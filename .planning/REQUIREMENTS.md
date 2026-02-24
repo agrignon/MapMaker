@@ -1,0 +1,138 @@
+# Requirements: MapMaker
+
+**Defined:** 2026-02-23
+**Core Value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions.
+
+## v1 Requirements
+
+Requirements for initial release. Each maps to roadmap phases.
+
+### Location & Selection
+
+- [ ] **LOCS-01**: User can search for a location by city name, street address, or lat/lon coordinates
+- [ ] **LOCS-02**: User can define a bounding box by dragging on a 2D map to set the area of interest
+- [ ] **LOCS-03**: User can resize and reposition the bounding box after initial placement
+
+### Terrain
+
+- [ ] **TERR-01**: User sees real terrain elevation data rendered from DEM sources within the selected bounding box
+- [ ] **TERR-02**: User can control terrain elevation exaggeration with a slider (flatten to exaggerate)
+- [ ] **TERR-03**: Flat terrain areas produce a printable model with minimum height floor (not zero-thickness)
+
+### Buildings
+
+- [ ] **BLDG-01**: User sees OSM building footprints extruded to real heights within the selected area
+- [ ] **BLDG-02**: Buildings use detailed roof geometry (gabled, hipped, etc.) where OSM data is available
+- [ ] **BLDG-03**: Buildings missing height data use a fallback hierarchy (levels → footprint heuristic → type default)
+- [ ] **BLDG-04**: Buildings sit correctly on the terrain surface at their geographic location
+
+### Roads
+
+- [ ] **ROAD-01**: User sees OSM road network rendered as 3D geometry within the selected area
+- [ ] **ROAD-02**: User can choose road style: recessed channels, raised surfaces, or flat at terrain level
+- [ ] **ROAD-03**: Road width reflects road type (highway wider than residential street)
+
+### Model Controls
+
+- [ ] **CTRL-01**: User can toggle terrain, buildings, and roads on/off individually
+- [ ] **CTRL-02**: User can set maximum physical dimensions: X width, Y depth, Z height
+- [ ] **CTRL-03**: User can switch measurements between mm and inches (default: mm)
+- [ ] **CTRL-04**: Controls are hidden/disabled when their layer is toggled off (e.g., road style hidden when roads off)
+
+### Preview & Navigation
+
+- [ ] **PREV-01**: User sees a live 3D preview of the model with orbit, zoom, and pan controls
+- [ ] **PREV-02**: 2D map editor and 3D preview are displayed side-by-side in a hybrid layout
+- [ ] **PREV-03**: User can go back from 3D preview to editing without losing selections or settings
+- [ ] **PREV-04**: 3D preview updates when user toggles features or changes settings
+
+### Export
+
+- [ ] **EXPT-01**: User can generate a binary STL file from the current model
+- [ ] **EXPT-02**: Generated STL includes a solid base plate underneath the terrain/features
+- [ ] **EXPT-03**: Generated STL is watertight (manifold) and printable without repair in standard slicers
+- [ ] **EXPT-04**: User can download the STL file directly to their local machine
+- [ ] **EXPT-05**: STL dimensions match the user's specified physical dimensions in the correct unit (mm)
+
+### Foundation (Technical)
+
+- [ ] **FNDN-01**: All geometry uses local meter-space coordinates (UTM projection), not Web Mercator
+- [ ] **FNDN-02**: STL export writes coordinates in millimeters (canonical unit for 3D printing)
+- [ ] **FNDN-03**: Mesh generation runs in a Web Worker to prevent UI freezing
+
+## v2 Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Enhanced Selection
+
+- **ESEL-01**: User can share current view/settings via a URL (no accounts needed)
+- **ESEL-02**: User can adjust bounding box aspect ratio and rotation
+
+### Additional Layers
+
+- **LAYR-01**: User sees water bodies rendered as depressions in the terrain
+- **LAYR-02**: User can overlay GPX tracks (hiking trails) on the model
+- **LAYR-03**: User sees elevation contour lines on the terrain surface
+
+### Advanced Export
+
+- **AEXP-01**: User can export in 3MF format with multi-material color assignments
+- **AEXP-02**: User can split large areas into multiple print tiles
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Multi-color/multi-material STL | User paints in their slicer (Bambu Studio, etc.) — better control there |
+| User accounts / saved projects | Doubles infrastructure scope; URL sharing is simpler alternative |
+| Custom polygon / freehand selection | Rectangle covers 90%+ of use cases; KML import is v2+ |
+| Mobile-native experience | 3D canvas performance poor on mobile; print workflow is desktop |
+| Texture/satellite imagery overlay | FDM printers can't reproduce texture; clean geometry for manual painting |
+| Real-time collaboration | Single-user tool |
+| Server-side STL generation | Client-side preferred for simplicity; server fallback if needed later |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| LOCS-01 | — | Pending |
+| LOCS-02 | — | Pending |
+| LOCS-03 | — | Pending |
+| TERR-01 | — | Pending |
+| TERR-02 | — | Pending |
+| TERR-03 | — | Pending |
+| BLDG-01 | — | Pending |
+| BLDG-02 | — | Pending |
+| BLDG-03 | — | Pending |
+| BLDG-04 | — | Pending |
+| ROAD-01 | — | Pending |
+| ROAD-02 | — | Pending |
+| ROAD-03 | — | Pending |
+| CTRL-01 | — | Pending |
+| CTRL-02 | — | Pending |
+| CTRL-03 | — | Pending |
+| CTRL-04 | — | Pending |
+| PREV-01 | — | Pending |
+| PREV-02 | — | Pending |
+| PREV-03 | — | Pending |
+| PREV-04 | — | Pending |
+| EXPT-01 | — | Pending |
+| EXPT-02 | — | Pending |
+| EXPT-03 | — | Pending |
+| EXPT-04 | — | Pending |
+| EXPT-05 | — | Pending |
+| FNDN-01 | — | Pending |
+| FNDN-02 | — | Pending |
+| FNDN-03 | — | Pending |
+
+**Coverage:**
+- v1 requirements: 29 total
+- Mapped to phases: 0
+- Unmapped: 29
+
+---
+*Requirements defined: 2026-02-23*
+*Last updated: 2026-02-23 after initial definition*
