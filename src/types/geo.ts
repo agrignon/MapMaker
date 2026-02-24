@@ -35,3 +35,18 @@ export interface BboxMM {
   widthMM: number;
   heightMM: number;
 }
+
+/** Status of the terrain generation pipeline */
+export type GenerationStatus = 'idle' | 'fetching' | 'meshing' | 'validating' | 'ready' | 'error';
+
+/** Decoded elevation data for a bounding box */
+export interface ElevationData {
+  /** Elevation values in meters, row-major order */
+  elevations: Float32Array;
+  /** Grid width (number of columns) — must be 2^k+1 for martini */
+  gridSize: number;
+  /** Minimum elevation in meters */
+  minElevation: number;
+  /** Maximum elevation in meters */
+  maxElevation: number;
+}
