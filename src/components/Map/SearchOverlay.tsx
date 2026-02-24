@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMap } from '@vis.gl/react-maplibre';
 import { GeocodingControl } from '@maptiler/geocoding-control/react';
 import { createMapLibreGlMapController } from '@maptiler/geocoding-control/maplibregl';
@@ -25,10 +25,22 @@ export function SearchOverlay() {
   const maps = useMap();
   const mapRef = maps['main-map'] ?? maps.current;
 
-  const mapController = useMemo<MapController | undefined>(() => {
+  // Defer controller creation until the map style is fully loaded.
+  // createMapLibreGlMapController accesses map sources immediately,
+  // which throws "Style is not done loading" if called too early.
+  const [mapController, setMapController] = useState<MapController | undefined>();
+  useEffect(() => {
     const map = mapRef?.getMap();
-    if (!map) return undefined;
-    return createMapLibreGlMapController(map, maplibregl);
+    if (!map) return;
+
+    const create = () => setMapController(createMapLibreGlMapController(map, maplibregl));
+
+    if (map.isStyleLoaded()) {
+      create();
+    } else {
+      map.once('style.load', create);
+      return () => { map.off('style.load', create); };
+    }
   }, [mapRef]);
 
   // Track input value via ref to intercept lat/lon before API call
