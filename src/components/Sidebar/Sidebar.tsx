@@ -9,7 +9,7 @@ export function Sidebar() {
     <div
       style={{
         position: 'absolute',
-        top: 12,
+        top: 60,
         left: 12,
         zIndex: 10,
         width: '260px',
