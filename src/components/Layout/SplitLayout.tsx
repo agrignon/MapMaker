@@ -1,5 +1,8 @@
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { useMapStore } from '../../store/mapStore';
+import { PreviewCanvas } from '../Preview/PreviewCanvas';
+import { PreviewSidebar } from '../Preview/PreviewSidebar';
+import { TerrainControls } from '../Preview/TerrainControls';
 
 interface SplitLayoutProps {
   children: React.ReactNode;
@@ -30,19 +33,11 @@ export function SplitLayout({ children }: SplitLayoutProps) {
           }}
         />
         <Panel defaultSize={50} minSize={25}>
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              backgroundColor: '#1a1a1a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#9ca3af',
-              fontSize: '1rem',
-            }}
-          >
-            3D Preview
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <PreviewCanvas />
+            <PreviewSidebar>
+              <TerrainControls />
+            </PreviewSidebar>
           </div>
         </Panel>
       </PanelGroup>
