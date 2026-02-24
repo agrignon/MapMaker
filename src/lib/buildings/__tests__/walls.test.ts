@@ -44,24 +44,23 @@ describe('computeSignedArea', () => {
 });
 
 describe('buildWalls', () => {
-  // CCW square (already correct winding): 4 unique vertices + closing = 5 points
-  // But buildWalls processes edges between consecutive pairs, so 4 edges for 4 unique edges
-  // Ring with closing vertex: 5 points → 4 segments
+  // CCW square (already correct winding): 4 unique vertices, no closing duplicate
+  // buildWalls wraps last vertex back to first via modulo: 4 vertices → 4 edges
   const CCW_SQUARE: [number, number][] = [
-    [0, 0], [10, 0], [10, 10], [0, 10], [0, 0],
+    [0, 0], [10, 0], [10, 10], [0, 10],
   ];
-  const UNIFORM_BASE = [0, 0, 0, 0, 0]; // all at z=0
+  const UNIFORM_BASE = [0, 0, 0, 0]; // all at z=0
   const HEIGHT_MM = 30;
 
   it('produces 6 vertices per wall segment (4 segments = 24 vertices = 72 floats)', () => {
-    // 5 ring points → 4 edges → 4 quads → 4*6 = 24 vertices * 3 coords = 72 floats
+    // 4 vertices → 4 edges → 4 quads → 4*6 = 24 vertices * 3 coords = 72 floats
     const walls = buildWalls(CCW_SQUARE, UNIFORM_BASE, HEIGHT_MM);
     expect(walls.length).toBe(72);
   });
 
   it('per-vertex base Z: distinct base Z values appear in bottom vertices', () => {
     // Supply different base Z values for each vertex
-    const varyingBase = [0, 5, 10, 15, 0]; // mm elevations
+    const varyingBase = [0, 5, 10, 15]; // mm elevations
     const walls = buildWalls(CCW_SQUARE, varyingBase, HEIGHT_MM);
 
     // Extract all Z values (every 3rd value starting at index 2)
@@ -78,7 +77,7 @@ describe('buildWalls', () => {
   });
 
   it('top vertex Z = base Z + height', () => {
-    const varyingBase = [100, 200, 300, 400, 100];
+    const varyingBase = [100, 200, 300, 400];
     const walls = buildWalls(CCW_SQUARE, varyingBase, HEIGHT_MM);
 
     // Every Z value should be either a base value or base + HEIGHT_MM
@@ -91,9 +90,9 @@ describe('buildWalls', () => {
   it('winding detection: CW ring produces same geometry as CCW ring (outward normals in both)', () => {
     // CW square (reversed winding — should be auto-corrected)
     const cwSquare: [number, number][] = [
-      [0, 0], [0, 10], [10, 10], [10, 0], [0, 0],
+      [0, 0], [0, 10], [10, 10], [10, 0],
     ];
-    const cwBase = [0, 0, 0, 0, 0];
+    const cwBase = [0, 0, 0, 0];
 
     const ccwWalls = buildWalls(CCW_SQUARE, UNIFORM_BASE, HEIGHT_MM);
     const cwWalls = buildWalls(cwSquare, cwBase, HEIGHT_MM);

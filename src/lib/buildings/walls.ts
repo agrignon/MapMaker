@@ -72,16 +72,15 @@ export function buildWalls(
   }
 
   const n = workRing.length;
-  // Last vertex connects back to first (closed ring), but we skip the closing
-  // duplicate vertex if it exists (OSM rings often repeat first vertex at end)
-  const segCount = n - 1; // n vertices = n-1 unique edges
+  // n unique vertices = n edges (wraps around: last vertex connects back to first)
+  const segCount = n;
 
   // 6 vertices per segment (2 triangles), 3 coords per vertex
   const positions = new Float32Array(segCount * 6 * 3);
   let offset = 0;
 
   for (let i = 0; i < segCount; i++) {
-    const j = i + 1;
+    const j = (i + 1) % n;
 
     const [x0, y0] = workRing[i];
     const [x1, y1] = workRing[j];

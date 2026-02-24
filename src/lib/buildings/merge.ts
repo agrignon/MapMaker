@@ -25,6 +25,23 @@ import { computeSignedArea } from './walls';
 import { buildSingleBuilding } from './buildingMesh';
 
 /**
+ * Strip the closing duplicate vertex from an OSM polygon ring.
+ * OSM rings repeat the first vertex at the end: [A, B, C, D, A] → [A, B, C, D].
+ * This prevents earcut from producing degenerate triangles and ensures
+ * edge counts match between floor/roof caps and walls (each perimeter edge
+ * appears exactly twice: once in a wall quad, once in a cap triangle).
+ */
+function stripClosingVertex(ring: [number, number][]): [number, number][] {
+  if (ring.length < 2) return ring;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] === last[0] && first[1] === last[1]) {
+    return ring.slice(0, -1);
+  }
+  return ring;
+}
+
+/**
  * Project a [lon, lat] ring to local mm space.
  *
  * Steps:
@@ -132,27 +149,34 @@ export function buildAllBuildings(
   for (const feature of features) {
     const { properties, outerRing, holes } = feature;
 
-    // Skip degenerate rings
-    if (outerRing.length < 4) continue;
+    // Strip closing duplicate vertex from OSM rings before processing.
+    // OSM rings repeat the first vertex: [A,B,C,D,A] → [A,B,C,D].
+    // Without stripping, earcut references both v0 and vN for the same position,
+    // causing perimeter edges to appear 3 times instead of 2 → non-manifold.
+    const openOuter = stripClosingVertex(outerRing);
+    const openHoles = holes.map(stripClosingVertex);
+
+    // Skip degenerate rings (need at least 3 unique vertices for a polygon)
+    if (openOuter.length < 3) continue;
 
     // Step a: Compute footprint area and resolve height
-    const footprintAreaM2 = computeFootprintAreaM2(outerRing);
+    const footprintAreaM2 = computeFootprintAreaM2(openOuter);
     const heightM = resolveHeight(properties, footprintAreaM2);
     const roofShape = properties['roof:shape'] ?? 'flat';
     const roofHeightM = resolveRoofHeight(properties, heightM);
 
     // Step b: Project outer ring to local mm space
-    const outerRingMM = projectRingToMM(outerRing, bboxCenterUTM, horizontalScale);
+    const outerRingMM = projectRingToMM(openOuter, bboxCenterUTM, horizontalScale);
 
     // Project hole rings to local mm space
-    const holesMM = holes.map((hole) =>
+    const holesMM = openHoles.map((hole) =>
       projectRingToMM(hole, bboxCenterUTM, horizontalScale)
     );
 
     // Step c: Sample terrain elevation per vertex (outer ring)
     // baseZmm[i] = (sampledElevationM - minElevationM) * zScale
     // CRITICAL: matches terrain.ts line 124: z = (elevation - minElevation) * zScale
-    const baseZmm = sampleBaseZmm(outerRing, bbox, elevData, minElevationM, zScale);
+    const baseZmm = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
 
     // Step d: Convert building height from meters to mm
     // heightMM = heightM * horizontalScale * exaggeration (same scale as Z)
