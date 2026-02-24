@@ -63,3 +63,6 @@ export interface ExportResult {
 
 /** Status of an in-progress or completed STL export */
 export type ExportStatus = 'idle' | 'building' | 'validating' | 'ready' | 'error';
+
+/** Status of the building data fetch and geometry generation pipeline */
+export type BuildingGenerationStatus = 'idle' | 'fetching' | 'building' | 'ready' | 'error';

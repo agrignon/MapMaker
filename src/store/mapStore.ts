@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportResult, ExportStatus } from '../types/geo';
+import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportResult, ExportStatus, BuildingGenerationStatus } from '../types/geo';
 import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
+import type { BuildingFeature } from '../lib/buildings/types';
 
 interface MapState {
   bbox: BoundingBox | null;
@@ -19,6 +20,10 @@ interface MapState {
   exportStep: string;
   exportResult: ExportResult | null;
   locationName: string | null;
+  // Building state
+  buildingFeatures: BuildingFeature[] | null;
+  buildingGenerationStatus: BuildingGenerationStatus;
+  buildingGenerationStep: string;
 }
 
 interface MapActions {
@@ -34,6 +39,9 @@ interface MapActions {
   setExportStatus: (status: ExportStatus, step?: string) => void;
   setExportResult: (result: ExportResult | null) => void;
   setLocationName: (name: string | null) => void;
+  // Building actions
+  setBuildingFeatures: (features: BuildingFeature[] | null) => void;
+  setBuildingGenerationStatus: (status: BuildingGenerationStatus, step?: string) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -55,6 +63,10 @@ export const useMapStore = create<MapStore>((set) => ({
   exportStep: '',
   exportResult: null,
   locationName: null,
+  // Building state defaults
+  buildingFeatures: null,
+  buildingGenerationStatus: 'idle',
+  buildingGenerationStep: '',
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -105,5 +117,13 @@ export const useMapStore = create<MapStore>((set) => ({
 
   setLocationName: (name) => {
     set({ locationName: name });
+  },
+
+  setBuildingFeatures: (features) => {
+    set({ buildingFeatures: features });
+  },
+
+  setBuildingGenerationStatus: (status, step = '') => {
+    set({ buildingGenerationStatus: status, buildingGenerationStep: step });
   },
 }));

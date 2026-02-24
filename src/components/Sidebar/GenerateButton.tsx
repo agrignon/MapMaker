@@ -1,5 +1,6 @@
 /**
- * Generate Preview button — fetches elevation data and builds terrain mesh.
+ * Generate Preview button — fetches elevation data and builds terrain mesh,
+ * then fetches building data from Overpass (non-blocking for the preview).
  *
  * States:
  *  - No bbox: disabled, "Select an area first"
@@ -11,19 +12,41 @@
 
 import { useMapStore } from '../../store/mapStore';
 import { fetchElevationForBbox } from '../../lib/elevation/stitch';
+import { fetchBuildingData } from '../../lib/buildings/overpass';
+import { parseBuildingFeatures } from '../../lib/buildings/parse';
 
 export function GenerateButton() {
   const bbox = useMapStore((s) => s.bbox);
   const generationStatus = useMapStore((s) => s.generationStatus);
   const generationStep = useMapStore((s) => s.generationStep);
   const showPreview = useMapStore((s) => s.showPreview);
+  const buildingGenerationStatus = useMapStore((s) => s.buildingGenerationStatus);
+  const buildingGenerationStep = useMapStore((s) => s.buildingGenerationStep);
   const setGenerationStatus = useMapStore((s) => s.setGenerationStatus);
   const setElevationData = useMapStore((s) => s.setElevationData);
   const setShowPreview = useMapStore((s) => s.setShowPreview);
+  const setBuildingFeatures = useMapStore((s) => s.setBuildingFeatures);
+  const setBuildingGenerationStatus = useMapStore((s) => s.setBuildingGenerationStatus);
 
   const isLoading = generationStatus === 'fetching' || generationStatus === 'meshing';
   const hasBbox = bbox !== null;
   const hasError = generationStatus === 'error';
+  const isBuildingFetching = buildingGenerationStatus === 'fetching' || buildingGenerationStatus === 'building';
+
+  async function fetchBuildings() {
+    if (!bbox) return;
+    try {
+      setBuildingGenerationStatus('fetching', 'Fetching building data...');
+      const overpassData = await fetchBuildingData(bbox);
+      const features = parseBuildingFeatures(overpassData);
+      setBuildingFeatures(features);
+      setBuildingGenerationStatus('ready', `${features.length} buildings found`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Building fetch failed';
+      setBuildingGenerationStatus('error', message);
+      // Buildings are optional — terrain preview is still usable
+    }
+  }
 
   async function handleGenerate() {
     if (!bbox) return;
@@ -38,6 +61,9 @@ export function GenerateButton() {
       setElevationData(result);
       setGenerationStatus('ready', 'Terrain ready');
       setShowPreview(true);
+
+      // Fetch buildings in parallel (non-blocking — terrain preview is already visible)
+      void fetchBuildings();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setGenerationStatus('error', message);
@@ -110,6 +136,30 @@ export function GenerateButton() {
       {!hasError && !hasBbox && (
         <p className="text-center text-xs text-gray-400 dark:text-gray-500">
           Draw a rectangle on the map
+        </p>
+      )}
+
+      {/* Building fetch status — shown after terrain is ready */}
+      {showPreview && !hasError && (
+        <p className="text-center text-xs mt-1"
+           style={{ color: buildingGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
+          {isBuildingFetching && (
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                border: '1.5px solid rgba(156,163,175,0.3)',
+                borderTopColor: '#9ca3af',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                marginRight: '4px',
+                verticalAlign: 'middle',
+              }}
+              aria-hidden="true"
+            />
+          )}
+          {buildingGenerationStep}
         </p>
       )}
     </div>

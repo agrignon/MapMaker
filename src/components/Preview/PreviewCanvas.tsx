@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { PreviewControls } from './PreviewControls';
 import { TerrainMesh } from './TerrainMesh';
+import { BuildingMesh } from './BuildingMesh';
 import { Component, type ReactNode } from 'react';
 
 /** Catch R3F render errors so they don't produce a silent black screen */
@@ -43,6 +44,7 @@ export function PreviewCanvas() {
         <SceneErrorBoundary>
           <PreviewControls />
           <TerrainMesh />
+          <BuildingMesh />
         </SceneErrorBoundary>
       </Canvas>
     </div>
