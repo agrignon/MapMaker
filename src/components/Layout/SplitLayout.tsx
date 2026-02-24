@@ -1,4 +1,3 @@
-import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
@@ -12,37 +11,35 @@ interface SplitLayoutProps {
 export function SplitLayout({ children }: SplitLayoutProps) {
   const showPreview = useMapStore((state) => state.showPreview);
 
-  if (!showPreview) {
-    return (
-      <div className="flex-1 h-full">
+  return (
+    <div className="flex-1 h-full flex">
+      {/* Left panel: map — always rendered, never unmounted */}
+      <div style={{ flex: showPreview ? '1 1 50%' : '1 1 100%', minWidth: 0, height: '100%', position: 'relative' }}>
         {children}
       </div>
-    );
-  }
 
-  return (
-    <div className="flex-1 h-full">
-      <Group direction="horizontal" style={{ height: '100%' }}>
-        <Panel defaultSize={50} minSize={25}>
-          {children}
-        </Panel>
-        <Separator
+      {/* Drag handle — only when preview is visible */}
+      {showPreview && (
+        <div
           style={{
             width: '4px',
-            backgroundColor: '#4b5563',
             cursor: 'col-resize',
+            backgroundColor: '#4b5563',
+            flexShrink: 0,
           }}
         />
-        <Panel defaultSize={50} minSize={25}>
-          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-            <PreviewCanvas />
-            <PreviewSidebar>
-              <TerrainControls />
-              <ExportPanel />
-            </PreviewSidebar>
-          </div>
-        </Panel>
-      </Group>
+      )}
+
+      {/* Right panel: 3D preview — only when preview is visible */}
+      {showPreview && (
+        <div style={{ flex: '1 1 50%', minWidth: 0, height: '100%', position: 'relative' }}>
+          <PreviewCanvas />
+          <PreviewSidebar>
+            <TerrainControls />
+            <ExportPanel />
+          </PreviewSidebar>
+        </div>
+      )}
     </div>
   );
 }
