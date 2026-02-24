@@ -1,4 +1,4 @@
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
@@ -22,11 +22,11 @@ export function SplitLayout({ children }: SplitLayoutProps) {
 
   return (
     <div className="flex-1 h-full">
-      <PanelGroup direction="horizontal" style={{ height: '100%' }}>
+      <Group direction="horizontal" style={{ height: '100%' }}>
         <Panel defaultSize={50} minSize={25}>
           {children}
         </Panel>
-        <PanelResizeHandle
+        <Separator
           style={{
             width: '4px',
             backgroundColor: '#4b5563',
@@ -42,7 +42,7 @@ export function SplitLayout({ children }: SplitLayoutProps) {
             </PreviewSidebar>
           </div>
         </Panel>
-      </PanelGroup>
+      </Group>
     </div>
   );
 }
