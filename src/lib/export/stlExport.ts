@@ -51,10 +51,18 @@ export function downloadSTL(buffer: ArrayBuffer, filename: string): void {
  * Uses locationName (from geocoding search) if available, otherwise falls back to coordinates.
  *
  * Examples:
- *   locationName="Mount Rainier" → "mount-rainier-terrain.stl"
- *   no locationName, bbox at 46.85°N 121.73°W → "terrain-46.85--121.73.stl"
+ *   locationName="Mount Rainier", hasBuildings=false → "mount-rainier-terrain.stl"
+ *   locationName="Mount Rainier", hasBuildings=true  → "mount-rainier-terrain-buildings.stl"
+ *   no locationName, bbox at 46.85°N 121.73°W       → "terrain-46.85--121.73.stl"
+ *   no locationName, hasBuildings=true               → "terrain-buildings-46.85--121.73.stl"
  */
-export function generateFilename(bbox: BoundingBox, locationName: string | null): string {
+export function generateFilename(
+  bbox: BoundingBox,
+  locationName: string | null,
+  hasBuildings = false
+): string {
+  const suffix = hasBuildings ? 'terrain-buildings' : 'terrain';
+
   if (locationName && locationName.trim().length > 0) {
     // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse multiple hyphens
     const slug = locationName
@@ -62,11 +70,15 @@ export function generateFilename(bbox: BoundingBox, locationName: string | null)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
-    return `${slug}-terrain.stl`;
+    return `${slug}-${suffix}.stl`;
   }
 
   // Coordinate-based fallback
   const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
   const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
+
+  if (hasBuildings) {
+    return `terrain-buildings-${centerLat.toFixed(2)}-${centerLon.toFixed(2)}.stl`;
+  }
   return `terrain-${centerLat.toFixed(2)}-${centerLon.toFixed(2)}.stl`;
 }

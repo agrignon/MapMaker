@@ -11,8 +11,12 @@ import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
 import { buildTerrainGeometry } from '../../lib/mesh/terrain';
 import { buildSolidMesh } from '../../lib/mesh/solid';
+import { mergeTerrainAndBuildings } from '../../lib/mesh/buildingSolid';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
+import { buildAllBuildings } from '../../lib/buildings/merge';
+import { wgs84ToUTM } from '../../lib/utm';
+import type { BuildingGeometryParams } from '../../lib/buildings/types';
 
 // Module-level buffer storage — ArrayBuffer is not serializable to Zustand
 // This holds the last exported buffer for the Download button
@@ -38,10 +42,12 @@ export function ExportPanel() {
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
+  const utmZone = useMapStore((s) => s.utmZone);
   const locationName = useMapStore((s) => s.locationName);
   const exportStatus = useMapStore((s) => s.exportStatus);
   const exportStep = useMapStore((s) => s.exportStep);
   const exportResult = useMapStore((s) => s.exportResult);
+  const buildingFeatures = useMapStore((s) => s.buildingFeatures);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
@@ -61,10 +67,14 @@ export function ExportPanel() {
   const isExporting = exportStatus === 'building' || exportStatus === 'validating';
 
   // Progress bar percentage
+  // Steps: Building solid mesh (10%) → Building buildings mesh (30%) →
+  //        Merging terrain and buildings (50%) → Validating (70%) → Writing STL (90%)
   const progressPercent =
-    exportStep.includes('Building') ? 33 :
-    exportStep.includes('Validating') ? 66 :
-    exportStep.includes('Writing') ? 90 : 10;
+    exportStep.includes('Writing') ? 90 :
+    exportStep.includes('Validating') ? 70 :
+    exportStep.includes('Merging') ? 50 :
+    exportStep.includes('buildings mesh') ? 30 :
+    exportStep.includes('Building') ? 10 : 10;
 
   async function handleExport() {
     if (!elevationData || !bbox || !dimensions) return;
@@ -87,13 +97,53 @@ export function ExportPanel() {
         maxError: 5,
       });
 
-      const solidGeom = buildSolidMesh(terrainGeom, basePlateThicknessMM);
+      const terrainSolid = buildSolidMesh(terrainGeom, basePlateThicknessMM);
 
-      // Step 2: Validate mesh
+      // Step 2: Include building geometry if available
+      const hasBuildings = Boolean(buildingFeatures && buildingFeatures.length > 0 && utmZone);
+      let exportSolid = terrainSolid;
+
+      if (hasBuildings && buildingFeatures && utmZone) {
+        setExportStatus('building', 'Building buildings mesh...');
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Compute bbox center UTM (same as BuildingMesh.tsx)
+        const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
+        const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
+        const centerUTM = wgs84ToUTM(centerLon, centerLat);
+
+        const buildingParams: BuildingGeometryParams = {
+          widthMM: targetWidthMM,
+          depthMM: targetDepthMM,
+          geographicWidthM: dimensions.widthM,
+          geographicDepthM: dimensions.heightM,
+          utmZone,
+          bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
+          exaggeration,
+          minElevationM: elevationData.minElevation,
+        };
+
+        const buildingsGeometry = buildAllBuildings(
+          buildingFeatures,
+          bbox,
+          elevationData,
+          buildingParams
+        );
+
+        if (buildingsGeometry) {
+          setExportStatus('building', 'Merging terrain and buildings...');
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          exportSolid = mergeTerrainAndBuildings(terrainSolid, buildingsGeometry);
+          buildingsGeometry.dispose();
+        }
+      }
+
+      // Step 3: Validate mesh
       setExportStatus('validating', 'Validating mesh...');
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      const validation = await validateMesh(solidGeom);
+      const validation = await validateMesh(exportSolid);
 
       if (!validation.isManifold) {
         const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
@@ -102,15 +152,15 @@ export function ExportPanel() {
         return;
       }
 
-      // Step 3: Write STL
+      // Step 4: Write STL
       setExportStatus('building', 'Writing STL...');
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      const mesh = new THREE.Mesh(solidGeom);
+      const mesh = new THREE.Mesh(exportSolid);
       const { buffer, sizeBytes, triangleCount } = exportToSTL(mesh);
 
       // Compute height: terrain Z range + base plate
-      const posAttr = solidGeom.getAttribute('position') as THREE.BufferAttribute;
+      const posAttr = exportSolid.getAttribute('position') as THREE.BufferAttribute;
       let maxZ = -Infinity;
       for (let i = 0; i < posAttr.count; i++) {
         const z = posAttr.getZ(i);
@@ -118,8 +168,8 @@ export function ExportPanel() {
       }
       const heightMM = maxZ + basePlateThicknessMM;
 
-      // Generate filename
-      const filename = generateFilename(bbox, locationName);
+      // Generate filename (includes -buildings suffix when buildings are present)
+      const filename = generateFilename(bbox, locationName, hasBuildings);
       pendingFilenameRef.current = filename;
 
       // Store buffer for download
