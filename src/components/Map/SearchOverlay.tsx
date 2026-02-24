@@ -6,7 +6,7 @@ import maplibregl from 'maplibre-gl';
 import type { MapController } from '@maptiler/geocoding-control/types';
 import '@maptiler/geocoding-control/style.css';
 
-const API_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
+const API_KEY = (import.meta.env.VITE_MAPTILER_KEY as string | undefined) ?? '';
 
 /** Pattern for "lat, lon" input (e.g. "48.8566, 2.3522"). */
 const LAT_LON_RE = /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/;
@@ -15,6 +15,11 @@ const LAT_LON_RE = /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/;
  * Geocoding search overlay with MapTiler autocomplete.
  * Also intercepts raw "lat, lon" coordinate input and flies the map directly,
  * bypassing the geocoding API.
+ *
+ * Returns null if no API key is configured — this prevents the broken
+ * "Something went wrong" error state from ever appearing. In practice the
+ * parent MapView already guards the missing-key case and won't render this
+ * component, but the guard here is a safety net.
  */
 export function SearchOverlay() {
   const maps = useMap();
@@ -73,6 +78,9 @@ export function SearchOverlay() {
     container.addEventListener('input', handleInput, true);
     return () => container.removeEventListener('input', handleInput, true);
   }, [mapRef]);
+
+  // Safety guard: if API key is missing, render nothing rather than a broken widget
+  if (!API_KEY) return null;
 
   return (
     <div
