@@ -3,6 +3,7 @@ import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
 import { TerrainControls } from '../Preview/TerrainControls';
+import { ExportPanel } from '../Preview/ExportPanel';
 
 interface SplitLayoutProps {
   children: React.ReactNode;
@@ -37,6 +38,7 @@ export function SplitLayout({ children }: SplitLayoutProps) {
             <PreviewCanvas />
             <PreviewSidebar>
               <TerrainControls />
+              <ExportPanel />
             </PreviewSidebar>
           </div>
         </Panel>

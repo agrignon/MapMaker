@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData } from '../types/geo';
+import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportResult, ExportStatus } from '../types/geo';
 import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
 
 interface MapState {
@@ -14,6 +14,11 @@ interface MapState {
   basePlateThicknessMM: number;
   targetWidthMM: number;
   targetDepthMM: number;
+  // Export state
+  exportStatus: ExportStatus;
+  exportStep: string;
+  exportResult: ExportResult | null;
+  locationName: string | null;
 }
 
 interface MapActions {
@@ -25,6 +30,10 @@ interface MapActions {
   setExaggeration: (value: number) => void;
   setBasePlateThicknessMM: (value: number) => void;
   setTargetDimensions: (widthMM: number, depthMM: number) => void;
+  // Export actions
+  setExportStatus: (status: ExportStatus, step?: string) => void;
+  setExportResult: (result: ExportResult | null) => void;
+  setLocationName: (name: string | null) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -41,6 +50,11 @@ export const useMapStore = create<MapStore>((set) => ({
   basePlateThicknessMM: 3,
   targetWidthMM: 150,
   targetDepthMM: 150,
+  // Export state defaults
+  exportStatus: 'idle',
+  exportStep: '',
+  exportResult: null,
+  locationName: null,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -79,5 +93,17 @@ export const useMapStore = create<MapStore>((set) => ({
 
   setTargetDimensions: (widthMM, depthMM) => {
     set({ targetWidthMM: widthMM, targetDepthMM: depthMM });
+  },
+
+  setExportStatus: (status, step = '') => {
+    set({ exportStatus: status, exportStep: step });
+  },
+
+  setExportResult: (result) => {
+    set({ exportResult: result });
+  },
+
+  setLocationName: (name) => {
+    set({ locationName: name });
   },
 }));

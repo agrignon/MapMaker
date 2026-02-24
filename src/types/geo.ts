@@ -50,3 +50,16 @@ export interface ElevationData {
   /** Maximum elevation in meters */
   maxElevation: number;
 }
+
+/** Result of an STL export operation (serializable — no ArrayBuffer) */
+export interface ExportResult {
+  sizeBytes: number;
+  triangleCount: number;
+  widthMM: number;
+  depthMM: number;
+  heightMM: number;
+  filename: string;
+}
+
+/** Status of an in-progress or completed STL export */
+export type ExportStatus = 'idle' | 'building' | 'validating' | 'ready' | 'error';
