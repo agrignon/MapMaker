@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, MapLibre satellite map, geocoding search, UTM/STL coordinate pipeline with tests
 - [x] 01-02-PLAN.md — Bounding box drawing/editing with Terra Draw, sidebar selection info, generate button
-- [ ] 01-03-PLAN.md — Gap closure: fix API key runtime guard and map instance lookup (all 9 UAT failures)
+- [x] 01-03-PLAN.md — Gap closure: fix API key runtime guard and map instance lookup (all 9 UAT failures); HTML overlay bbox with resize/move
 
 ### Phase 2: Terrain + Preview + Export
 **Goal**: Users can generate a printable terrain STL for any selected area, see it in a live 3D preview, and download it — the complete output contract is validated end-to-end for the terrain-only case
@@ -111,7 +111,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/3 | Gap closure | - |
+| 1. Foundation | 3/3 | Awaiting UAT verification | - |
 | 2. Terrain + Preview + Export | 4/5 | Gap closure | - |
 | 3. Buildings | 2/3 | In Progress|  |
 | 4. Roads + Controls | 0/TBD | Not started | - |

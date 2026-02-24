@@ -81,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase 03-buildings 03-02]: Hipped roof falls back to pyramidal when building is square (halfExtents[0] <= halfExtents[1] means ridge length is zero)
 - [Phase 03-buildings 03-02]: Non-flat wall height = max(50% buildingHeight, buildingHeight - roofHeight) — prevents invisible walls from disproportionate OSM roof height data
 - [Phase 03-buildings 03-02]: BuildingMesh uses non-blocking building fetch — terrain visible immediately, buildings load asynchronously with status indicator
+- [Phase 01-foundation 01-03]: HTML overlay approach for bbox rectangle — div follows map via 'move' event listener; no MapLibre GeoJSON source required
+- [Phase 01-foundation 01-03]: maps.current vs maps[id] — without MapProvider, useMap() only populates .current key; always use maps.current inside a <Map> child
+- [Phase 01-foundation 01-03]: API key guard pattern — cast env var as string|undefined, guard with if (!KEY) return <ErrorUI>; never silently pass empty string to MapTiler
 
 ### Pending Todos
 
@@ -88,12 +91,20 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 1 gap closure (01-03): UAT verification still pending (no SUMMARY for 01-03)
+- Phase 1 gap closure (01-03): Automated task complete (code fixes committed, 14/14 tests pass). UAT browser verification still pending — requires user with valid MapTiler API key to verify 9 browser scenarios
 - Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
+
+## Deferred Issues
+
+Pre-existing `npm run build` failures (NOT caused by 01-03 changes — exist in committed codebase from Phase 2/3):
+- `src/components/Preview/PreviewControls.tsx(2,1): THREE declared but never read`
+- `src/lib/buildings/__tests__/walls.test.ts(131,5): All variables are unused`
+- `src/lib/mesh/terrain.ts(7,21): Missing declaration for @mapbox/martini`
+- `src/lib/mesh/terrain.ts(69,47): geographicDepthM declared but never read`
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 03-02-PLAN.md — Advanced roofs (gabled/hipped/pyramidal) via OBB ridge detection, BuildingMesh R3F component wired into 3D preview, 109 tests passing. Ready for Phase 3 Plan 03.
+Stopped at: Completed 01-03-PLAN.md automated task — API key guard, maps.current fix, useTerradraw HTML overlay with resize/move. Awaiting human UAT verification for Task 2 checkpoint.
 Resume file: None
