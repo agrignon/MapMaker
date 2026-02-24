@@ -8,11 +8,13 @@ import Martini from '@mapbox/martini';
 import type { ElevationData } from '../../types/geo';
 
 export interface TerrainMeshParams {
-  widthMM: number;      // target physical width in millimeters
-  depthMM: number;      // target physical depth in millimeters
-  exaggeration: number; // vertical exaggeration multiplier (default 1.5)
-  minHeightMM: number;  // TERR-03 minimum floor height in mm (default 5)
-  maxError: number;     // RTIN error threshold (default 5, lower = more triangles)
+  widthMM: number;        // target physical width in millimeters
+  depthMM: number;        // target physical depth in millimeters
+  geographicWidthM: number;  // real-world width of the bbox in meters
+  geographicDepthM: number;  // real-world depth of the bbox in meters
+  exaggeration: number;   // vertical exaggeration multiplier (default 1.5)
+  minHeightMM: number;    // TERR-03 minimum floor height in mm (default 5)
+  maxError: number;       // RTIN error threshold (default 5, lower = more triangles)
 }
 
 /**
@@ -64,7 +66,7 @@ export function buildTerrainGeometry(
   params: TerrainMeshParams
 ): THREE.BufferGeometry {
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { widthMM, depthMM, exaggeration, minHeightMM, maxError } = params;
+  const { widthMM, depthMM, geographicWidthM, geographicDepthM, exaggeration, minHeightMM, maxError } = params;
 
   // 1. Build martini mesh using RTIN algorithm
   const martini = new Martini(gridSize);
@@ -76,41 +78,23 @@ export function buildTerrainGeometry(
   // 2. Compute elevation range
   const elevRange = maxElevation - minElevation;
 
-  // 3. Compute Z scaling (in mm per meter of elevation)
-  // Meters of elevation to millimeters: we scale to fit widthMM
-  // The reference scale: elevRange meters → elevRange_MM
-  // widthMM / (geographic extent in meters) is the horizontal scale,
-  // but we don't have that info here — use a proportional scale
-  // Instead: the mesh will be widthMM x depthMM in XY
-  // For Z, we use exaggeration directly as a vertical scale relative to the mesh
-  // The Z scale maps elevation meters to mm with exaggeration applied.
-  //
-  // Strategy: map elevation range to (widthMM * exaggeration * 0.1) as reference,
-  // but enforce minHeightMM floor.
-  // Actual approach per plan: zScale = max(exaggeration, minHeightMM / elevRange_MM)
-  // where elevRange_MM is determined by the horizontal scale.
-  // Since we don't have the actual geographic size, we treat the elevation
-  // values as meters and scale them proportionally to the model width:
-  // 1 unit horizontal = widthMM / (gridSize-1) mm
-  // For vertical, natural scale = widthMM / geographicWidthM meters → too complex without geo info
-  // Instead: use a simple mm-per-meter scale with exaggeration
-  // Default: 1 meter = 1mm * exaggeration gives reasonable results for typical terrain
-  // with minHeightMM floor enforced.
+  // 3. Compute Z scaling proportional to horizontal scale
+  // horizontalScale = mm per meter of real-world distance
+  // Z must use the same scale so the terrain looks natural at exaggeration=1
+  const horizontalScale = widthMM / geographicWidthM;
 
   let zScale: number;
   if (elevRange === 0) {
-    // Perfectly flat — all Z will be set to minHeightMM
-    zScale = 0; // special case handled below
+    zScale = 0; // special case: perfectly flat — handled below
   } else {
-    // Scale elevation range in meters to mm with exaggeration
-    // Base: elevRange meters → some mm. We want visible variation.
-    // Use: mmPerMeter = exaggeration (so 1.5x means 1 meter height = 1.5mm)
-    // Enforce floor: if elevRange * exaggeration < minHeightMM, scale up
-    const naturalHeightMM = elevRange * exaggeration;
+    // Natural Z height at exaggeration=1 would be elevRange * horizontalScale mm
+    // With exaggeration applied: elevRange * horizontalScale * exaggeration mm
+    // Enforce minHeightMM floor for flat areas
+    const naturalHeightMM = elevRange * horizontalScale * exaggeration;
     if (naturalHeightMM < minHeightMM) {
       zScale = minHeightMM / elevRange;
     } else {
-      zScale = exaggeration;
+      zScale = horizontalScale * exaggeration;
     }
   }
 
@@ -169,22 +153,23 @@ export function updateTerrainElevation(
   params: TerrainMeshParams
 ): void {
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { exaggeration, minHeightMM } = params;
+  const { widthMM, geographicWidthM, exaggeration, minHeightMM } = params;
 
   const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
   const vertexCount = positionAttribute.count;
 
   const elevRange = maxElevation - minElevation;
+  const horizontalScale = widthMM / geographicWidthM;
 
   let zScale: number;
   if (elevRange === 0) {
     zScale = 0;
   } else {
-    const naturalHeightMM = elevRange * exaggeration;
+    const naturalHeightMM = elevRange * horizontalScale * exaggeration;
     if (naturalHeightMM < minHeightMM) {
       zScale = minHeightMM / elevRange;
     } else {
-      zScale = exaggeration;
+      zScale = horizontalScale * exaggeration;
     }
   }
 

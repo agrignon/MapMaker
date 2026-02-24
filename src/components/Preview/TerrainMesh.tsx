@@ -18,6 +18,7 @@ export function TerrainMesh() {
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
+  const dimensions = useMapStore((s) => s.dimensions);
 
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -25,11 +26,13 @@ export function TerrainMesh() {
   const lastParamsRef = useRef<TerrainMeshParams | null>(null);
 
   useEffect(() => {
-    if (!elevationData) return;
+    if (!elevationData || !dimensions) return;
 
     const params: TerrainMeshParams = {
       widthMM: targetWidthMM,
       depthMM: targetDepthMM,
+      geographicWidthM: dimensions.widthM,
+      geographicDepthM: dimensions.heightM,
       exaggeration,
       minHeightMM: 5,
       maxError: 5,
@@ -59,7 +62,7 @@ export function TerrainMesh() {
       updateTerrainElevation(geometryRef.current, elevationData, params);
       lastParamsRef.current = params;
     }
-  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, basePlateThicknessMM]);
+  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, basePlateThicknessMM, dimensions]);
 
   // Cleanup geometry on unmount
   useEffect(() => {
@@ -71,7 +74,7 @@ export function TerrainMesh() {
     };
   }, []);
 
-  if (!elevationData) return null;
+  if (!elevationData || !dimensions) return null;
 
   return (
     <mesh ref={meshRef}>

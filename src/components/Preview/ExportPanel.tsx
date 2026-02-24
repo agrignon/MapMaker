@@ -36,6 +36,7 @@ export function ExportPanel() {
   const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
+  const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const locationName = useMapStore((s) => s.locationName);
   const exportStatus = useMapStore((s) => s.exportStatus);
@@ -66,7 +67,7 @@ export function ExportPanel() {
     exportStep.includes('Writing') ? 90 : 10;
 
   async function handleExport() {
-    if (!elevationData || !bbox) return;
+    if (!elevationData || !bbox || !dimensions) return;
 
     setValidationError(null);
     exportBufferRef.current = null;
@@ -79,6 +80,8 @@ export function ExportPanel() {
       const terrainGeom = buildTerrainGeometry(elevationData, {
         widthMM: targetWidthMM,
         depthMM: targetDepthMM,
+        geographicWidthM: dimensions.widthM,
+        geographicDepthM: dimensions.heightM,
         exaggeration,
         minHeightMM: 5,
         maxError: 5,
