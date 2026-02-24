@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 3 of 6 (Buildings) — IN PROGRESS
-Plan: 1 of 4 complete
-Status: Phase 3 Plan 01 complete — full building geometry library (10 modules, 46 tests)
-Last activity: 2026-02-24 — Building pipeline implemented: fetch, parse, height resolve, elevation sample, triangulate, walls, roof, merge
+Plan: 2 of 4 complete
+Status: Phase 3 Plan 02 complete — advanced roofs (gabled/hipped/pyramidal), OBB helper, BuildingMesh R3F component wired into 3D preview
+Last activity: 2026-02-24 — Buildings visible in 3D preview with correct roof shapes and terrain placement
 
-Progress: [█████░░░░░] ~50%
+Progress: [██████░░░░] ~60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 2.8 min
-- Total execution time: 0.38 hours
+- Total plans completed: 8
+- Average duration: 2.9 min
+- Total execution time: ~0.48 hours
 
 **By Phase:**
 
@@ -29,15 +29,16 @@ Progress: [█████░░░░░] ~50%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
-| 03-buildings | 1 | 8 min | 8 min |
+| 03-buildings | 2 | 14 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 3 min, 3 min, 2 min, 1 min, 8 min
+- Last 5 plans: 3 min, 2 min, 1 min, 8 min, 6 min
 - Trend: Normal
 
 *Updated after each plan completion*
 | Phase 02-terrain-preview-export P05 | 1 | 2 tasks | 2 files |
 | Phase 03-buildings P01 | 3 | 3 tasks | 15 files |
+| Phase 03-buildings P02 | 2 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,10 @@ Recent decisions affecting current work:
 - [Phase 03-buildings 03-01]: Winding convention — positive shoelace area = CCW in UTM Y-up coords (reverse only when area < 0); plan doc said screen-space convention which is opposite
 - [Phase 03-buildings 03-01]: zScale for buildings includes TERR-03 minHeightMM=5 floor check to stay aligned with terrain on flat areas
 - [Phase 03-buildings 03-01]: mergeGeometries from three/addons/utils/BufferGeometryUtils.js (not main three package)
+- [Phase 03-buildings 03-02]: OBB via rotating calipers — Graham scan convex hull + per-edge AABB projection, keep minimum-area rotation; axes[0] = long axis
+- [Phase 03-buildings 03-02]: Hipped roof falls back to pyramidal when building is square (halfExtents[0] <= halfExtents[1] means ridge length is zero)
+- [Phase 03-buildings 03-02]: Non-flat wall height = max(50% buildingHeight, buildingHeight - roofHeight) — prevents invisible walls from disproportionate OSM roof height data
+- [Phase 03-buildings 03-02]: BuildingMesh uses non-blocking building fetch — terrain visible immediately, buildings load asynchronously with status indicator
 
 ### Pending Todos
 
@@ -90,5 +95,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 03-01-PLAN.md — Full building geometry library (10 modules, 46 unit tests, 88 total passing). zScale consistent with terrain.ts. Ready for Phase 3 Plan 02 (advanced roofs).
+Stopped at: Completed 03-02-PLAN.md — Advanced roofs (gabled/hipped/pyramidal) via OBB ridge detection, BuildingMesh R3F component wired into 3D preview, 109 tests passing. Ready for Phase 3 Plan 03.
 Resume file: None

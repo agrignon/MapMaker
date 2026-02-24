@@ -22,7 +22,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Buildings
 
 - [x] **BLDG-01**: User sees OSM building footprints extruded to real heights within the selected area
-- [ ] **BLDG-02**: Buildings use detailed roof geometry (gabled, hipped, etc.) where OSM data is available
+- [x] **BLDG-02**: Buildings use detailed roof geometry (gabled, hipped, etc.) where OSM data is available
 - [x] **BLDG-03**: Buildings missing height data use a fallback hierarchy (levels → footprint heuristic → type default)
 - [x] **BLDG-04**: Buildings sit correctly on the terrain surface at their geographic location
 
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPT-04 | Phase 2 | Complete |
 | EXPT-05 | Phase 2 | Complete |
 | BLDG-01 | Phase 3 | Complete |
-| BLDG-02 | Phase 3 | Pending |
+| BLDG-02 | Phase 3 | Complete |
 | BLDG-03 | Phase 3 | Complete |
 | BLDG-04 | Phase 3 | Complete |
 | ROAD-01 | Phase 4 | Pending |

@@ -66,7 +66,7 @@ Plans:
   2. Buildings with detailed OSM roof geometry (gabled, hipped, flat) render with the correct roof shape rather than a flat top
   3. Buildings missing OSM height tags still render with plausible heights derived from the fallback hierarchy (levels tag, then footprint-area heuristic, then type default) — a rural US area shows buildings rather than empty terrain
   4. Buildings sit exactly at terrain level at their geographic location — a building on a slope has its base flush with the slope, not floating above or cutting below it
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md — Building data pipeline + geometry core library (Overpass fetch, height resolver, elevation sampler, earcut triangulation, wall/roof construction, merge)
@@ -113,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/3 | Gap closure | - |
 | 2. Terrain + Preview + Export | 4/5 | Gap closure | - |
-| 3. Buildings | 1/3 | In Progress|  |
+| 3. Buildings | 2/3 | In Progress|  |
 | 4. Roads + Controls | 0/TBD | Not started | - |
 | 5. Edit-Iterate Loop | 0/TBD | Not started | - |
 | 6. Performance Hardening | 0/TBD | Not started | - |
