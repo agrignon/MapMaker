@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 6 (Terrain Preview & Export) — IN PROGRESS
-Plan: 1 of 4 in current phase (02-01 complete)
-Status: Plan 02-01 Complete — Ready for Plan 02-02
-Last activity: 2026-02-24 — Completed 02-01: Phase 2 deps, SplitLayout, elevation pipeline (tiles + stitch + tests)
+Plan: 2 of 4 in current phase (02-02 complete)
+Status: Plan 02-02 Complete — Ready for Plan 02-03
+Last activity: 2026-02-24 — Completed 02-02: Martini terrain mesh, R3F 3D preview, Generate button, PreviewSidebar with terrain controls
 
-Progress: [███░░░░░░░] ~22%
+Progress: [████░░░░░░] ~33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 3 min
-- Total execution time: 0.17 hours
+- Total execution time: 0.20 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
-| 02-terrain-preview-export | 1 | 3 min | 3 min |
+| 02-terrain-preview-export | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 3 min
+- Last 5 plans: 5 min, 2 min, 3 min, 3 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -58,6 +58,10 @@ Recent decisions affecting current work:
 - [Phase 02-terrain-preview-export 02-01]: manifold-3d excluded from Vite optimizeDeps — WASM binary causes streaming compile failures when pre-bundled
 - [Phase 02-terrain-preview-export 02-01]: fetchTilePixels uses OffscreenCanvas (not img element) to avoid main-thread blocking during tile decode
 - [Phase 02-terrain-preview-export 02-01]: chooseTileZoom falls back to zoom=8 minimum for bboxes too large to fit in 9 tiles — correct graceful degradation
+- [Phase 02-terrain-preview-export 02-02]: minHeightMM=5 floor for flat terrain: zScale = 5/elevRange when exaggeration produces < 5mm height (TERR-03)
+- [Phase 02-terrain-preview-export 02-02]: In-place Z update on exaggeration change: recover grid indices from vertex X/Y positions to avoid re-running Martini
+- [Phase 02-terrain-preview-export 02-02]: GenerateButton in left sidebar (trigger); terrain controls in right-panel PreviewSidebar after generation
+- [Phase 02-terrain-preview-export 02-02]: Camera Z-up at [200,-300,250] fov=50 for natural overhead angle on 150mm terrain model
 
 ### Pending Todos
 
@@ -65,12 +69,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 2: Martini tile stitching RESOLVED — implemented with border-dedup stitching and bilinear resampling in 02-01
 - Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
+- manifold-3d WASM integration not yet tested in browser context — validate in Plan 02-03
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 02-terrain-preview-export-01-PLAN.md — Phase 2 deps, SplitLayout, elevation pipeline complete, ready for 02-02
+Stopped at: Completed 02-terrain-preview-export-02-PLAN.md — Martini terrain mesh, R3F 3D preview, Generate button, terrain controls complete, ready for 02-03
 Resume file: None
