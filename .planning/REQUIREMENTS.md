@@ -48,11 +48,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Export
 
-- [ ] **EXPT-01**: User can generate a binary STL file from the current model
-- [ ] **EXPT-02**: Generated STL includes a solid base plate underneath the terrain/features
-- [ ] **EXPT-03**: Generated STL is watertight (manifold) and printable without repair in standard slicers
-- [ ] **EXPT-04**: User can download the STL file directly to their local machine
-- [ ] **EXPT-05**: STL dimensions match the user's specified physical dimensions in the correct unit (mm)
+- [x] **EXPT-01**: User can generate a binary STL file from the current model
+- [x] **EXPT-02**: Generated STL includes a solid base plate underneath the terrain/features
+- [x] **EXPT-03**: Generated STL is watertight (manifold) and printable without repair in standard slicers
+- [x] **EXPT-04**: User can download the STL file directly to their local machine
+- [x] **EXPT-05**: STL dimensions match the user's specified physical dimensions in the correct unit (mm)
 
 ### Foundation (Technical)
 
@@ -108,11 +108,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TERR-03 | Phase 2 | Complete |
 | PREV-01 | Phase 2 | Complete |
 | PREV-02 | Phase 2 | Complete |
-| EXPT-01 | Phase 2 | Pending |
-| EXPT-02 | Phase 2 | Pending |
-| EXPT-03 | Phase 2 | Pending |
-| EXPT-04 | Phase 2 | Pending |
-| EXPT-05 | Phase 2 | Pending |
+| EXPT-01 | Phase 2 | Complete |
+| EXPT-02 | Phase 2 | Complete |
+| EXPT-03 | Phase 2 | Complete |
+| EXPT-04 | Phase 2 | Complete |
+| EXPT-05 | Phase 2 | Complete |
 | BLDG-01 | Phase 3 | Pending |
 | BLDG-02 | Phase 3 | Pending |
 | BLDG-03 | Phase 3 | Pending |

@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 6 (Terrain Preview & Export) — IN PROGRESS
-Plan: 2 of 4 in current phase (02-02 complete)
-Status: Plan 02-02 Complete — Ready for Plan 02-03
-Last activity: 2026-02-24 — Completed 02-02: Martini terrain mesh, R3F 3D preview, Generate button, PreviewSidebar with terrain controls
+Plan: 3 of 4 in current phase (02-03 Tasks 1-2 complete, awaiting Task 3 human-verify checkpoint)
+Status: Plan 02-03 Checkpoint — User must verify exported STL in PrusaSlicer/Bambu Studio
+Last activity: 2026-02-24 — Completed 02-03 Tasks 1-2: watertight solid mesh, STL export, export panel UI
 
 Progress: [████░░░░░░] ~33%
 
@@ -62,6 +62,8 @@ Recent decisions affecting current work:
 - [Phase 02-terrain-preview-export 02-02]: In-place Z update on exaggeration change: recover grid indices from vertex X/Y positions to avoid re-running Martini
 - [Phase 02-terrain-preview-export 02-02]: GenerateButton in left sidebar (trigger); terrain controls in right-panel PreviewSidebar after generation
 - [Phase 02-terrain-preview-export 02-02]: Camera Z-up at [200,-300,250] fov=50 for natural overhead angle on 150mm terrain model
+- [Phase 02-terrain-preview-export]: Export pipeline rebuilds geometry from store data (not scene): decouples STL export from live Three.js scene
+- [Phase 02-terrain-preview-export]: Module-level ArrayBuffer ref for STL buffer: Zustand can't serialize ArrayBuffers; hold buffer in module var for download
 
 ### Pending Todos
 
@@ -71,10 +73,11 @@ None.
 
 - Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
-- manifold-3d WASM integration not yet tested in browser context — validate in Plan 02-03
+- Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
+- Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 02-terrain-preview-export-02-PLAN.md — Martini terrain mesh, R3F 3D preview, Generate button, terrain controls complete, ready for 02-03
+Stopped at: Completed 02-03 Tasks 1-2; paused at Task 3 checkpoint:human-verify — user must test exported STL in PrusaSlicer/Bambu Studio; type "approved" to continue
 Resume file: None
