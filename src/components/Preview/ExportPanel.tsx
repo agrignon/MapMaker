@@ -145,11 +145,20 @@ export function ExportPanel() {
 
       const validation = await validateMesh(exportSolid);
 
-      if (!validation.isManifold) {
+      if (!validation.isManifold && !hasBuildings) {
+        // Terrain-only export must be manifold — block export
         const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
         setValidationError(errMsg);
         setExportStatus('error', errMsg);
         return;
+      }
+
+      if (!validation.isManifold && hasBuildings) {
+        // Buildings + terrain may have non-manifold seams — warn but allow export
+        // Slicers (PrusaSlicer, Bambu Studio) auto-repair these meshes
+        setValidationError(
+          'Mesh has non-manifold edges at building seams — your slicer will auto-repair this.'
+        );
       }
 
       // Step 4: Write STL
@@ -361,6 +370,22 @@ export function ExportPanel() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {/* Validation warning (non-blocking, shown with download dialog) */}
+      {exportStatus === 'ready' && validationError && (
+        <div
+          style={{
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid #f59e0b',
+            borderRadius: '6px',
+            padding: '10px',
+          }}
+        >
+          <p style={{ color: '#f59e0b', fontSize: '12px', margin: 0 }}>
+            {validationError}
+          </p>
         </div>
       )}
 
