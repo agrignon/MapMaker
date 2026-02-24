@@ -10,8 +10,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Location & Selection
 
 - [x] **LOCS-01**: User can search for a location by city name, street address, or lat/lon coordinates
-- [ ] **LOCS-02**: User can define a bounding box by dragging on a 2D map to set the area of interest
-- [ ] **LOCS-03**: User can resize and reposition the bounding box after initial placement
+- [x] **LOCS-02**: User can define a bounding box by dragging on a 2D map to set the area of interest
+- [x] **LOCS-03**: User can resize and reposition the bounding box after initial placement
 
 ### Terrain
 
@@ -99,8 +99,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | LOCS-01 | Phase 1 | Complete |
-| LOCS-02 | Phase 1 | Pending |
-| LOCS-03 | Phase 1 | Pending |
+| LOCS-02 | Phase 1 | Complete |
+| LOCS-03 | Phase 1 | Complete |
 | FNDN-01 | Phase 1 | Complete |
 | FNDN-02 | Phase 1 | Complete |
 | TERR-01 | Phase 2 | Pending |
@@ -135,4 +135,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after roadmap creation — all 29 requirements mapped*
+*Last updated: 2026-02-24 after 01-02 completion — LOCS-02, LOCS-03 marked complete; Phase 1 fully satisfied*

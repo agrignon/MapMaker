@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 1 — Foundation (COMPLETE)
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation)
-Plan: 1 of 2 in current phase (01-01 complete)
-Status: In Progress
-Last activity: 2026-02-24 — Completed 01-01: project scaffold, MapLibre map, UTM/STL pipeline
+Phase: 1 of 6 (Foundation) — COMPLETE
+Plan: 2 of 2 in current phase (01-01 complete, 01-02 complete)
+Status: Phase 1 Complete — Ready for Phase 2
+Last activity: 2026-02-24 — Completed 01-02: Terra Draw bbox drawing, sidebar selection info, generate button
 
-Progress: [█░░░░░░░░░] ~8%
+Progress: [██░░░░░░░░] ~17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 5 min
-- Total execution time: 0.08 hours
+- Total plans completed: 2
+- Average duration: 3.5 min
+- Total execution time: 0.12 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1 | 5 min | 5 min |
+| 01-foundation | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min
-- Trend: —
+- Last 5 plans: 5 min, 2 min
+- Trend: Fast
 
 *Updated after each plan completion*
 
@@ -50,10 +50,13 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: Used @vis.gl/react-maplibre@8.1.0 (package jumped from 1.x alpha to 8.x major; 8.1.0 is stable)
 - [Phase 01-foundation]: UTM projection uses centroid longitude for zone selection — both corners project into same zone for valid meter-space arithmetic
 - [Phase 01-foundation]: Tailwind v4 via @tailwindcss/vite plugin — no tailwind.config.js, configuration in CSS with @theme directives
+- [Phase 01-foundation 01-02]: terra-draw-maplibre-gl-adapter@1.3.0 installed separately — adapter not bundled in terra-draw 1.25.0
+- [Phase 01-foundation 01-02]: MapInteractions inner component pattern — useTerradraw must be called inside a <Map> child for useMap() context
+- [Phase 01-foundation 01-02]: Auto-switch to select mode after rectangle creation — no manual mode toggle needed by user
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 01-foundation-01-PLAN.md — project scaffold complete, ready for Plan 02 (bbox drawing)
+Stopped at: Completed 01-foundation-02-PLAN.md — bbox drawing complete, Phase 1 Foundation complete, ready for Phase 2
 Resume file: None
