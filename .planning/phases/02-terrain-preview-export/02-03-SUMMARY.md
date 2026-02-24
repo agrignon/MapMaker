@@ -67,7 +67,7 @@ completed: 2026-02-24
 - **Duration:** ~4 min
 - **Started:** 2026-02-24T05:17:18Z
 - **Completed:** 2026-02-24T05:21:39Z
-- **Tasks:** 2 of 3 (Task 3 is a human-verify checkpoint — awaiting user verification)
+- **Tasks:** 3 of 3 (Task 3 human-verify checkpoint approved)
 - **Files modified:** 7
 
 ## Accomplishments
@@ -83,7 +83,7 @@ Each task was committed atomically:
 1. **Task 1: Build watertight solid mesh, manifold validation, and STL export** - `0c19180` (feat)
 2. **Task 2: Build Export panel UI with progress bar and download dialog** - `e0b725f` (feat)
 
-**Task 3: Human-verify checkpoint** - awaiting user verification in PrusaSlicer/Bambu Studio
+**Task 3: Human-verify checkpoint** - **APPROVED** — STL loads in Bambu Studio, slices successfully
 
 ## Files Created/Modified
 - `src/lib/mesh/solid.ts` — buildSolidMesh(): terrain surface + base plate + 4 side walls at 64 samples/edge
@@ -105,24 +105,23 @@ Each task was committed atomically:
 None - plan executed exactly as written.
 
 ## Issues Encountered
-None - TypeScript compiled cleanly on first attempt, all 14 existing tests continued passing.
+- **Tile rotation/stitching bug:** Terrain in exported STL appears tiled into 4 quadrants with incorrect rotation/orientation. The terrain shape is present but spatially wrong. Root cause likely in elevation tile stitching (`stitch.ts`) or terrain mesh building (`terrain.ts`). Discovered during slicer verification.
+- 9 additional bug fixes needed during checkpoint (see Bug fixes section above)
 
 ## User Setup Required
 None - no external service configuration required. Validation uses already-installed manifold-3d package.
 
-## Checkpoint Status
+## Checkpoint Result
 
-**Task 3 (human-verify) is blocking.** User must:
-1. Run `npm run dev` (http://localhost:5173)
-2. Draw bbox over mountainous area, click Generate Preview
-3. In the right sidebar: set dimensions, click Export STL
-4. Verify progress bar shows labeled steps (Building/Validating/Writing)
-5. Verify download dialog shows file size, triangle count, and mm dimensions
-6. Open the downloaded .stl in PrusaSlicer or Bambu Studio
-7. Confirm: no repair warnings, solid model with terrain on top and flat base
-8. Try a flat area (e.g., Kansas City) — verify model is not paper-thin (5mm minimum floor)
+**Task 3 (human-verify): APPROVED** (2026-02-23)
 
-Type "approved" to continue to Plan 02-04, or describe issues.
+User verified:
+- STL loads in Bambu Studio without repair warnings
+- File slices and could print
+- End-to-end pipeline works: bbox → Generate → Preview → Export → Slicer
+
+**Known issue found during verification:**
+- **Tile rotation/stitching bug:** Exported terrain appears tiled into 4 quadrants with incorrect rotation. The elevation tile assembly or coordinate mapping has an orientation issue — terrain shape is present but spatially wrong. Likely in `src/lib/elevation/stitch.ts` or `src/lib/mesh/terrain.ts`. Needs investigation before Phase 3.
 
 ## Next Phase Readiness
 - Complete STL export pipeline: bbox → Generate → 3D preview → Export → download .stl
@@ -132,4 +131,4 @@ Type "approved" to continue to Plan 02-04, or describe issues.
 
 ---
 *Phase: 02-terrain-preview-export*
-*Completed: 2026-02-24 (pending Task 3 human verification)*
+*Completed: 2026-02-24*
