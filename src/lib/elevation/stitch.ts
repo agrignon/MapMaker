@@ -15,8 +15,8 @@ import {
 
 /**
  * Stitch multiple decoded tile elevation arrays into a single elevation grid.
- * Adjacent tiles share a 1-pixel border; stitching skips duplicate border pixels.
- * Resulting stitched size: (cols * tileSize - (cols - 1)) x (rows * tileSize - (rows - 1))
+ * Tiles are standard XYZ raster tiles with no overlap; each tile is copied in full.
+ * Resulting stitched size: cols * tileSize x rows * tileSize
  */
 export function stitchTileElevations(
   tiles: { elevation: Float32Array; tileSize: number; col: number; row: number }[],
@@ -24,27 +24,22 @@ export function stitchTileElevations(
   rows: number,
   tileSize: number
 ): Float32Array {
-  // Each non-first tile contributes (tileSize - 1) pixels (skipping shared border)
-  const stitchedWidth = cols * tileSize - (cols - 1);
-  const stitchedHeight = rows * tileSize - (rows - 1);
+  const stitchedWidth = cols * tileSize;
+  const stitchedHeight = rows * tileSize;
   const result = new Float32Array(stitchedWidth * stitchedHeight);
 
   for (const tile of tiles) {
     const { elevation, col, row } = tile;
 
     // Destination offset in the stitched grid
-    const destColOffset = col * (tileSize - 1);
-    const destRowOffset = row * (tileSize - 1);
+    const destColOffset = col * tileSize;
+    const destRowOffset = row * tileSize;
 
-    // Source pixel range — skip first col/row for non-first tiles to avoid border duplication
-    const srcColStart = col === 0 ? 0 : 1;
-    const srcRowStart = row === 0 ? 0 : 1;
-
-    for (let srcRow = srcRowStart; srcRow < tileSize; srcRow++) {
-      for (let srcCol = srcColStart; srcCol < tileSize; srcCol++) {
+    for (let srcRow = 0; srcRow < tileSize; srcRow++) {
+      for (let srcCol = 0; srcCol < tileSize; srcCol++) {
         const srcIdx = srcRow * tileSize + srcCol;
-        const destCol = destColOffset + srcCol - (col === 0 ? 0 : 1);
-        const destRow = destRowOffset + srcRow - (row === 0 ? 0 : 1);
+        const destCol = destColOffset + srcCol;
+        const destRow = destRowOffset + srcRow;
         const destIdx = destRow * stitchedWidth + destCol;
         result[destIdx] = elevation[srcIdx];
       }
@@ -138,8 +133,8 @@ export async function fetchElevationForBbox(
 
   // 4. Stitch tiles
   const stitchedElevation = stitchTileElevations(fetchedTiles, cols, rows, tileSize);
-  const stitchedWidth = cols * tileSize - (cols - 1);
-  const stitchedHeight = rows * tileSize - (rows - 1);
+  const stitchedWidth = cols * tileSize;
+  const stitchedHeight = rows * tileSize;
 
   // 5. Resample to martini grid
   const elevations = resampleToMartiniGrid(stitchedElevation, stitchedWidth, stitchedHeight, targetSize);
