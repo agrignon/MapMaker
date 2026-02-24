@@ -12,7 +12,7 @@ MapMaker is built in six phases that follow the dependency graph of the output p
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline
+- [ ] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline
 - [ ] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download
 - [ ] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain
 - [ ] **Phase 4: Roads + Controls** - OSM roads with configurable styles and fully parameterized layer controls
@@ -31,11 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can resize and reposition the bounding box after initial placement by dragging its edges or corners
   4. All bounding box coordinates are projected to local flat-earth meter space (UTM), not Web Mercator — verifiable by an automated test asserting correct dimensions at known latitudes
   5. STL export coordinate pipeline writes vertex coordinates in millimeters — verifiable by an automated test asserting a known bbox produces STL dimensions matching specified physical size
-**Plans:** 2/2 plans complete
+**Plans:** 3 plans (2 complete, 1 gap closure)
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, MapLibre satellite map, geocoding search, UTM/STL coordinate pipeline with tests
 - [x] 01-02-PLAN.md — Bounding box drawing/editing with Terra Draw, sidebar selection info, generate button
+- [ ] 01-03-PLAN.md — Gap closure: fix API key runtime guard and map instance lookup (all 9 UAT failures)
 
 ### Phase 2: Terrain + Preview + Export
 **Goal**: Users can generate a printable terrain STL for any selected area, see it in a live 3D preview, and download it — the complete output contract is validated end-to-end for the terrain-only case
@@ -98,7 +99,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/2 | Complete    | 2026-02-24 |
+| 1. Foundation | 2/3 | Gap closure | - |
 | 2. Terrain + Preview + Export | 0/TBD | Not started | - |
 | 3. Buildings | 0/TBD | Not started | - |
 | 4. Roads + Controls | 0/TBD | Not started | - |
