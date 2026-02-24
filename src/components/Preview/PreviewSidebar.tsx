@@ -1,9 +1,3 @@
-/**
- * Collapsible sidebar overlaying the 3D preview panel.
- * Houses terrain controls and (future) export controls.
- * Positioned on the right edge of the 3D preview area.
- */
-
 import { useState } from 'react';
 
 interface PreviewSidebarProps {
@@ -11,7 +5,6 @@ interface PreviewSidebarProps {
 }
 
 export function PreviewSidebar({ children }: PreviewSidebarProps) {
-  // Default expanded so controls are visible when terrain is first generated
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -27,59 +20,52 @@ export function PreviewSidebar({ children }: PreviewSidebarProps) {
         pointerEvents: 'none',
       }}
     >
-      {/* Toggle button — always visible at the edge */}
+      {/* Toggle button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label={isOpen ? 'Collapse controls' : 'Expand controls'}
         style={{
           pointerEvents: 'auto',
           marginTop: '16px',
-          marginRight: isOpen ? '0px' : '0px',
           width: '28px',
           height: '48px',
-          backgroundColor: '#1f2937',
-          border: '1px solid #374151',
-          borderRight: isOpen ? 'none' : '1px solid #374151',
+          backgroundColor: 'rgba(17, 24, 39, 0.6)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRight: isOpen ? 'none' : undefined,
           borderRadius: isOpen ? '6px 0 0 6px' : '6px',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#9ca3af',
+          color: '#d1d5db',
           fontSize: '12px',
-          alignSelf: 'flex-start',
           flexShrink: 0,
         }}
       >
         {isOpen ? '›' : '‹'}
       </button>
 
-      {/* Expandable panel */}
+      {/* Expandable panel — transparent overlay */}
       {isOpen && (
         <div
           style={{
             pointerEvents: 'auto',
-            width: '280px',
-            height: '100%',
-            backgroundColor: 'rgba(17, 24, 39, 0.95)',
-            backdropFilter: 'blur(4px)',
-            borderLeft: '1px solid #374151',
-            boxShadow: '-4px 0 16px rgba(0,0,0,0.4)',
-            padding: '16px',
+            width: '240px',
+            maxHeight: '100%',
+            backgroundColor: 'rgba(17, 24, 39, 0.55)',
+            backdropFilter: 'blur(12px)',
+            borderLeft: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '-4px 0 16px rgba(0,0,0,0.3)',
+            padding: '14px',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
+            gap: '14px',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ color: '#e5e7eb', fontWeight: 600, fontSize: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '13px' }}>
               Preview Controls
             </span>
           </div>

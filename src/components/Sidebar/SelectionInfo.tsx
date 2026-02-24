@@ -1,6 +1,5 @@
 import { useMapStore } from '../../store/mapStore';
 
-/** Threshold in meters below which dimensions display in meters rather than km. */
 const KM_THRESHOLD = 1000;
 
 function formatDimension(meters: number): string {
@@ -14,76 +13,69 @@ function formatCoord(value: number, decimalPlaces = 4): string {
   return value.toFixed(decimalPlaces);
 }
 
-/**
- * Displays real-world bbox dimensions, corner coordinates, UTM zone,
- * and an optional large-area warning.
- *
- * Shows nothing (null) when no bbox is selected.
- */
+const cardStyle: React.CSSProperties = {
+  borderRadius: '6px',
+  border: '1px solid rgba(255,255,255,0.1)',
+  padding: '8px 10px',
+  backgroundColor: 'rgba(255,255,255,0.04)',
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '10px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'rgba(255,255,255,0.45)',
+  marginBottom: '2px',
+};
+
+const valueStyle: React.CSSProperties = {
+  fontSize: '13px',
+  color: 'rgba(255,255,255,0.85)',
+};
+
 export function SelectionInfo() {
   const bbox = useMapStore((s) => s.bbox);
   const dimensions = useMapStore((s) => s.dimensions);
   const utmZone = useMapStore((s) => s.utmZone);
 
-  if (!bbox || !dimensions) {
-    return null;
-  }
+  if (!bbox || !dimensions) return null;
 
   const { sw, ne } = bbox;
   const { widthM, heightM } = dimensions;
-
-  const widthLabel = formatDimension(widthM);
-  const heightLabel = formatDimension(heightM);
-
   const showLargeAreaWarning = widthM > 5000 || heightM > 5000;
-
-  // Hemisphere for UTM zone display (N if north of equator, S otherwise)
   const centroidLat = (sw.lat + ne.lat) / 2;
   const hemisphere = centroidLat >= 0 ? 'N' : 'S';
 
   return (
-    <div className="space-y-3 text-sm">
-      {/* Dimensions */}
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
-          Dimensions
-        </p>
-        <p className="text-base font-medium text-gray-900 dark:text-gray-100">
-          {widthLabel} &times; {heightLabel}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={cardStyle}>
+        <p style={labelStyle}>Dimensions</p>
+        <p style={{ ...valueStyle, fontWeight: 500, fontSize: '14px', margin: 0 }}>
+          {formatDimension(widthM)} &times; {formatDimension(heightM)}
         </p>
       </div>
 
-      {/* Coordinates */}
-      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
-          Coordinates
+      <div style={cardStyle}>
+        <p style={labelStyle}>Coordinates</p>
+        <p style={{ ...valueStyle, margin: '0 0 2px' }}>
+          <span style={{ fontWeight: 500 }}>SW:</span> {formatCoord(sw.lat)}, {formatCoord(sw.lon)}
         </p>
-        <p className="text-gray-800 dark:text-gray-200">
-          <span className="font-medium">SW:</span>{' '}
-          {formatCoord(sw.lat)}, {formatCoord(sw.lon)}
-        </p>
-        <p className="text-gray-800 dark:text-gray-200">
-          <span className="font-medium">NE:</span>{' '}
-          {formatCoord(ne.lat)}, {formatCoord(ne.lon)}
+        <p style={{ ...valueStyle, margin: 0 }}>
+          <span style={{ fontWeight: 500 }}>NE:</span> {formatCoord(ne.lat)}, {formatCoord(ne.lon)}
         </p>
       </div>
 
-      {/* UTM Zone */}
       {utmZone !== null && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
-            Projection
-          </p>
-          <p className="text-gray-800 dark:text-gray-200">
-            UTM Zone {utmZone}{hemisphere}
-          </p>
+        <div style={cardStyle}>
+          <p style={labelStyle}>Projection</p>
+          <p style={{ ...valueStyle, margin: 0 }}>UTM Zone {utmZone}{hemisphere}</p>
         </div>
       )}
 
-      {/* Large area warning */}
       {showLargeAreaWarning && (
-        <div className="rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/30 p-3">
-          <p className="text-amber-800 dark:text-amber-300 text-xs leading-snug">
+        <div style={{ ...cardStyle, border: '1px solid rgba(251, 191, 36, 0.4)', backgroundColor: 'rgba(251, 191, 36, 0.1)' }}>
+          <p style={{ fontSize: '11px', color: 'rgba(251, 191, 36, 0.85)', margin: 0, lineHeight: 1.4 }}>
             Large area selected — processing may take longer.
           </p>
         </div>

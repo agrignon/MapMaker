@@ -5,10 +5,10 @@ import { SplitLayout } from './components/Layout/SplitLayout';
 function App() {
   return (
     <div className="h-screen flex">
-      <Sidebar />
       <SplitLayout>
         <div className="relative w-full h-full">
           <MapView />
+          <Sidebar />
         </div>
       </SplitLayout>
     </div>
