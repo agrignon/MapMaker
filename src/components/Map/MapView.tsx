@@ -5,7 +5,7 @@ import { useTerradraw } from '../../hooks/useTerradraw';
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
 
-const MAP_STYLE = `https://api.maptiler.com/maps/satellite-v2/style.json?key=${MAPTILER_KEY ?? ''}`;
+const MAP_STYLE = `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_KEY ?? ''}`;
 
 /**
  * Inner component rendered as a child of <Map> so that useMap() works.
