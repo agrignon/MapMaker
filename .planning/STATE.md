@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 1 of 6 (Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-23 — Roadmap created, 29 requirements mapped to 6 phases
+Plan: 1 of 2 in current phase (01-01 complete)
+Status: In Progress
+Last activity: 2026-02-24 — Completed 01-01: project scaffold, MapLibre map, UTM/STL pipeline
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] ~8%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 5 min
+- Total execution time: 0.08 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-foundation | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: —
+- Last 5 plans: 5 min
 - Trend: —
 
 *Updated after each plan completion*
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - Phase 2: Elevation data from MapTiler terrain-RGB tiles; martini RTIN algorithm for terrain mesh; manifold-3d WASM for STL validation
 - Phase 3: three-bvh-csg for building-terrain boolean operations (prevents non-manifold geometry)
 - Phase 6: Web Worker + Transferable ArrayBuffers for mesh generation (non-negotiable — prevents 500ms–3s UI freeze on dense areas)
+- [Phase 01-foundation]: Used @vis.gl/react-maplibre@8.1.0 (package jumped from 1.x alpha to 8.x major; 8.1.0 is stable)
+- [Phase 01-foundation]: UTM projection uses centroid longitude for zone selection — both corners project into same zone for valid meter-space arithmetic
+- [Phase 01-foundation]: Tailwind v4 via @tailwindcss/vite plugin — no tailwind.config.js, configuration in CSS with @theme directives
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-23
-Stopped at: Roadmap created, ready to plan Phase 1
+Last session: 2026-02-24
+Stopped at: Completed 01-foundation-01-PLAN.md — project scaffold complete, ready for Plan 02 (bbox drawing)
 Resume file: None

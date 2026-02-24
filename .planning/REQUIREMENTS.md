@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Location & Selection
 
-- [ ] **LOCS-01**: User can search for a location by city name, street address, or lat/lon coordinates
+- [x] **LOCS-01**: User can search for a location by city name, street address, or lat/lon coordinates
 - [ ] **LOCS-02**: User can define a bounding box by dragging on a 2D map to set the area of interest
 - [ ] **LOCS-03**: User can resize and reposition the bounding box after initial placement
 
@@ -56,8 +56,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation (Technical)
 
-- [ ] **FNDN-01**: All geometry uses local meter-space coordinates (UTM projection), not Web Mercator
-- [ ] **FNDN-02**: STL export writes coordinates in millimeters (canonical unit for 3D printing)
+- [x] **FNDN-01**: All geometry uses local meter-space coordinates (UTM projection), not Web Mercator
+- [x] **FNDN-02**: STL export writes coordinates in millimeters (canonical unit for 3D printing)
 - [ ] **FNDN-03**: Mesh generation runs in a Web Worker to prevent UI freezing
 
 ## v2 Requirements
@@ -98,11 +98,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LOCS-01 | Phase 1 | Pending |
+| LOCS-01 | Phase 1 | Complete |
 | LOCS-02 | Phase 1 | Pending |
 | LOCS-03 | Phase 1 | Pending |
-| FNDN-01 | Phase 1 | Pending |
-| FNDN-02 | Phase 1 | Pending |
+| FNDN-01 | Phase 1 | Complete |
+| FNDN-02 | Phase 1 | Complete |
 | TERR-01 | Phase 2 | Pending |
 | TERR-02 | Phase 2 | Pending |
 | TERR-03 | Phase 2 | Pending |

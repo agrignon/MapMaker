@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can resize and reposition the bounding box after initial placement by dragging its edges or corners
   4. All bounding box coordinates are projected to local flat-earth meter space (UTM), not Web Mercator — verifiable by an automated test asserting correct dimensions at known latitudes
   5. STL export coordinate pipeline writes vertex coordinates in millimeters — verifiable by an automated test asserting a known bbox produces STL dimensions matching specified physical size
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, MapLibre satellite map, geocoding search, UTM/STL coordinate pipeline with tests
@@ -98,7 +98,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/2 | Planned | - |
+| 1. Foundation | 1/2 | In Progress|  |
 | 2. Terrain + Preview + Export | 0/TBD | Not started | - |
 | 3. Buildings | 0/TBD | Not started | - |
 | 4. Roads + Controls | 0/TBD | Not started | - |
