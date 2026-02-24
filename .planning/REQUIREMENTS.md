@@ -15,7 +15,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Terrain
 
-- [ ] **TERR-01**: User sees real terrain elevation data rendered from DEM sources within the selected bounding box
+- [x] **TERR-01**: User sees real terrain elevation data rendered from DEM sources within the selected bounding box
 - [ ] **TERR-02**: User can control terrain elevation exaggeration with a slider (flatten to exaggerate)
 - [ ] **TERR-03**: Flat terrain areas produce a printable model with minimum height floor (not zero-thickness)
 
@@ -42,7 +42,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Preview & Navigation
 
 - [ ] **PREV-01**: User sees a live 3D preview of the model with orbit, zoom, and pan controls
-- [ ] **PREV-02**: 2D map editor and 3D preview are displayed side-by-side in a hybrid layout
+- [x] **PREV-02**: 2D map editor and 3D preview are displayed side-by-side in a hybrid layout
 - [ ] **PREV-03**: User can go back from 3D preview to editing without losing selections or settings
 - [ ] **PREV-04**: 3D preview updates when user toggles features or changes settings
 
@@ -103,11 +103,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOCS-03 | Phase 1 | Complete |
 | FNDN-01 | Phase 1 | Complete |
 | FNDN-02 | Phase 1 | Complete |
-| TERR-01 | Phase 2 | Pending |
+| TERR-01 | Phase 2 | Complete |
 | TERR-02 | Phase 2 | Pending |
 | TERR-03 | Phase 2 | Pending |
 | PREV-01 | Phase 2 | Pending |
-| PREV-02 | Phase 2 | Pending |
+| PREV-02 | Phase 2 | Complete |
 | EXPT-01 | Phase 2 | Pending |
 | EXPT-02 | Phase 2 | Pending |
 | EXPT-03 | Phase 2 | Pending |

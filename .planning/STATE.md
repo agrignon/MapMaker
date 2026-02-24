@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 1 — Foundation (COMPLETE)
+**Current focus:** Phase 2 — Terrain Preview & Export (IN PROGRESS)
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation) — COMPLETE
-Plan: 2 of 2 in current phase (01-01 complete, 01-02 complete)
-Status: Phase 1 Complete — Ready for Phase 2
-Last activity: 2026-02-24 — Completed 01-02: Terra Draw bbox drawing, sidebar selection info, generate button
+Phase: 2 of 6 (Terrain Preview & Export) — IN PROGRESS
+Plan: 1 of 4 in current phase (02-01 complete)
+Status: Plan 02-01 Complete — Ready for Plan 02-02
+Last activity: 2026-02-24 — Completed 02-01: Phase 2 deps, SplitLayout, elevation pipeline (tiles + stitch + tests)
 
-Progress: [██░░░░░░░░] ~17%
+Progress: [███░░░░░░░] ~22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 3.5 min
-- Total execution time: 0.12 hours
+- Total plans completed: 3
+- Average duration: 3 min
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
+| 02-terrain-preview-export | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min
+- Last 5 plans: 5 min, 2 min, 3 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -53,6 +54,10 @@ Recent decisions affecting current work:
 - [Phase 01-foundation 01-02]: terra-draw-maplibre-gl-adapter@1.3.0 installed separately — adapter not bundled in terra-draw 1.25.0
 - [Phase 01-foundation 01-02]: MapInteractions inner component pattern — useTerradraw must be called inside a <Map> child for useMap() context
 - [Phase 01-foundation 01-02]: Auto-switch to select mode after rectangle creation — no manual mode toggle needed by user
+- [Phase 02-terrain-preview-export 02-01]: @react-three/fiber@9 used (not v8) — React 19 compatible; v8 does not support React 19
+- [Phase 02-terrain-preview-export 02-01]: manifold-3d excluded from Vite optimizeDeps — WASM binary causes streaming compile failures when pre-bundled
+- [Phase 02-terrain-preview-export 02-01]: fetchTilePixels uses OffscreenCanvas (not img element) to avoid main-thread blocking during tile decode
+- [Phase 02-terrain-preview-export 02-01]: chooseTileZoom falls back to zoom=8 minimum for bboxes too large to fit in 9 tiles — correct graceful degradation
 
 ### Pending Todos
 
@@ -60,12 +65,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 2: Martini tile stitching for bounding boxes spanning multiple tiles needs a research spike before implementation
+- Phase 2: Martini tile stitching RESOLVED — implemented with border-dedup stitching and bilinear resampling in 02-01
 - Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 01-foundation-02-PLAN.md — bbox drawing complete, Phase 1 Foundation complete, ready for Phase 2
+Stopped at: Completed 02-terrain-preview-export-01-PLAN.md — Phase 2 deps, SplitLayout, elevation pipeline complete, ready for 02-02
 Resume file: None
