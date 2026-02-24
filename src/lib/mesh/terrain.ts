@@ -112,7 +112,10 @@ export function buildTerrainGeometry(
     // X: map to widthMM, centered
     const x = (vx / (gridSize - 1)) * widthMM - widthMM / 2;
     // Y: map to depthMM, centered (depth is Y axis)
-    const y = (vy / (gridSize - 1)) * depthMM - depthMM / 2;
+    // Y-axis: vy=0 is north (row 0 in array), must map to positive Y (north in mesh space).
+    // Formula: y = (1 - vy/(gridSize-1)) * depthMM - depthMM/2
+    // vy=0 → y=+depthMM/2 (north), vy=gridSize-1 → y=-depthMM/2 (south)
+    const y = (1 - vy / (gridSize - 1)) * depthMM - depthMM / 2;
     // Z: elevation mapped to mm with exaggeration and floor
     let z: number;
     if (elevRange === 0) {
@@ -177,9 +180,13 @@ export function updateTerrainElevation(
     const x = positionAttribute.getX(i);
     const y = positionAttribute.getY(i);
 
-    // Recover grid indices
+    // Recover grid indices from vertex position.
+    // X recovery: vx = (x + widthMM/2) / widthMM * (gridSize-1)
     const vx = Math.round((x + widthMM / 2) / widthMM * (gridSize - 1));
-    const vy = Math.round((y + depthMM / 2) / depthMM * (gridSize - 1));
+    // Y recovery: invert y = (1 - vy/(gridSize-1)) * depthMM - depthMM/2
+    // => (y + depthMM/2) / depthMM = 1 - vy/(gridSize-1)
+    // => vy = (1 - (y + depthMM/2) / depthMM) * (gridSize-1)
+    const vy = Math.round((1 - (y + depthMM / 2) / depthMM) * (gridSize - 1));
 
     const elevation = elevations[vy * gridSize + vx];
 
