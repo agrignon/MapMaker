@@ -153,7 +153,7 @@ export function updateTerrainElevation(
   params: TerrainMeshParams
 ): void {
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { widthMM, geographicWidthM, exaggeration, minHeightMM } = params;
+  const { widthMM, depthMM, geographicWidthM, exaggeration, minHeightMM } = params;
 
   const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
   const vertexCount = positionAttribute.count;
@@ -172,14 +172,6 @@ export function updateTerrainElevation(
       zScale = horizontalScale * exaggeration;
     }
   }
-
-  // We need to know which vertex corresponds to which grid position.
-  // The positions were built from the martini vertices array, so we need to
-  // re-derive the vertex grid positions from the current X/Y positions.
-  // Since X = (vx / (gridSize-1)) * widthMM - widthMM/2,
-  // we can recover vx from X: vx = (X + widthMM/2) / widthMM * (gridSize-1)
-  // Similarly for vy from Y.
-  const { widthMM, depthMM } = params;
 
   for (let i = 0; i < vertexCount; i++) {
     const x = positionAttribute.getX(i);
