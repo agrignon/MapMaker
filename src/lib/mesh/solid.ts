@@ -193,6 +193,15 @@ export function buildSolidMesh(
   });
 
   // ---- 3. Merge all parts --------------------------------------------------
+  // All geometries must have matching attributes for mergeGeometries to work.
+  // Compute normals on base plate and walls so they match the terrain (position + normal).
+  basePlateGeom.computeVertexNormals();
+  wallGeometries.forEach((g) => g.computeVertexNormals());
+  // Strip normals from terrain too and recompute on merged result for consistency
+  terrainNonIndexed.deleteAttribute('normal');
+  basePlateGeom.deleteAttribute('normal');
+  wallGeometries.forEach((g) => g.deleteAttribute('normal'));
+
   const allGeoms = [terrainNonIndexed, basePlateGeom, ...wallGeometries];
   const merged = mergeGeometries(allGeoms, false);
 
