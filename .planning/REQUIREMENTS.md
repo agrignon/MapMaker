@@ -98,41 +98,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LOCS-01 | — | Pending |
-| LOCS-02 | — | Pending |
-| LOCS-03 | — | Pending |
-| TERR-01 | — | Pending |
-| TERR-02 | — | Pending |
-| TERR-03 | — | Pending |
-| BLDG-01 | — | Pending |
-| BLDG-02 | — | Pending |
-| BLDG-03 | — | Pending |
-| BLDG-04 | — | Pending |
-| ROAD-01 | — | Pending |
-| ROAD-02 | — | Pending |
-| ROAD-03 | — | Pending |
-| CTRL-01 | — | Pending |
-| CTRL-02 | — | Pending |
-| CTRL-03 | — | Pending |
-| CTRL-04 | — | Pending |
-| PREV-01 | — | Pending |
-| PREV-02 | — | Pending |
-| PREV-03 | — | Pending |
-| PREV-04 | — | Pending |
-| EXPT-01 | — | Pending |
-| EXPT-02 | — | Pending |
-| EXPT-03 | — | Pending |
-| EXPT-04 | — | Pending |
-| EXPT-05 | — | Pending |
-| FNDN-01 | — | Pending |
-| FNDN-02 | — | Pending |
-| FNDN-03 | — | Pending |
+| LOCS-01 | Phase 1 | Pending |
+| LOCS-02 | Phase 1 | Pending |
+| LOCS-03 | Phase 1 | Pending |
+| FNDN-01 | Phase 1 | Pending |
+| FNDN-02 | Phase 1 | Pending |
+| TERR-01 | Phase 2 | Pending |
+| TERR-02 | Phase 2 | Pending |
+| TERR-03 | Phase 2 | Pending |
+| PREV-01 | Phase 2 | Pending |
+| PREV-02 | Phase 2 | Pending |
+| EXPT-01 | Phase 2 | Pending |
+| EXPT-02 | Phase 2 | Pending |
+| EXPT-03 | Phase 2 | Pending |
+| EXPT-04 | Phase 2 | Pending |
+| EXPT-05 | Phase 2 | Pending |
+| BLDG-01 | Phase 3 | Pending |
+| BLDG-02 | Phase 3 | Pending |
+| BLDG-03 | Phase 3 | Pending |
+| BLDG-04 | Phase 3 | Pending |
+| ROAD-01 | Phase 4 | Pending |
+| ROAD-02 | Phase 4 | Pending |
+| ROAD-03 | Phase 4 | Pending |
+| CTRL-01 | Phase 4 | Pending |
+| CTRL-02 | Phase 4 | Pending |
+| CTRL-03 | Phase 4 | Pending |
+| CTRL-04 | Phase 4 | Pending |
+| PREV-03 | Phase 5 | Pending |
+| PREV-04 | Phase 5 | Pending |
+| FNDN-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after initial definition*
+*Last updated: 2026-02-23 after roadmap creation — all 29 requirements mapped*
