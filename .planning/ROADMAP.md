@@ -54,7 +54,7 @@ Plans:
 - [x] 02-01-PLAN.md — Setup + split-panel layout + elevation tile fetching/stitching pipeline
 - [x] 02-02-PLAN.md — Martini terrain mesh + R3F 3D preview + exaggeration controls
 - [x] 02-03-PLAN.md — Watertight solid mesh + manifold validation + STL export + download
-- [ ] 02-04-PLAN.md — Gap closure: fix tile rotation/stitching bug (terrain appears as 4 incorrectly rotated quadrants)
+- [x] 02-04-PLAN.md — Gap closure: fix tile rotation/stitching bug (terrain appears as 4 incorrectly rotated quadrants)
 
 ### Phase 3: Buildings
 **Goal**: Users can see OSM buildings rendered with real heights on top of terrain, including correct placement on slopes and estimated heights where OSM data is missing
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/3 | Gap closure | - |
-| 2. Terrain + Preview + Export | 3/4 | Gap closure | - |
+| 2. Terrain + Preview + Export | 4/4 | Complete | 2026-02-24 |
 | 3. Buildings | 0/TBD | Not started | - |
 | 4. Roads + Controls | 0/TBD | Not started | - |
 | 5. Edit-Iterate Loop | 0/TBD | Not started | - |

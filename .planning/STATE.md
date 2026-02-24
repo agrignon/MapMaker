@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 2 — Terrain Preview & Export (IN PROGRESS)
+**Current focus:** Phase 3 — Buildings overlay
 
 ## Current Position
 
-Phase: 2 of 6 (Terrain Preview & Export) — IN PROGRESS
-Plan: 3 of 4 in current phase (02-03 Tasks 1-2 complete, awaiting Task 3 human-verify checkpoint)
-Status: Plan 02-03 Checkpoint — User must verify exported STL in PrusaSlicer/Bambu Studio
-Last activity: 2026-02-24 — Completed 02-03 Tasks 1-2: watertight solid mesh, STL export, export panel UI
+Phase: 2 of 6 (Terrain Preview & Export) — COMPLETE
+Plan: 4 of 4 complete
+Status: All Phase 2 plans complete including gap closure (02-04)
+Last activity: 2026-02-24 — Phase 2 gap closure complete (Y-axis inversion fix, 38 tests passing)
 
-Progress: [████░░░░░░] ~33%
+Progress: [████░░░░░░] ~40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 3 min
-- Total execution time: 0.20 hours
+- Total plans completed: 5
+- Average duration: 2.6 min
+- Total execution time: 0.22 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
-| 02-terrain-preview-export | 2 | 6 min | 3 min |
+| 02-terrain-preview-export | 3 | 8 min | 2.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 3 min, 3 min
+- Last 5 plans: 5 min, 2 min, 3 min, 3 min, 2 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 02-terrain-preview-export 02-02]: Camera Z-up at [200,-300,250] fov=50 for natural overhead angle on 150mm terrain model
 - [Phase 02-terrain-preview-export]: Export pipeline rebuilds geometry from store data (not scene): decouples STL export from live Three.js scene
 - [Phase 02-terrain-preview-export]: Module-level ArrayBuffer ref for STL buffer: Zustand can't serialize ArrayBuffers; hold buffer in module var for download
+- [Phase 02-terrain-preview-export 02-04]: Y-axis fix is in terrain.ts coordinate mapping only — stitch.ts and tiles.ts are correct; tile row 0 = north is right
+- [Phase 02-terrain-preview-export 02-04]: Regression test uses synthetic 257x257 grid with asymmetric quadrant elevations (NW=100m, NE=50m, SW=25m, SE=10m) to detect inversion without real tile data
 
 ### Pending Todos
 
@@ -71,13 +73,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
-- Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
+- Phase 1 gap closure (01-03): UAT verification still pending (no SUMMARY for 01-03)
 - Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 02-03 Tasks 1-2; paused at Task 3 checkpoint:human-verify — user must test exported STL in PrusaSlicer/Bambu Studio; type "approved" to continue
+Stopped at: Completed 02-04-PLAN.md — Phase 2 gap closure (Y-axis inversion fix). Phase 2 fully complete. Ready for Phase 3.
 Resume file: None
