@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 
 ## Current Position
 
-Phase: 2 of 6 (Terrain Preview & Export) — COMPLETE
-Plan: 5 of 5 complete
-Status: All Phase 2 plans complete including gap closure (02-04) and tile boundary seam fix (02-05)
-Last activity: 2026-02-24 — Tile boundary seam bug fixed, all 42 tests passing
+Phase: 3 of 6 (Buildings) — IN PROGRESS
+Plan: 1 of 4 complete
+Status: Phase 3 Plan 01 complete — full building geometry library (10 modules, 46 tests)
+Last activity: 2026-02-24 — Building pipeline implemented: fetch, parse, height resolve, elevation sample, triangulate, walls, roof, merge
 
-Progress: [████░░░░░░] ~40%
+Progress: [█████░░░░░] ~50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 2.2 min
-- Total execution time: 0.22 hours
+- Total plans completed: 7
+- Average duration: 2.8 min
+- Total execution time: 0.38 hours
 
 **By Phase:**
 
@@ -29,13 +29,15 @@ Progress: [████░░░░░░] ~40%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
+| 03-buildings | 1 | 8 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 3 min, 3 min, 2 min, 1 min
-- Trend: Fast
+- Last 5 plans: 3 min, 3 min, 2 min, 1 min, 8 min
+- Trend: Normal
 
 *Updated after each plan completion*
 | Phase 02-terrain-preview-export P05 | 1 | 2 tasks | 2 files |
+| Phase 03-buildings P01 | 3 | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -70,6 +72,10 @@ Recent decisions affecting current work:
 - [Phase 02-terrain-preview-export 02-05]: MapTiler terrain-rgb-v2 tiles are standard 256x256 XYZ raster tiles with NO border overlap — stitching uses simple concatenation at col*tileSize stride
 - [Phase 02-terrain-preview-export 02-05]: fetchElevationForBbox stitchedWidth/Height must match stitchTileElevations formula exactly (cols*tileSize, rows*tileSize) or resampling coordinates diverge
 - [Phase 02-terrain-preview-export]: MapTiler terrain-rgb-v2 tiles are standard 256x256 XYZ raster tiles with NO border overlap — stitching uses simple concatenation at col*tileSize stride
+- [Phase 03-buildings 03-01]: three-mesh-bvh@0.9.8 installed with --legacy-peer-deps (conflict with @react-three/drei@10 which pins 0.8.3)
+- [Phase 03-buildings 03-01]: Winding convention — positive shoelace area = CCW in UTM Y-up coords (reverse only when area < 0); plan doc said screen-space convention which is opposite
+- [Phase 03-buildings 03-01]: zScale for buildings includes TERR-03 minHeightMM=5 floor check to stay aligned with terrain on flat areas
+- [Phase 03-buildings 03-01]: mergeGeometries from three/addons/utils/BufferGeometryUtils.js (not main three package)
 
 ### Pending Todos
 
@@ -84,5 +90,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 02-05-PLAN.md — Tile boundary seam bug fix (stitchTileElevations simple concatenation). Phase 2 fully complete with all gap closures. Ready for Phase 3.
+Stopped at: Completed 03-01-PLAN.md — Full building geometry library (10 modules, 46 unit tests, 88 total passing). zScale consistent with terrain.ts. Ready for Phase 3 Plan 02 (advanced roofs).
 Resume file: None
