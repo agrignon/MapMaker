@@ -1,7 +1,9 @@
+import { useState, useCallback } from 'react';
 import { Map, useMap } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { SearchOverlay } from './SearchOverlay';
 import { useTerradraw } from '../../hooks/useTerradraw';
+import type { MapEvent } from '@vis.gl/react-maplibre';
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
 
@@ -10,28 +12,22 @@ const MAP_STYLE = `https://api.maptiler.com/maps/satellite/style.json?key=${MAPT
 /**
  * Inner component rendered as a child of <Map> so that useMap() works.
  * Initialises Terra Draw for bbox drawing and wires other map interactions.
+ * Only mounted after the map's style is fully loaded (controlled by parent).
  */
 function MapInteractions() {
-  // useMap must be called inside a component that is a descendant of <Map>.
-  // Without a <MapProvider>, useMap() only populates the 'current' key (from
-  // MapContext set by the <Map> component itself). The id-based lookup
-  // maps['main-map'] requires MountedMapsContext which is only provided by
-  // <MapProvider>. Since this app has a single map and <MapInteractions> is
-  // already a child of <Map>, maps.current is the correct accessor.
   const maps = useMap();
   const mapInstance = maps.current?.getMap() ?? null;
 
   useTerradraw(mapInstance);
 
-  return (
-    <>
-      <SearchOverlay />
-    </>
-  );
+  return <SearchOverlay />;
 }
 
 /** Renders the full-viewport MapLibre satellite map with geocoding search overlay. */
 export function MapView() {
+  const [mapReady, setMapReady] = useState(false);
+  const handleLoad = useCallback((_e: MapEvent) => setMapReady(true), []);
+
   if (!MAPTILER_KEY) {
     return (
       <div className="flex items-center justify-center h-full bg-gray-900 text-white p-8">
@@ -60,8 +56,9 @@ export function MapView() {
       }}
       style={{ width: '100%', height: '100%' }}
       mapStyle={MAP_STYLE}
+      onLoad={handleLoad}
     >
-      <MapInteractions />
+      {mapReady && <MapInteractions />}
     </Map>
   );
 }

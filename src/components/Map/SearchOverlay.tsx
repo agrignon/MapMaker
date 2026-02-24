@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useMap } from '@vis.gl/react-maplibre';
 import { GeocodingControl } from '@maptiler/geocoding-control/react';
 import { createMapLibreGlMapController } from '@maptiler/geocoding-control/maplibregl';
@@ -16,31 +16,19 @@ const LAT_LON_RE = /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/;
  * Also intercepts raw "lat, lon" coordinate input and flies the map directly,
  * bypassing the geocoding API.
  *
- * Returns null if no API key is configured — this prevents the broken
- * "Something went wrong" error state from ever appearing. In practice the
- * parent MapView already guards the missing-key case and won't render this
- * component, but the guard here is a safety net.
+ * Only mounted after the map's style is fully loaded (MapView gates via onLoad),
+ * so it's safe to access map sources immediately.
+ *
+ * Returns null if no API key is configured.
  */
 export function SearchOverlay() {
   const maps = useMap();
   const mapRef = maps['main-map'] ?? maps.current;
 
-  // Defer controller creation until the map style is fully loaded.
-  // createMapLibreGlMapController accesses map sources immediately,
-  // which throws "Style is not done loading" if called too early.
-  const [mapController, setMapController] = useState<MapController | undefined>();
-  useEffect(() => {
+  const mapController = useMemo<MapController | undefined>(() => {
     const map = mapRef?.getMap();
-    if (!map) return;
-
-    const create = () => setMapController(createMapLibreGlMapController(map, maplibregl));
-
-    if (map.isStyleLoaded()) {
-      create();
-    } else {
-      map.once('style.load', create);
-      return () => { map.off('style.load', create); };
-    }
+    if (!map) return undefined;
+    return createMapLibreGlMapController(map, maplibregl);
   }, [mapRef]);
 
   // Track input value via ref to intercept lat/lon before API call
