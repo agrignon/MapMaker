@@ -13,7 +13,7 @@ MapMaker is built in six phases that follow the dependency graph of the output p
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline
-- [x] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (completed 2026-02-24)
+- [ ] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (gap closure: tile stitching bug)
 - [ ] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain
 - [ ] **Phase 4: Roads + Controls** - OSM roads with configurable styles and fully parameterized layer controls
 - [ ] **Phase 5: Edit-Iterate Loop** - State-preserving back-to-edit navigation and live preview updates
@@ -48,12 +48,13 @@ Plans:
   3. Flat terrain areas (near-zero elevation variation) produce a model with a visible minimum height — not a paper-thin surface
   4. User sees the 2D map panel and 3D preview panel displayed side-by-side simultaneously, with orbit, zoom, and pan controls on the 3D panel
   5. User can click Export, and the browser downloads a binary STL file whose bounding box dimensions match the user's specified physical dimensions in millimeters — the file opens without repair warnings in PrusaSlicer or Bambu Studio
-**Plans:** 3/3 plans complete
+**Plans:** 4 plans (3 complete, 1 gap closure)
 
 Plans:
-- [ ] 02-01-PLAN.md — Setup + split-panel layout + elevation tile fetching/stitching pipeline
-- [ ] 02-02-PLAN.md — Martini terrain mesh + R3F 3D preview + exaggeration controls
-- [ ] 02-03-PLAN.md — Watertight solid mesh + manifold validation + STL export + download
+- [x] 02-01-PLAN.md — Setup + split-panel layout + elevation tile fetching/stitching pipeline
+- [x] 02-02-PLAN.md — Martini terrain mesh + R3F 3D preview + exaggeration controls
+- [x] 02-03-PLAN.md — Watertight solid mesh + manifold validation + STL export + download
+- [ ] 02-04-PLAN.md — Gap closure: fix tile rotation/stitching bug (terrain appears as 4 incorrectly rotated quadrants)
 
 ### Phase 3: Buildings
 **Goal**: Users can see OSM buildings rendered with real heights on top of terrain, including correct placement on slopes and estimated heights where OSM data is missing
@@ -105,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/3 | Gap closure | - |
-| 2. Terrain + Preview + Export | 3/3 | Complete   | 2026-02-24 |
+| 2. Terrain + Preview + Export | 3/4 | Gap closure | - |
 | 3. Buildings | 0/TBD | Not started | - |
 | 4. Roads + Controls | 0/TBD | Not started | - |
 | 5. Edit-Iterate Loop | 0/TBD | Not started | - |
