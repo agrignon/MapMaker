@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-foundation
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md]
 started: 2026-02-24T02:00:00Z
-updated: 2026-02-24T02:05:00Z
+updated: 2026-02-24T02:10:00Z
 ---
 
 ## Current Test
@@ -81,37 +81,54 @@ skipped: 0
   reason: "User reported: launched the app, black screen where the map should be"
   severity: blocker
   test: 1
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "No .env file exists — only .env.example with placeholder. VITE_MAPTILER_KEY resolves to undefined, falls back to empty string via ?? '', MapTiler rejects unauthenticated request, MapLibre renders black canvas."
+  artifacts:
+    - path: "src/components/Map/MapView.tsx"
+      issue: "Line 6-8: ?? '' silently converts undefined key to empty string — no error shown to user"
+    - path: ".env.example"
+      issue: "Only example file exists, no .env with real key"
+  missing:
+    - "Create .env file with valid VITE_MAPTILER_KEY"
+    - "Add runtime guard in MapView.tsx to throw clear error when key is missing"
+  debug_session: ".planning/debug/black-screen-satellite-map.md"
 
 - truth: "Geocoding search shows autocomplete suggestions and flies to selected location"
   status: failed
   reason: "User reported: Start typing, popup appears with red text saying 'Something went wrong'"
   severity: blocker
   test: 2
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Same missing .env file. GeocodingControl receives apiKey='' (empty string). Library's internal guard (f && ee.set('key', f)) treats empty string as falsy, omits key from API request. MapTiler returns 403."
+  artifacts:
+    - path: "src/components/Map/SearchOverlay.tsx"
+      issue: "Line 9: ?? '' fallback produces falsy empty string"
+  missing:
+    - "Create .env file with valid VITE_MAPTILER_KEY (same fix as gap 1)"
+  debug_session: ".planning/debug/geocoding-something-went-wrong.md"
 
 - truth: "Typing lat/lon coordinates flies map directly to that location"
   status: failed
-  reason: "User reported: Again, I get a popup error with 'Something went wrong'"
+  reason: "User reported: popup error with 'Something went wrong'"
   severity: blocker
   test: 3
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Same as gap 2 — geocoding control fails before lat/lon interception can trigger."
+  artifacts:
+    - path: "src/components/Map/SearchOverlay.tsx"
+      issue: "Geocoding control error blocks all search input"
+  missing:
+    - "Fix .env (same as gap 1)"
+  debug_session: ".planning/debug/geocoding-something-went-wrong.md"
 
 - truth: "Click-and-drag draws a blue semi-transparent rectangle on the map"
   status: failed
-  reason: "User reported: the screen is all black, but there is a lone marker, and clicking and dragging moves the marker around the screen, no box being drawn"
+  reason: "User reported: black screen, lone marker, clicking and dragging moves marker around"
   severity: blocker
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "useMap()['main-map'] returns undefined because no <MapProvider> wraps the component tree. @vis.gl/react-maplibre registers maps by id only when MountedMapsContext is provided via <MapProvider>. Without it, useMap() only has .current key. useTerradraw receives null map instance and bails at line 23 (if (!map) return)."
+  artifacts:
+    - path: "src/components/Map/MapView.tsx"
+      issue: "Line 17: maps['main-map']?.getMap() returns undefined — no MapProvider in tree"
+    - path: "src/hooks/useTerradraw.ts"
+      issue: "Line 23: early return when map is null — TerraDraw never initializes"
+  missing:
+    - "Either wrap app in <MapProvider> from @vis.gl/react-maplibre, or change MapView.tsx to use maps.current instead of maps['main-map']"
+  debug_session: ".planning/debug/terradraw-rectangle-broken.md"
