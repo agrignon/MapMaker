@@ -11,7 +11,7 @@ const MAP_STYLE = `https://api.maptiler.com/maps/satellite/style.json?key=${MAPT
 
 /**
  * Inner component rendered as a child of <Map> so that useMap() works.
- * Initialises Terra Draw for bbox drawing and wires other map interactions.
+ * Initialises bbox drawing and wires other map interactions.
  * Only mounted after the map's style is fully loaded (controlled by parent).
  */
 function MapInteractions() {
