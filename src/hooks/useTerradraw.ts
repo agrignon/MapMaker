@@ -1,108 +1,73 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import {
-  TerraDraw,
-  TerraDrawRectangleMode,
-  TerraDrawSelectMode,
-} from 'terra-draw';
-import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { useMapStore } from '../store/mapStore';
 
-/**
- * Syncs a TerraDraw snapshot to the Zustand store.
- * Extracts the first rectangle polygon and derives SW/NE bbox.
- */
-function syncBboxToStore(draw: TerraDraw) {
-  const snapshot = draw.getSnapshot();
-  const rect = snapshot.find(
-    (f) =>
-      f.geometry.type === 'Polygon' &&
-      f.properties?.['mode'] === 'rectangle',
-  );
+const SOURCE_ID = 'bbox-source';
+const FILL_LAYER = 'bbox-fill';
+const LINE_LAYER = 'bbox-line';
 
-  if (!rect) {
-    useMapStore.getState().clearBbox();
-    return;
-  }
-
-  const coords = (rect.geometry as GeoJSON.Polygon).coordinates[0];
-  let minLon = Infinity, minLat = Infinity;
-  let maxLon = -Infinity, maxLat = -Infinity;
-
-  for (const [lon, lat] of coords) {
-    if (lon < minLon) minLon = lon;
-    if (lat < minLat) minLat = lat;
-    if (lon > maxLon) maxLon = lon;
-    if (lat > maxLat) maxLat = lat;
-  }
-
-  useMapStore.getState().setBbox(
-    { lon: minLon, lat: minLat },
-    { lon: maxLon, lat: maxLat },
-  );
+/** Build a GeoJSON Polygon from SW/NE corners. */
+function bboxPolygon(sw: { lng: number; lat: number }, ne: { lng: number; lat: number }): GeoJSON.Feature<GeoJSON.Polygon> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        [sw.lng, sw.lat],
+        [ne.lng, sw.lat],
+        [ne.lng, ne.lat],
+        [sw.lng, ne.lat],
+        [sw.lng, sw.lat],
+      ]],
+    },
+  };
 }
 
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
 /**
- * Custom hook that manages bbox drawing on a MapLibre map.
+ * Custom hook for bbox drawing on a MapLibre map.
  *
- * Drawing: Shift+drag draws a rectangle (standard map app pattern).
- * Post-draw: TerraDraw select mode handles resize/reposition.
+ * Drawing: Shift+drag draws a rectangle.
+ * Visualization: native MapLibre GeoJSON source + fill/line layers.
+ * Post-draw: Shift+drag again replaces the rectangle.
  *
- * @param map - A live maplibre-gl Map instance (or null before ready).
- *              Style must be loaded (MapView gates via onLoad).
+ * @param map - A live MapLibre map instance (style must be loaded).
  */
 export function useTerradraw(map: MapLibreMap | null): void {
-  const drawRef = useRef<TerraDraw | null>(null);
-
   useEffect(() => {
     if (!map) return;
 
-    // Disable MapLibre's built-in box zoom (also Shift+drag) to avoid conflict
+    // Disable MapLibre's box zoom (also Shift+drag)
     map.boxZoom.disable();
 
     // -----------------------------------------------------------------------
-    // TerraDraw: used for rendering the rectangle + select mode (resize/move)
+    // MapLibre source + layers for persistent rectangle rendering
     // -----------------------------------------------------------------------
-    const draw = new TerraDraw({
-      adapter: new TerraDrawMapLibreGLAdapter({ map }),
-      modes: [
-        new TerraDrawRectangleMode({
-          styles: {
-            fillColor: '#3b82f6',
-            fillOpacity: 0.2,
-            outlineColor: '#3b82f6',
-            outlineOpacity: 0.8,
-            outlineWidth: 2,
-          },
-        }),
-        new TerraDrawSelectMode({
-          flags: {
-            rectangle: {
-              feature: {
-                draggable: true,
-                coordinates: {
-                  midpoints: true,
-                  draggable: true,
-                  resizable: 'opposite',
-                },
-              },
-            },
-          },
-        }),
-      ],
+    map.addSource(SOURCE_ID, { type: 'geojson', data: EMPTY_FC });
+    map.addLayer({
+      id: FILL_LAYER,
+      type: 'fill',
+      source: SOURCE_ID,
+      paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.2 },
+    });
+    map.addLayer({
+      id: LINE_LAYER,
+      type: 'line',
+      source: SOURCE_ID,
+      paint: { 'line-color': '#3b82f6', 'line-width': 2, 'line-opacity': 0.8 },
     });
 
-    draw.start();
-    // Stay in 'static' mode (default after start) — Shift+drag handles drawing
-    drawRef.current = draw;
+    function updateRect(sw: { lng: number; lat: number }, ne: { lng: number; lat: number }) {
+      const src = map!.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (src) src.setData({ type: 'FeatureCollection', features: [bboxPolygon(sw, ne)] });
+    }
 
-    // Sync store when features are modified via select mode (resize/reposition)
-    const handleChange = (_ids: (string | number)[], type: string) => {
-      if (type === 'update' || type === 'delete') {
-        syncBboxToStore(draw);
-      }
-    };
-    draw.on('change', handleChange);
+    function clearRect() {
+      const src = map!.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (src) src.setData(EMPTY_FC);
+    }
 
     // -----------------------------------------------------------------------
     // Shift+drag rectangle drawing
@@ -115,15 +80,11 @@ export function useTerradraw(map: MapLibreMap | null): void {
     let overlay: HTMLDivElement | null = null;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift' && !drawing) {
-        canvas.style.cursor = 'crosshair';
-      }
+      if (e.key === 'Shift' && !drawing) canvas.style.cursor = 'crosshair';
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift' && !drawing) {
-        canvas.style.cursor = '';
-      }
+      if (e.key === 'Shift' && !drawing) canvas.style.cursor = '';
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -134,10 +95,8 @@ export function useTerradraw(map: MapLibreMap | null): void {
       startX = e.clientX - rect.left;
       startY = e.clientY - rect.top;
 
-      // Disable map panning while drawing
       map.dragPan.disable();
 
-      // Create visual overlay for the drawing preview
       overlay = document.createElement('div');
       overlay.style.cssText =
         'position:absolute;background:rgba(59,130,246,0.2);border:2px solid rgba(59,130,246,0.8);pointer-events:none;z-index:5;';
@@ -163,73 +122,34 @@ export function useTerradraw(map: MapLibreMap | null): void {
       if (!drawing) return;
       drawing = false;
 
-      // Remove overlay
-      if (overlay) {
-        overlay.remove();
-        overlay = null;
-      }
+      if (overlay) { overlay.remove(); overlay = null; }
 
-      // Re-enable map panning
       map.dragPan.enable();
       canvas.style.cursor = '';
 
-      // Convert pixel coords to geographic coords
       const rect = canvas.getBoundingClientRect();
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
 
-      // Ignore tiny drags (< 5px in any direction)
+      // Ignore tiny drags (< 5px)
       if (Math.abs(endX - startX) < 5 && Math.abs(endY - startY) < 5) return;
 
       const p1 = map.unproject([startX, startY]);
       const p2 = map.unproject([endX, endY]);
 
-      const sw = {
-        lng: Math.min(p1.lng, p2.lng),
-        lat: Math.min(p1.lat, p2.lat),
-      };
-      const ne = {
-        lng: Math.max(p1.lng, p2.lng),
-        lat: Math.max(p1.lat, p2.lat),
-      };
+      const sw = { lng: Math.min(p1.lng, p2.lng), lat: Math.min(p1.lat, p2.lat) };
+      const ne = { lng: Math.max(p1.lng, p2.lng), lat: Math.max(p1.lat, p2.lat) };
 
-      // Clear any existing rectangle
-      const existing = draw.getSnapshot();
-      if (existing.length > 0) {
-        draw.removeFeatures(existing.map((f) => f.id as string | number));
-      }
+      // Render persistent rectangle on map
+      updateRect(sw, ne);
 
-      // Add the new rectangle to TerraDraw (enables select mode resize/move)
-      draw.addFeatures([
-        {
-          type: 'Feature',
-          properties: { mode: 'rectangle' },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [
-              [
-                [sw.lng, sw.lat],
-                [ne.lng, sw.lat],
-                [ne.lng, ne.lat],
-                [sw.lng, ne.lat],
-                [sw.lng, sw.lat],
-              ],
-            ],
-          },
-        },
-      ]);
-
-      // Switch to select mode for resize/reposition
-      draw.setMode('select');
-
-      // Update the store
+      // Update store
       useMapStore.getState().setBbox(
         { lon: sw.lng, lat: sw.lat },
         { lon: ne.lng, lat: ne.lat },
       );
     };
 
-    // Register event handlers
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
@@ -245,10 +165,11 @@ export function useTerradraw(map: MapLibreMap | null): void {
       canvas.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      draw.off('change', handleChange);
-      draw.stop();
-      drawRef.current = null;
+      if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
+      if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER);
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       map.boxZoom.enable();
+      void clearRect;
     };
   }, [map]);
 }
