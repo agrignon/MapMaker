@@ -28,7 +28,7 @@ export function Sidebar() {
           <SelectionInfo />
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Search for a location and draw a bounding box to get started.
+            Search for a location, then <strong>Shift+drag</strong> on the map to draw a bounding box.
           </p>
         )}
       </div>
