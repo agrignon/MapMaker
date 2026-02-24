@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 6 (Terrain Preview & Export) — COMPLETE
-Plan: 4 of 4 complete
-Status: All Phase 2 plans complete including gap closure (02-04)
-Last activity: 2026-02-24 — Phase 2 gap closure complete (Y-axis inversion fix, 38 tests passing)
+Plan: 5 of 5 complete
+Status: All Phase 2 plans complete including gap closure (02-04) and tile boundary seam fix (02-05)
+Last activity: 2026-02-24 — Tile boundary seam bug fixed, all 42 tests passing
 
 Progress: [████░░░░░░] ~40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 2.6 min
+- Total plans completed: 6
+- Average duration: 2.2 min
 - Total execution time: 0.22 hours
 
 **By Phase:**
@@ -28,13 +28,14 @@ Progress: [████░░░░░░] ~40%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
-| 02-terrain-preview-export | 3 | 8 min | 2.7 min |
+| 02-terrain-preview-export | 4 | 9 min | 2.25 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 3 min, 3 min, 2 min
+- Last 5 plans: 2 min, 3 min, 3 min, 2 min, 1 min
 - Trend: Fast
 
 *Updated after each plan completion*
+| Phase 02-terrain-preview-export P05 | 1 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,9 @@ Recent decisions affecting current work:
 - [Phase 02-terrain-preview-export]: Module-level ArrayBuffer ref for STL buffer: Zustand can't serialize ArrayBuffers; hold buffer in module var for download
 - [Phase 02-terrain-preview-export 02-04]: Y-axis fix is in terrain.ts coordinate mapping only — stitch.ts and tiles.ts are correct; tile row 0 = north is right
 - [Phase 02-terrain-preview-export 02-04]: Regression test uses synthetic 257x257 grid with asymmetric quadrant elevations (NW=100m, NE=50m, SW=25m, SE=10m) to detect inversion without real tile data
+- [Phase 02-terrain-preview-export 02-05]: MapTiler terrain-rgb-v2 tiles are standard 256x256 XYZ raster tiles with NO border overlap — stitching uses simple concatenation at col*tileSize stride
+- [Phase 02-terrain-preview-export 02-05]: fetchElevationForBbox stitchedWidth/Height must match stitchTileElevations formula exactly (cols*tileSize, rows*tileSize) or resampling coordinates diverge
+- [Phase 02-terrain-preview-export]: MapTiler terrain-rgb-v2 tiles are standard 256x256 XYZ raster tiles with NO border overlap — stitching uses simple concatenation at col*tileSize stride
 
 ### Pending Todos
 
@@ -80,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 02-04-PLAN.md — Phase 2 gap closure (Y-axis inversion fix). Phase 2 fully complete. Ready for Phase 3.
+Stopped at: Completed 02-05-PLAN.md — Tile boundary seam bug fix (stitchTileElevations simple concatenation). Phase 2 fully complete with all gap closures. Ready for Phase 3.
 Resume file: None
