@@ -29,9 +29,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Roads
 
-- [ ] **ROAD-01**: User sees OSM road network rendered as 3D geometry within the selected area
-- [ ] **ROAD-02**: User can choose road style: recessed channels, raised surfaces, or flat at terrain level
-- [ ] **ROAD-03**: Road width reflects road type (highway wider than residential street)
+- [x] **ROAD-01**: User sees OSM road network rendered as 3D geometry within the selected area
+- [x] **ROAD-02**: User can choose road style: recessed channels, raised surfaces, or flat at terrain level
+- [x] **ROAD-03**: Road width reflects road type (highway wider than residential street)
 
 ### Water
 
@@ -132,9 +132,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CTRL-02 | Phase 4 | Complete |
 | CTRL-03 | Phase 4 | Complete |
 | CTRL-04 | Phase 4 | Complete |
-| ROAD-01 | Phase 5 | Pending |
-| ROAD-02 | Phase 5 | Pending |
-| ROAD-03 | Phase 5 | Pending |
+| ROAD-01 | Phase 5 | Complete |
+| ROAD-02 | Phase 5 | Complete |
+| ROAD-03 | Phase 5 | Complete |
 | WATR-01 | Phase 6 | Pending |
 | VEGE-01 | Phase 7 | Pending |
 | TERR-04 | Phase 7 | Pending |

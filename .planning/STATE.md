@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 
 ## Current Position
 
-Phase: 4 — Model Controls + Store Foundation (complete)
-Plan: 3 of 3 complete — Phase 4 COMPLETE (all gaps closed)
-Status: v1.0 roadmap — 27/34 requirements complete (Phases 1-4 fully done including CTRL-01 through CTRL-04, Z height override wired end-to-end), 7 remaining requirements mapped to Phases 5-9
-Last activity: 2026-02-25 — Plan 04-03 complete: targetHeightMM wired through TerrainMesh, BuildingMesh, ExportPanel — Z height override now affects 3D preview and STL export; CTRL-02 fully complete
+Phase: 5 — Roads Layer (in progress)
+Plan: 1 of 2 complete — Phase 5 Plan 01 done: road library (types, overpass, parse, roadMesh) with 45 tests
+Status: v1.0 roadmap — 30/34 requirements complete (ROAD-01, ROAD-02, ROAD-03 complete), 4 remaining requirements mapped to Phases 5-9
+Last activity: 2026-02-25 — Plan 05-01 complete: road data pipeline built (Overpass fetch, OSM parse, ribbon mesh generation); geometry-extrude@0.2.1 bug patched
 
-Progress: [███████░░░] ~64%
+Progress: [████████░░] ~70%
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Progress: [███████░░░] ~64%
 | Phase 04-model-controls-store-foundation P01 | 2 | 2 tasks | 3 files |
 | Phase 04-model-controls-store-foundation P02 | 2 | 2 tasks | 8 files |
 | Phase 04-model-controls-store-foundation P03 | 3 | 2 tasks | 6 files |
+| Phase 05-roads-layer P01 | 6 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,9 @@ Recent decisions affecting current work:
 - [Phase 04-model-controls-store-foundation]: PreviewSidebar is now self-contained with no children prop; dimension inputs migrated from ExportPanel to ModelSizeSection
 - [Phase 04-model-controls-store-foundation 04-03]: targetReliefMM = targetHeightMM - basePlateThicknessMM; caller subtracts base plate before passing to TerrainMeshParams/BuildingGeometryParams — keeps library functions focused on surface geometry
 - [Phase 04-model-controls-store-foundation 04-03]: buildAllBuildings building heightMM refactored to heightM * zScale (instead of heightM * horizontalScale * exaggeration) — correct for targetReliefMM override, TERR-03 floor, and normal cases
+- [Phase 05-roads-layer]: geometry-extrude@0.2.1 has rawVertices bug; patched via patch-package — rawVertices: vertices → rawVertices: points in convertPolylineToTriangulatedPolygon
+- [Phase 05-roads-layer]: ROAD_WIDTH_MM: highway=1.8mm, main=1.2mm, residential=0.7mm; ROAD_DEPTH_MM: highway=1.0mm, main=0.6mm, residential=0.3mm; ROAD_COLOR: #555555
+- [Phase 05-roads-layer]: Bridge lift = ROAD_DEPTH_MM[tier] * 2; UV never set on road geometry to avoid mergeGeometries attribute mismatch with terrain/buildings
 
 ### Pending Todos
 
@@ -124,5 +128,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 04-model-controls-store-foundation 04-03-PLAN.md — Phase 4 gap closure complete, Z height override wired end-to-end; ready for Phase 5 (Roads)
+Stopped at: Completed 05-roads-layer 05-01-PLAN.md — road library complete (types, overpass, parse, roadMesh + 45 tests); geometry-extrude@0.2.1 bug patched; ready for Plan 05-02 (UI wiring)
 Resume file: None
