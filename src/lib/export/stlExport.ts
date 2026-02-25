@@ -51,17 +51,22 @@ export function downloadSTL(buffer: ArrayBuffer, filename: string): void {
  * Uses locationName (from geocoding search) if available, otherwise falls back to coordinates.
  *
  * Examples:
- *   locationName="Mount Rainier", hasBuildings=false → "mount-rainier-terrain.stl"
- *   locationName="Mount Rainier", hasBuildings=true  → "mount-rainier-terrain-buildings.stl"
- *   no locationName, bbox at 46.85°N 121.73°W       → "terrain-46.85--121.73.stl"
- *   no locationName, hasBuildings=true               → "terrain-buildings-46.85--121.73.stl"
+ *   locationName="Mount Rainier", hasBuildings=false, hasRoads=false → "mount-rainier-terrain.stl"
+ *   locationName="Mount Rainier", hasBuildings=true, hasRoads=false  → "mount-rainier-terrain-buildings.stl"
+ *   locationName="Mount Rainier", hasBuildings=false, hasRoads=true  → "mount-rainier-terrain-roads.stl"
+ *   locationName="Mount Rainier", hasBuildings=true, hasRoads=true   → "mount-rainier-terrain-buildings-roads.stl"
+ *   no locationName, bbox at 46.85°N 121.73°W                       → "terrain-46.85--121.73.stl"
  */
 export function generateFilename(
   bbox: BoundingBox,
   locationName: string | null,
-  hasBuildings = false
+  hasBuildings = false,
+  hasRoads = false
 ): string {
-  const suffix = hasBuildings ? 'terrain-buildings' : 'terrain';
+  // Build suffix based on which layers are included
+  let suffix = 'terrain';
+  if (hasBuildings) suffix += '-buildings';
+  if (hasRoads) suffix += '-roads';
 
   if (locationName && locationName.trim().length > 0) {
     // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse multiple hyphens
@@ -77,8 +82,5 @@ export function generateFilename(
   const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
   const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
 
-  if (hasBuildings) {
-    return `terrain-buildings-${centerLat.toFixed(2)}-${centerLon.toFixed(2)}.stl`;
-  }
-  return `terrain-${centerLat.toFixed(2)}-${centerLon.toFixed(2)}.stl`;
+  return `${suffix}-${centerLat.toFixed(2)}-${centerLon.toFixed(2)}.stl`;
 }

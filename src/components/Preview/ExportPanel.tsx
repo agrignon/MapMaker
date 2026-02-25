@@ -16,8 +16,10 @@ import { mergeTerrainAndBuildings } from '../../lib/mesh/buildingSolid';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
 import { buildAllBuildings } from '../../lib/buildings/merge';
+import { buildRoadGeometry } from '../../lib/roads/roadMesh';
 import { wgs84ToUTM } from '../../lib/utm';
 import type { BuildingGeometryParams } from '../../lib/buildings/types';
+import type { RoadGeometryParams } from '../../lib/roads/types';
 
 // Module-level buffer storage — ArrayBuffer is not serializable to Zustand
 // This holds the last exported buffer for the Download button
@@ -51,6 +53,9 @@ export function ExportPanel() {
   const exportResult = useMapStore((s) => s.exportResult);
   const buildingFeatures = useMapStore((s) => s.buildingFeatures);
   const buildingsVisible = useMapStore((s) => s.layerToggles.buildings);
+  const roadFeatures = useMapStore((s) => s.roadFeatures);
+  const roadsVisible = useMapStore((s) => s.layerToggles.roads);
+  const roadStyle = useMapStore((s) => s.roadStyle);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
@@ -66,10 +71,13 @@ export function ExportPanel() {
 
   // Progress bar percentage
   // Steps: Building solid mesh (10%) → Building buildings mesh (30%) →
-  //        Merging terrain and buildings (50%) → Validating (70%) → Writing STL (90%)
+  //        Building roads mesh (45%) → Merging roads (50%) →
+  //        Validating (70%) → Writing STL (90%)
   const progressPercent =
     exportStep.includes('Writing') ? 90 :
     exportStep.includes('Validating') ? 70 :
+    exportStep.includes('Merging roads') ? 50 :
+    exportStep.includes('roads') ? 45 :
     exportStep.includes('Merging') ? 50 :
     exportStep.includes('buildings mesh') ? 30 :
     exportStep.includes('Building') ? 10 : 10;
@@ -143,13 +151,80 @@ export function ExportPanel() {
         }
       }
 
+      // Step 2b: Include road geometry if available and roads layer is toggled on
+      const hasRoads = Boolean(roadFeatures && roadFeatures.length > 0 && roadsVisible);
+
+      if (hasRoads && roadFeatures) {
+        setExportStatus('building', 'Building roads mesh...');
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
+        const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
+        const centerUTM = wgs84ToUTM(centerLon, centerLat);
+
+        const roadParams: RoadGeometryParams = {
+          widthMM: targetWidthMM,
+          depthMM: targetDepthMM,
+          geographicWidthM: dimensions.widthM,
+          geographicDepthM: dimensions.heightM,
+          exaggeration,
+          minElevationM: elevationData.minElevation,
+          bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
+          roadStyle,
+          targetReliefMM,
+        };
+
+        const roadsGeometry = buildRoadGeometry(roadFeatures, bbox, elevationData, roadParams);
+
+        if (roadsGeometry) {
+          setExportStatus('building', 'Merging roads into model...');
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          // Merge roads using mergeGeometries (NOT CSG — per STATE.md decision)
+          // Roads are additive geometry, not boolean
+          const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
+
+          // Ensure both geometries are non-indexed for consistent merge
+          const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
+          const roadsNonIndexed = roadsGeometry.index ? roadsGeometry.toNonIndexed() : roadsGeometry;
+
+          // Strip any attributes from roads that don't exist on terrain+buildings (uv, etc.)
+          // Only keep position and normal for STL compatibility
+          const roadAttrs = Object.keys(roadsNonIndexed.attributes);
+          for (const attr of roadAttrs) {
+            if (attr !== 'position' && attr !== 'normal') {
+              roadsNonIndexed.deleteAttribute(attr);
+            }
+          }
+
+          // Ensure terrain+buildings also only has position and normal
+          const exportAttrs = Object.keys(exportNonIndexed.attributes);
+          for (const attr of exportAttrs) {
+            if (attr !== 'position' && attr !== 'normal') {
+              exportNonIndexed.deleteAttribute(attr);
+            }
+          }
+
+          const merged = mergeGeometries([exportNonIndexed, roadsNonIndexed], false);
+          if (merged) {
+            merged.computeVertexNormals();
+            exportSolid.dispose();
+            exportSolid = merged;
+          }
+
+          roadsGeometry.dispose();
+          roadsNonIndexed.dispose();
+          if (exportNonIndexed !== exportSolid) exportNonIndexed.dispose();
+        }
+      }
+
       // Step 3: Validate mesh
       setExportStatus('validating', 'Validating mesh...');
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const validation = await validateMesh(exportSolid);
 
-      if (!validation.isManifold && !hasBuildings) {
+      if (!validation.isManifold && !hasBuildings && !hasRoads) {
         // Terrain-only export must be manifold — block export
         const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
         setValidationError(errMsg);
@@ -157,11 +232,11 @@ export function ExportPanel() {
         return;
       }
 
-      if (!validation.isManifold && hasBuildings) {
-        // Buildings + terrain may have non-manifold seams — warn but allow export
+      if (!validation.isManifold && (hasBuildings || hasRoads)) {
+        // Features + terrain may have non-manifold seams — warn but allow export
         // Slicers (PrusaSlicer, Bambu Studio) auto-repair these meshes
         setValidationError(
-          'Mesh has non-manifold edges at building seams — your slicer will auto-repair this.'
+          'Mesh has non-manifold edges at feature seams — your slicer will auto-repair this.'
         );
       }
 
@@ -183,8 +258,8 @@ export function ExportPanel() {
       }
       const heightMM = maxZ + basePlateThicknessMM;
 
-      // Generate filename (includes -buildings suffix when buildings are present)
-      const filename = generateFilename(bbox, locationName, hasBuildings);
+      // Generate filename (reflects which layers are included)
+      const filename = generateFilename(bbox, locationName, hasBuildings, hasRoads);
       pendingFilenameRef.current = filename;
 
       // Store buffer for download
