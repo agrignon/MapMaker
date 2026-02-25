@@ -3,6 +3,13 @@ import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportRes
 import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
 import type { BuildingFeature } from '../lib/buildings/types';
 
+export interface LayerToggles {
+  buildings: boolean;
+  roads: boolean;
+  water: boolean;
+  vegetation: boolean;
+}
+
 interface MapState {
   bbox: BoundingBox | null;
   utmZone: number | null;
@@ -24,6 +31,10 @@ interface MapState {
   buildingFeatures: BuildingFeature[] | null;
   buildingGenerationStatus: BuildingGenerationStatus;
   buildingGenerationStep: string;
+  // Phase 4: Layer toggles, units, Z height
+  layerToggles: LayerToggles;
+  units: 'mm' | 'in';
+  targetHeightMM: number;
 }
 
 interface MapActions {
@@ -42,11 +53,16 @@ interface MapActions {
   // Building actions
   setBuildingFeatures: (features: BuildingFeature[] | null) => void;
   setBuildingGenerationStatus: (status: BuildingGenerationStatus, step?: string) => void;
+  // Phase 4: Layer toggle, units, and dimension actions
+  setLayerToggle: (layer: keyof LayerToggles, enabled: boolean) => void;
+  setUnits: (units: 'mm' | 'in') => void;
+  setTargetWidth: (widthMM: number) => void;
+  setTargetHeightMM: (value: number) => void;
 }
 
 type MapStore = MapState & MapActions;
 
-export const useMapStore = create<MapStore>((set) => ({
+export const useMapStore = create<MapStore>((set, get) => ({
   bbox: null,
   utmZone: null,
   dimensions: null,
@@ -67,6 +83,15 @@ export const useMapStore = create<MapStore>((set) => ({
   buildingFeatures: null,
   buildingGenerationStatus: 'idle',
   buildingGenerationStep: '',
+  // Phase 4: Layer toggles defaults (terrain has no toggle — always on)
+  layerToggles: {
+    buildings: true,
+    roads: true,
+    water: true,
+    vegetation: true,
+  },
+  units: 'mm',
+  targetHeightMM: 0,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -125,5 +150,27 @@ export const useMapStore = create<MapStore>((set) => ({
 
   setBuildingGenerationStatus: (status, step = '') => {
     set({ buildingGenerationStatus: status, buildingGenerationStep: step });
+  },
+
+  setLayerToggle: (layer, enabled) => {
+    set((state) => ({ layerToggles: { ...state.layerToggles, [layer]: enabled } }));
+  },
+
+  setUnits: (units) => {
+    set({ units });
+  },
+
+  setTargetWidth: (widthMM) => {
+    const state = get();
+    if (!state.dimensions) {
+      set({ targetWidthMM: widthMM });
+      return;
+    }
+    const aspectRatio = state.dimensions.heightM / state.dimensions.widthM;
+    set({ targetWidthMM: widthMM, targetDepthMM: widthMM * aspectRatio });
+  },
+
+  setTargetHeightMM: (value) => {
+    set({ targetHeightMM: value });
   },
 }));
