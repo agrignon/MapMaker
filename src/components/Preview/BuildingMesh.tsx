@@ -23,6 +23,8 @@ export function BuildingMesh() {
   const exaggeration = useMapStore((s) => s.exaggeration);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
+  const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
+  const targetHeightMM = useMapStore((s) => s.targetHeightMM);
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const utmZone = useMapStore((s) => s.utmZone);
@@ -48,6 +50,11 @@ export function BuildingMesh() {
     const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
     const centerUTM = wgs84ToUTM(centerLon, centerLat);
 
+    // Compute targetReliefMM: must match TerrainMesh.tsx formula exactly for alignment
+    const targetReliefMM = targetHeightMM > 0
+      ? Math.max(1, targetHeightMM - basePlateThicknessMM)
+      : 0;
+
     const params: BuildingGeometryParams = {
       widthMM: targetWidthMM,
       depthMM: targetDepthMM,
@@ -57,6 +64,7 @@ export function BuildingMesh() {
       bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
       exaggeration,
       minElevationM: elevationData.minElevation,
+      targetReliefMM,
     };
 
     // Dispose previous geometry before building new one
@@ -85,6 +93,8 @@ export function BuildingMesh() {
     exaggeration,
     targetWidthMM,
     targetDepthMM,
+    basePlateThicknessMM,
+    targetHeightMM,
     dimensions,
     bbox,
     utmZone,

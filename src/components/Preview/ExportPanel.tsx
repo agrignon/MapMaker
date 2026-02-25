@@ -41,6 +41,7 @@ export function ExportPanel() {
   const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
+  const targetHeightMM = useMapStore((s) => s.targetHeightMM);
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const utmZone = useMapStore((s) => s.utmZone);
@@ -79,6 +80,11 @@ export function ExportPanel() {
     setValidationError(null);
     exportBufferRef.current = null;
 
+    // Compute targetReliefMM: must match TerrainMesh.tsx and BuildingMesh.tsx formula exactly
+    const targetReliefMM = targetHeightMM > 0
+      ? Math.max(1, targetHeightMM - basePlateThicknessMM)
+      : 0;
+
     try {
       // Step 1: Build terrain geometry
       setExportStatus('building', 'Building solid mesh...');
@@ -92,6 +98,7 @@ export function ExportPanel() {
         exaggeration,
         minHeightMM: 5,
         maxError: 5,
+        targetReliefMM,
       });
 
       const terrainSolid = buildSolidMesh(terrainGeom, basePlateThicknessMM);
@@ -118,6 +125,7 @@ export function ExportPanel() {
           bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
           exaggeration,
           minElevationM: elevationData.minElevation,
+          targetReliefMM,
         };
 
         const buildingsGeometry = buildAllBuildings(
@@ -165,14 +173,21 @@ export function ExportPanel() {
       const mesh = new THREE.Mesh(exportSolid);
       const { buffer, sizeBytes, triangleCount } = exportToSTL(mesh);
 
-      // Compute height: terrain Z range + base plate
-      const posAttr = exportSolid.getAttribute('position') as THREE.BufferAttribute;
-      let maxZ = -Infinity;
-      for (let i = 0; i < posAttr.count; i++) {
-        const z = posAttr.getZ(i);
-        if (z > maxZ) maxZ = z;
+      // Compute height in mm.
+      // When targetHeightMM > 0 (user override), the total Z is exactly targetHeightMM.
+      // When targetHeightMM === 0 (auto), scan geometry for maxZ and add base plate.
+      let heightMM: number;
+      if (targetHeightMM > 0) {
+        heightMM = targetHeightMM;
+      } else {
+        const posAttr = exportSolid.getAttribute('position') as THREE.BufferAttribute;
+        let maxZ = -Infinity;
+        for (let i = 0; i < posAttr.count; i++) {
+          const z = posAttr.getZ(i);
+          if (z > maxZ) maxZ = z;
+        }
+        heightMM = maxZ + basePlateThicknessMM;
       }
-      const heightMM = maxZ + basePlateThicknessMM;
 
       // Generate filename (includes -buildings suffix when buildings are present)
       const filename = generateFilename(bbox, locationName, hasBuildings);

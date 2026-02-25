@@ -18,6 +18,7 @@ export function TerrainMesh() {
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
+  const targetHeightMM = useMapStore((s) => s.targetHeightMM);
   const dimensions = useMapStore((s) => s.dimensions);
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -28,6 +29,12 @@ export function TerrainMesh() {
   useEffect(() => {
     if (!elevationData || !dimensions) return;
 
+    // Compute targetReliefMM: total Z override minus base plate thickness.
+    // When targetHeightMM === 0, auto mode — no override.
+    const targetReliefMM = targetHeightMM > 0
+      ? Math.max(1, targetHeightMM - basePlateThicknessMM)
+      : 0;
+
     const params: TerrainMeshParams = {
       widthMM: targetWidthMM,
       depthMM: targetDepthMM,
@@ -36,6 +43,7 @@ export function TerrainMesh() {
       exaggeration,
       minHeightMM: 5,
       maxError: 5,
+      targetReliefMM,
     };
 
     const elevationChanged = elevationData !== lastElevationRef.current;
@@ -62,7 +70,7 @@ export function TerrainMesh() {
       updateTerrainElevation(geometryRef.current, elevationData, params);
       lastParamsRef.current = params;
     }
-  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, basePlateThicknessMM, dimensions]);
+  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, basePlateThicknessMM, targetHeightMM, dimensions]);
 
   // Cleanup geometry on unmount
   useEffect(() => {
