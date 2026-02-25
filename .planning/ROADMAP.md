@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (completed 2026-02-24)
 - [x] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain (completed 2026-02-25)
 - [x] **Phase 4: Model Controls + Store Foundation** - Full layer toggles, physical dimensions, unit toggle, and contextual control visibility wired to all layers (completed 2026-02-25)
-- [x] **Phase 5: Roads Layer** - OSM roads as 3D geometry with configurable style (raised/recessed/flat) and type-based widths (completed 2026-02-25)
+- [ ] **Phase 5: Roads Layer** - OSM roads as 3D geometry with configurable style (raised/recessed/flat) and type-based widths (UAT gap closure in progress)
 - [ ] **Phase 6: Water Layer** - Rivers, lakes, and water bodies baked as flat depressions into the terrain elevation grid
 - [ ] **Phase 7: Vegetation + Terrain Smoothing** - Parks and forests as toggleable geometry; mesh smoothing slider for smoother STL output
 - [ ] **Phase 8: Edit-Iterate + Export Polish** - State-preserving back-to-edit navigation, live preview updates, and location-name STL filenames
@@ -90,7 +90,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Extend Zustand store with layer toggles, units, targetHeightMM; wire mesh visibility and export gating
 - [x] 04-02-PLAN.md — Rebuild PreviewSidebar with collapsible sections, ModelSizeSection, layer toggles, unit toggle, contextual visibility
-- [ ] 04-03-PLAN.md — Gap closure: wire targetHeightMM into terrain/building mesh generation and export pipeline
+- [x] 04-03-PLAN.md — Gap closure: wire targetHeightMM into terrain/building mesh generation and export pipeline
 
 ### Phase 5: Roads Layer
 **Goal**: Users can see the OSM road network rendered as 3D geometry within the selected area, choose a road style, and have roads included in the exported STL
@@ -101,11 +101,12 @@ Plans:
   2. Highway and trunk roads are visibly wider than residential and service streets — type-based width differences are noticeable in the 3D preview
   3. User can select recessed channels, raised surfaces, or flat road style, and the 3D preview updates to show roads in the chosen style
   4. Roads are included in the exported STL and the resulting file opens without repair warnings in a standard slicer
-**Plans:** 2/2 plans complete
+**Plans:** 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Road data pipeline + geometry library (Overpass fetch, parse/classify, geometry-extrude ribbon mesh, terrain-following Z, unit tests)
-- [ ] 05-02-PLAN.md — RoadMesh component + RoadsSection UI + store extension + GenerateButton wiring + STL export integration
+- [x] 05-01-PLAN.md — Road data pipeline + geometry library (Overpass fetch, parse/classify, geometry-extrude ribbon mesh, terrain-following Z, unit tests)
+- [x] 05-02-PLAN.md — RoadMesh component + RoadsSection UI + store extension + GenerateButton wiring + STL export integration
+- [ ] 05-03-PLAN.md — Gap closure: fix Z-fighting (roads invisible), Overpass rate limiting (road fetch fails), building base Z, export clipping
 
 ### Phase 6: Water Layer
 **Goal**: Users can see rivers, lakes, and water bodies rendered as flat depressions within the selected area, with the depression baked into the terrain mesh so the STL is correct for printing
@@ -159,7 +160,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Terrain + Preview + Export | 5/5 | Complete | 2026-02-24 |
 | 3. Buildings | 3/3 | Complete | 2026-02-25 |
 | 4. Model Controls + Store Foundation | 3/3 | Complete   | 2026-02-25 |
-| 5. Roads Layer | 2/2 | Complete   | 2026-02-25 |
+| 5. Roads Layer | 2/3 | Gap closure   | - |
 | 6. Water Layer | 0/TBD | Not started | - |
 | 7. Vegetation + Terrain Smoothing | 0/TBD | Not started | - |
 | 8. Edit-Iterate + Export Polish | 0/TBD | Not started | - |
