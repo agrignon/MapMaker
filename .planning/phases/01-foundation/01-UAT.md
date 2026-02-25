@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: resolved
 phase: 01-foundation
 source: [01-01-SUMMARY.md, 01-02-SUMMARY.md]
 started: 2026-02-24T02:00:00Z
@@ -77,7 +77,7 @@ skipped: 0
 ## Gaps
 
 - truth: "Satellite imagery map renders filling the right side of the screen"
-  status: failed
+  status: resolved
   reason: "User reported: launched the app, black screen where the map should be"
   severity: blocker
   test: 1
@@ -93,7 +93,7 @@ skipped: 0
   debug_session: ".planning/debug/black-screen-satellite-map.md"
 
 - truth: "Geocoding search shows autocomplete suggestions and flies to selected location"
-  status: failed
+  status: resolved
   reason: "User reported: Start typing, popup appears with red text saying 'Something went wrong'"
   severity: blocker
   test: 2
@@ -106,7 +106,7 @@ skipped: 0
   debug_session: ".planning/debug/geocoding-something-went-wrong.md"
 
 - truth: "Typing lat/lon coordinates flies map directly to that location"
-  status: failed
+  status: resolved
   reason: "User reported: popup error with 'Something went wrong'"
   severity: blocker
   test: 3
@@ -119,7 +119,7 @@ skipped: 0
   debug_session: ".planning/debug/geocoding-something-went-wrong.md"
 
 - truth: "Click-and-drag draws a blue semi-transparent rectangle on the map"
-  status: failed
+  status: resolved
   reason: "User reported: black screen, lone marker, clicking and dragging moves marker around"
   severity: blocker
   test: 4
