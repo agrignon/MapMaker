@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { PreviewControls } from './PreviewControls';
 import { TerrainMesh } from './TerrainMesh';
 import { BuildingMesh } from './BuildingMesh';
+import { RoadMesh } from './RoadMesh';
 import { BasePlateMesh } from './BasePlateMesh';
 import { Component, type ReactNode } from 'react';
 
@@ -47,6 +48,7 @@ export function PreviewCanvas() {
           <PreviewControls />
           <TerrainMesh />
           <BuildingMesh />
+          <RoadMesh />
           <BasePlateMesh />
         </SceneErrorBoundary>
       </Canvas>

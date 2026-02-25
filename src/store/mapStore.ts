@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportResult, ExportStatus, BuildingGenerationStatus } from '../types/geo';
 import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
 import type { BuildingFeature } from '../lib/buildings/types';
+import type { RoadFeature, RoadStyle } from '../lib/roads/types';
 
 export interface LayerToggles {
   buildings: boolean;
@@ -35,6 +36,11 @@ interface MapState {
   layerToggles: LayerToggles;
   units: 'mm' | 'in';
   targetHeightMM: number;
+  // Road state
+  roadFeatures: RoadFeature[] | null;
+  roadStyle: RoadStyle;
+  roadGenerationStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error';
+  roadGenerationStep: string;
 }
 
 interface MapActions {
@@ -58,6 +64,10 @@ interface MapActions {
   setUnits: (units: 'mm' | 'in') => void;
   setTargetWidth: (widthMM: number) => void;
   setTargetHeightMM: (value: number) => void;
+  // Road actions
+  setRoadFeatures: (features: RoadFeature[] | null) => void;
+  setRoadStyle: (style: RoadStyle) => void;
+  setRoadGenerationStatus: (status: 'idle' | 'fetching' | 'building' | 'ready' | 'error', step?: string) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -92,6 +102,11 @@ export const useMapStore = create<MapStore>((set, get) => ({
   },
   units: 'mm',
   targetHeightMM: 0,
+  // Road state defaults
+  roadFeatures: null,
+  roadStyle: 'recessed',  // locked decision: default is recessed
+  roadGenerationStatus: 'idle',
+  roadGenerationStep: '',
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -173,4 +188,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setTargetHeightMM: (value) => {
     set({ targetHeightMM: value });
   },
+
+  setRoadFeatures: (features) => set({ roadFeatures: features }),
+  setRoadStyle: (style) => set({ roadStyle: style }),
+  setRoadGenerationStatus: (status, step = '') => set({ roadGenerationStatus: status, roadGenerationStep: step }),
 }));

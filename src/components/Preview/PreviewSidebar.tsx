@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ModelSizeSection } from './ModelSizeSection';
 import { TerrainSection } from './TerrainSection';
 import { BuildingsSection } from './BuildingsSection';
+import { RoadsSection } from './RoadsSection';
 import { LayerPlaceholderSection } from './LayerPlaceholderSection';
 import { ExportPanel } from './ExportPanel';
 
@@ -86,7 +87,7 @@ export function PreviewSidebar() {
           {/* Layer sections in pipeline order */}
           <TerrainSection />
           <BuildingsSection />
-          <LayerPlaceholderSection label="Roads" />
+          <RoadsSection />
           <LayerPlaceholderSection label="Water" />
           <LayerPlaceholderSection label="Vegetation" />
 
