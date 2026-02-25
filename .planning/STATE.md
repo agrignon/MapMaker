@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 3 of 6 (Buildings) — IN PROGRESS
-Plan: 2 of 4 complete
-Status: Phase 3 Plan 02 complete — advanced roofs (gabled/hipped/pyramidal), OBB helper, BuildingMesh R3F component wired into 3D preview
-Last activity: 2026-02-24 — Buildings visible in 3D preview with correct roof shapes and terrain placement
+Plan: 3 of 4 complete
+Status: Phase 3 Plan 03 complete — CSG union module, building-aware STL export pipeline, 6 new tests; awaiting human verification (Task 2 checkpoint)
+Last activity: 2026-02-25 — Buildings included in STL export via three-bvh-csg union with fallback; all 115 tests pass
 
-Progress: [██████░░░░] ~60%
+Progress: [███████░░░] ~70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 2.9 min
-- Total execution time: ~0.48 hours
+- Total execution time: ~0.49 hours
 
 **By Phase:**
 
@@ -29,16 +29,17 @@ Progress: [██████░░░░] ~60%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 7 min | 3.5 min |
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
-| 03-buildings | 2 | 14 min | 7 min |
+| 03-buildings | 3 | 19 min | 6.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 3 min, 2 min, 1 min, 8 min, 6 min
+- Last 5 plans: 2 min, 1 min, 8 min, 6 min, 5 min
 - Trend: Normal
 
 *Updated after each plan completion*
 | Phase 02-terrain-preview-export P05 | 1 | 2 tasks | 2 files |
 | Phase 03-buildings P01 | 3 | 3 tasks | 15 files |
 | Phase 03-buildings P02 | 2 | 2 tasks | 9 files |
+| Phase 03-buildings P03 | 1 | 1 task | 4 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 03-buildings 03-02]: Hipped roof falls back to pyramidal when building is square (halfExtents[0] <= halfExtents[1] means ridge length is zero)
 - [Phase 03-buildings 03-02]: Non-flat wall height = max(50% buildingHeight, buildingHeight - roofHeight) — prevents invisible walls from disproportionate OSM roof height data
 - [Phase 03-buildings 03-02]: BuildingMesh uses non-blocking building fetch — terrain visible immediately, buildings load asynchronously with status indicator
+- [Phase 03-buildings 03-03]: CSG fallback to mergeGeometries — if three-bvh-csg throws or exceeds 10s, fall back to simple merge; export never fails completely
+- [Phase 03-buildings 03-03]: Non-manifold seam warning (non-blocking) for buildings+terrain export — slicers auto-repair minor seam gaps, blocking the export entirely would be worse UX
+- [Phase 03-buildings 03-03]: Evaluator attributes=['position', 'normal'] — skip UV to avoid attribute-mismatch errors in three-bvh-csg when geometries lack UV channels
 - [Phase 01-foundation 01-03]: HTML overlay approach for bbox rectangle — div follows map via 'move' event listener; no MapLibre GeoJSON source required
 - [Phase 01-foundation 01-03]: maps.current vs maps[id] — without MapProvider, useMap() only populates .current key; always use maps.current inside a <Map> child
 - [Phase 01-foundation 01-03]: API key guard pattern — cast env var as string|undefined, guard with if (!KEY) return <ErrorUI>; never silently pass empty string to MapTiler
@@ -92,7 +96,7 @@ None.
 ### Blockers/Concerns
 
 - Phase 1 gap closure (01-03): Automated task complete (code fixes committed, 14/14 tests pass). UAT browser verification still pending — requires user with valid MapTiler API key to verify 9 browser scenarios
-- Phase 3: three-bvh-csg API and performance for terrain-scale meshes not directly validated — research spike recommended
+- Phase 3 Plan 03-03: Human verification checkpoint pending — user needs to visually confirm buildings in 3D preview and verify exported STL opens without repair warnings in a slicer (PrusaSlicer / Bambu Studio)
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
 
 ## Deferred Issues
@@ -105,6 +109,6 @@ Pre-existing `npm run build` failures (NOT caused by 01-03 changes — exist in 
 
 ## Session Continuity
 
-Last session: 2026-02-24
-Stopped at: Completed 01-03-PLAN.md automated task — API key guard, maps.current fix, useTerradraw HTML overlay with resize/move. Awaiting human UAT verification for Task 2 checkpoint.
+Last session: 2026-02-25
+Stopped at: Completed 03-03-PLAN.md automated Task 1 — CSG union module, building-aware export pipeline, 6 new tests. Awaiting human verification checkpoint (Task 2) for visual STL confirmation in slicer.
 Resume file: None
