@@ -2,7 +2,7 @@
 
 ## Overview
 
-MapMaker is built in six phases that follow the dependency graph of the output pipeline. Phase 1 establishes correct geographic foundations (map, bbox, coordinate projection) because every downstream feature produces wrong-scale geometry if this is wrong. Phase 2 delivers the terrain-only end-to-end pipeline — elevation data in, printable STL out — which validates the full output contract before buildings or roads are added. Phases 3 and 4 layer in the differentiating features (buildings then roads) on top of the proven pipeline. Phase 5 completes the edit-iterate workflow loop. Phase 6 hardens performance so the app handles real-world usage without freezing or memory errors.
+MapMaker is built in nine phases that follow the dependency graph of the output pipeline. Phase 1 establishes correct geographic foundations (map, bbox, coordinate projection) because every downstream feature produces wrong-scale geometry if this is wrong. Phase 2 delivers the terrain-only end-to-end pipeline — elevation data in, printable STL out — which validates the full output contract before buildings or roads are added. Phase 3 layers in OSM buildings on top of the proven terrain pipeline. Phases 4 through 9 complete the v1 feature set: Phase 4 extends the Zustand store with all new state fields and wires up layer controls so every subsequent feature can be immediately toggled; Phase 5 adds roads as 3D geometry with configurable style; Phase 6 bakes water bodies as depressions into the terrain elevation grid; Phase 7 adds vegetation geometry and the terrain smoothing slider; Phase 8 closes the edit-iterate UX loop and polishes export filenames; Phase 9 offloads mesh generation to a Web Worker and ships a production build that compiles clean.
 
 ## Phases
 
@@ -12,12 +12,15 @@ MapMaker is built in six phases that follow the dependency graph of the output p
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline
-- [ ] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (gap closure: tile boundary seam bug)
+- [x] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline (completed 2026-02-24)
+- [x] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (completed 2026-02-24)
 - [x] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain (completed 2026-02-25)
-- [ ] **Phase 4: Roads + Controls** - OSM roads with configurable styles and fully parameterized layer controls
-- [ ] **Phase 5: Edit-Iterate Loop** - State-preserving back-to-edit navigation and live preview updates
-- [ ] **Phase 6: Performance Hardening** - Web Worker mesh generation and browser memory/rate-limit safeguards
+- [ ] **Phase 4: Model Controls + Store Foundation** - Full layer toggles, physical dimensions, unit toggle, and contextual control visibility wired to all layers
+- [ ] **Phase 5: Roads Layer** - OSM roads as 3D geometry with configurable style (raised/recessed/flat) and type-based widths
+- [ ] **Phase 6: Water Layer** - Rivers, lakes, and water bodies baked as flat depressions into the terrain elevation grid
+- [ ] **Phase 7: Vegetation + Terrain Smoothing** - Parks and forests as toggleable geometry; mesh smoothing slider for smoother STL output
+- [ ] **Phase 8: Edit-Iterate + Export Polish** - State-preserving back-to-edit navigation, live preview updates, and location-name STL filenames
+- [ ] **Phase 9: Performance Hardening** - Web Worker mesh generation and clean production build
 
 ## Phase Details
 
@@ -31,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can resize and reposition the bounding box after initial placement by dragging its edges or corners
   4. All bounding box coordinates are projected to local flat-earth meter space (UTM), not Web Mercator — verifiable by an automated test asserting correct dimensions at known latitudes
   5. STL export coordinate pipeline writes vertex coordinates in millimeters — verifiable by an automated test asserting a known bbox produces STL dimensions matching specified physical size
-**Plans:** 3 plans (2 complete, 1 gap closure)
+**Plans:** 3 plans (all complete)
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, MapLibre satellite map, geocoding search, UTM/STL coordinate pipeline with tests
@@ -48,14 +51,14 @@ Plans:
   3. Flat terrain areas (near-zero elevation variation) produce a model with a visible minimum height — not a paper-thin surface
   4. User sees the 2D map panel and 3D preview panel displayed side-by-side simultaneously, with orbit, zoom, and pan controls on the 3D panel
   5. User can click Export, and the browser downloads a binary STL file whose bounding box dimensions match the user's specified physical dimensions in millimeters — the file opens without repair warnings in PrusaSlicer or Bambu Studio
-**Plans:** 5 plans (4 complete, 1 gap closure)
+**Plans:** 5 plans (all complete)
 
 Plans:
 - [x] 02-01-PLAN.md — Setup + split-panel layout + elevation tile fetching/stitching pipeline
 - [x] 02-02-PLAN.md — Martini terrain mesh + R3F 3D preview + exaggeration controls
 - [x] 02-03-PLAN.md — Watertight solid mesh + manifold validation + STL export + download
 - [x] 02-04-PLAN.md — Gap closure: fix tile rotation/stitching bug (terrain appears as 4 incorrectly rotated quadrants)
-- [ ] 02-05-PLAN.md — Gap closure: fix tile boundary seam bug (false border-overlap assumption in stitchTileElevations)
+- [x] 02-05-PLAN.md — Gap closure: fix tile boundary seam bug (false border-overlap assumption in stitchTileElevations)
 
 ### Phase 3: Buildings
 **Goal**: Users can see OSM buildings rendered with real heights on top of terrain, including correct placement on slopes and estimated heights where OSM data is missing
@@ -73,47 +76,82 @@ Plans:
 - [x] 03-02-PLAN.md — Roof geometry (gabled/hipped/pyramidal) + 3D preview integration (BuildingMesh component, store extension, GenerateButton wiring)
 - [x] 03-03-PLAN.md — STL export integration (three-bvh-csg CSG union) + visual verification checkpoint
 
-### Phase 4: Roads + Controls
-**Goal**: Users can see OSM roads rendered on terrain with a choice of road style, and all layer controls (toggles, dimensions, units, road style, terrain exaggeration) are fully wired up and contextually aware
+### Phase 4: Model Controls + Store Foundation
+**Goal**: All layer state fields exist in the Zustand store and the UI exposes fully wired layer toggles, physical dimension inputs, unit switching, and contextual control visibility — so every subsequent phase can immediately test its feature against the correct toggle behavior
 **Depends on**: Phase 3
-**Requirements**: ROAD-01, ROAD-02, ROAD-03, CTRL-01, CTRL-02, CTRL-03, CTRL-04
+**Requirements**: CTRL-01, CTRL-02, CTRL-03, CTRL-04
 **Success Criteria** (what must be TRUE):
-  1. User sees the OSM road network rendered as 3D geometry on terrain within the selected area, with highway roads visibly wider than residential streets
-  2. User can select recessed channels, raised surfaces, or flat road style, and the 3D preview updates to show roads in the chosen style
-  3. User can toggle terrain, buildings, and roads on/off individually, and the 3D preview reflects the current visible layers
-  4. User can enter maximum physical dimensions (X width, Y depth, Z height) in either mm or inches, switch units, and the preview and exported STL reflect the specified size
-  5. Road style selector is hidden when the roads layer is toggled off, and terrain exaggeration slider is hidden when terrain layer is toggled off
+  1. User can toggle terrain, buildings, roads, water, and vegetation on/off individually, and the 3D preview immediately reflects each toggle
+  2. User can enter maximum physical dimensions (X width, Y depth, Z height) in the sidebar, and the 3D preview and exported STL reflect the specified size
+  3. User can switch measurements between mm and inches, and all dimension displays update to show the converted values
+  4. Road style selector is hidden when the roads toggle is off, vegetation controls are hidden when vegetation is off, and smoothing slider is hidden when terrain is off — contextual visibility is correct for each layer
 **Plans**: TBD
 
-### Phase 5: Edit-Iterate Loop
-**Goal**: Users can move between the editing view and 3D preview without losing their selections or settings, and the preview automatically reflects changes without requiring manual refresh
+### Phase 5: Roads Layer
+**Goal**: Users can see the OSM road network rendered as 3D geometry within the selected area, choose a road style, and have roads included in the exported STL
 **Depends on**: Phase 4
-**Requirements**: PREV-03, PREV-04
+**Requirements**: ROAD-01, ROAD-02, ROAD-03
 **Success Criteria** (what must be TRUE):
-  1. User can click "Back to Edit" from the 3D preview and return to the editing view with the same bounding box position, feature toggles, and settings intact — nothing is reset
-  2. When a user toggles a feature on/off or changes any setting, the 3D preview updates automatically to reflect the change without the user needing to click a refresh or regenerate button
+  1. User sees the OSM road network rendered as 3D geometry on terrain within the selected area — a town center shows a visible road grid
+  2. Highway and trunk roads are visibly wider than residential and service streets — type-based width differences are noticeable in the 3D preview
+  3. User can select recessed channels, raised surfaces, or flat road style, and the 3D preview updates to show roads in the chosen style
+  4. Roads are included in the exported STL and the resulting file opens without repair warnings in a standard slicer
 **Plans**: TBD
 
-### Phase 6: Performance Hardening
-**Goal**: Mesh generation runs off the main thread so the UI never freezes, and the app handles dense city areas, large bounding boxes, and repeat usage without running out of memory or hitting API rate limits
+### Phase 6: Water Layer
+**Goal**: Users can see rivers, lakes, and water bodies rendered as flat depressions within the selected area, with the depression baked into the terrain mesh so the STL is correct for printing
 **Depends on**: Phase 5
-**Requirements**: FNDN-03
+**Requirements**: WATR-01
 **Success Criteria** (what must be TRUE):
-  1. Mesh generation for any valid bounding box runs in a Web Worker — the 2D map and UI remain fully interactive during generation with no visible freeze or jank
-  2. A dense urban area (e.g., a 1km x 1km block of Manhattan) generates a preview mesh without crashing the browser tab or producing an out-of-memory error
-  3. Loading a new area after a previous one completes does not accumulate memory — geometry for previous layers is disposed before new geometry is allocated
+  1. User sees water bodies (rivers, lakes) rendered as flat depressions visually distinct from surrounding terrain in the 3D preview
+  2. Water depression is baked into the terrain elevation grid before mesh generation — the exported STL shows the physical depression, not just a visual overlay
+  3. An area containing a lake with an island renders correctly — the island is above water level, the surrounding lake is a depression, and the STL is watertight
+**Plans**: TBD
+
+### Phase 7: Vegetation + Terrain Smoothing
+**Goal**: Users can see parks and forests as a toggleable geometry layer, and can control mesh smoothing to interpolate rough elevation transitions into smoother surfaces for better print quality
+**Depends on**: Phase 6
+**Requirements**: VEGE-01, TERR-04
+**Success Criteria** (what must be TRUE):
+  1. User sees parks and forested areas rendered as raised geometry patches distinct from surrounding terrain — a city park is visibly distinguishable from roads and buildings
+  2. User can drag a smoothing slider, and the 3D terrain preview updates to show smoother elevation transitions — raw 30m SRTM step artifacts are visibly reduced at higher smoothing values
+  3. Smoothing is applied to the DEM elevation grid before feature placement — buildings, roads, and water depressions remain correctly positioned after smoothing is increased
+  4. Vegetation layer count is displayed next to the vegetation toggle — a zero-feature result ("Vegetation — 0 features found") is shown rather than a silent empty layer
+**Plans**: TBD
+
+### Phase 8: Edit-Iterate + Export Polish
+**Goal**: Users can navigate between editing and preview without losing state, the preview reflects changes live, and exported STL filenames include the searched location name
+**Depends on**: Phase 7
+**Requirements**: PREV-03, PREV-04, EXPT-06
+**Success Criteria** (what must be TRUE):
+  1. User can click "Back to Edit" from the 3D preview and return to the editing view with the same bounding box, feature toggles, layer settings, and dimension values intact — nothing is reset
+  2. When a user toggles a feature on/off or changes any setting (dimensions, units, smoothing, road style), the 3D preview updates automatically without requiring a manual regenerate click
+  3. When the user searched for a named location (e.g., "London, UK"), the downloaded STL filename includes that name (e.g., `london-uk-150mm.stl`) rather than raw coordinates
+**Plans**: TBD
+
+### Phase 9: Performance Hardening
+**Goal**: Mesh generation runs off the main thread so the UI never freezes during generation, and the production build compiles clean for deployment
+**Depends on**: Phase 8
+**Requirements**: FNDN-03, FNDN-04
+**Success Criteria** (what must be TRUE):
+  1. Mesh generation for any valid bounding box runs in a Web Worker — the 2D map and UI controls remain fully interactive during generation with no visible freeze or jank
+  2. Running `npm run build` completes without TypeScript errors — the production artifact is deployable and the Worker bundle loads correctly at runtime
+  3. A dense urban area (e.g., a 1km x 1km block of a major city) generates a preview mesh without crashing the browser tab or producing an out-of-memory error
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/3 | Awaiting UAT verification | - |
-| 2. Terrain + Preview + Export | 4/5 | Gap closure | - |
-| 3. Buildings | 3/3 | Complete    | 2026-02-25 |
-| 4. Roads + Controls | 0/TBD | Not started | - |
-| 5. Edit-Iterate Loop | 0/TBD | Not started | - |
-| 6. Performance Hardening | 0/TBD | Not started | - |
+| 1. Foundation | 3/3 | Complete | 2026-02-24 |
+| 2. Terrain + Preview + Export | 5/5 | Complete | 2026-02-24 |
+| 3. Buildings | 3/3 | Complete | 2026-02-25 |
+| 4. Model Controls + Store Foundation | 0/TBD | Not started | - |
+| 5. Roads Layer | 0/TBD | Not started | - |
+| 6. Water Layer | 0/TBD | Not started | - |
+| 7. Vegetation + Terrain Smoothing | 0/TBD | Not started | - |
+| 8. Edit-Iterate + Export Polish | 0/TBD | Not started | - |
+| 9. Performance Hardening | 0/TBD | Not started | - |

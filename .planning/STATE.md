@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-23)
+See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 3 — Buildings overlay
+**Current focus:** Phase 4 — Model Controls + Store Foundation
 
 ## Current Position
 
-Phase: Not started (re-scoped roadmap, defining phases 4+)
-Plan: —
-Status: v1.0 re-scoped — 19/34 requirements complete (Phases 1-3), 15 remaining requirements awaiting roadmap
-Last activity: 2026-02-24 — v1.0 re-scope: added TERR-04, WATR-01, VEGE-01, EXPT-06, FNDN-04; updated CTRL-01
+Phase: 4 — Model Controls + Store Foundation
+Plan: Not started
+Status: v1.0 roadmap expanded to 9 phases — 19/34 requirements complete (Phases 1-3), 15 remaining requirements mapped to Phases 4-9
+Last activity: 2026-02-24 — v1.0 re-scope roadmap created: Phases 4-9 defined for roads, water, vegetation, smoothing, edit-iterate, and performance
 
 Progress: [██████░░░░] ~56%
 
@@ -52,7 +52,11 @@ Recent decisions affecting current work:
 - Phase 1: Coordinate projection must use local UTM flat-earth meter space, not Web Mercator — enforced with automated tests before any geometry is built
 - Phase 2: Elevation data from MapTiler terrain-RGB tiles; martini RTIN algorithm for terrain mesh; manifold-3d WASM for STL validation
 - Phase 3: three-bvh-csg for building-terrain boolean operations (prevents non-manifold geometry)
-- Phase 6: Web Worker + Transferable ArrayBuffers for mesh generation (non-negotiable — prevents 500ms–3s UI freeze on dense areas)
+- Phase 4: Zustand store extended first — all new state fields (roadFeatures, waterFeatures, vegetationFeatures, roadStyle, layerToggles, smoothingLevel, units) before any new mesh component reads them
+- Phase 5: geometry-extrude@0.2.1 for road centerline-to-ribbon mesh; vertex displacement for roads and water (not CSG) to avoid quadratic triangle intersection cost on dense cities
+- Phase 6: Water must be applied to elevation grid BEFORE buildTerrainGeometry() — depression baked into terrain STL, WaterMesh.tsx is visual overlay only
+- Phase 7: Smooth DEM elevation Float32Array BEFORE all feature placement — smoothing applied after feature geometry is generated destroys building bases and road edges
+- Phase 9: Web Worker + Transferable ArrayBuffers for mesh generation — merge all geometry into three typed arrays before postMessage, never per-feature buffers (prevents 44x Chrome regression)
 - [Phase 01-foundation]: Used @vis.gl/react-maplibre@8.1.0 (package jumped from 1.x alpha to 8.x major; 8.1.0 is stable)
 - [Phase 01-foundation]: UTM projection uses centroid longitude for zone selection — both corners project into same zone for valid meter-space arithmetic
 - [Phase 01-foundation]: Tailwind v4 via @tailwindcss/vite plugin — no tailwind.config.js, configuration in CSS with @theme directives
@@ -96,12 +100,13 @@ None.
 ### Blockers/Concerns
 
 - Phase 1 gap closure (01-03): Automated task complete (code fixes committed, 14/14 tests pass). UAT browser verification still pending — requires user with valid MapTiler API key to verify 9 browser scenarios
-- Phase 3 complete: all 3 plans executed and human-verified
-- Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
+- Phase 5 (Roads): Road intersection polygon merging strategy requires a research spike — vertex displacement vs. junction polygon computation has significant mesh quality and STL validity consequences; resolve before implementation begins
+- Phase 6 (Water): Coastal/ocean handling requires a concrete v1 decision before water layer architecture is finalized — options: scope out, elevation-zero raster fallback, or osmdata.openstreetmap.de water polygons; resolve in Phase 6 research spike
+- Phase 9 (Worker): comlink + vite-plugin-comlink with shared geometry lib code — production build edge cases (Pitfall 15) warrant a spike before full implementation
 
 ## Deferred Issues
 
-Pre-existing `npm run build` failures (NOT caused by 01-03 changes — exist in committed codebase from Phase 2/3):
+Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist in committed codebase from Phase 2/3 — addressed in Phase 9):
 - `src/components/Preview/PreviewControls.tsx(2,1): THREE declared but never read`
 - `src/lib/buildings/__tests__/walls.test.ts(131,5): All variables are unused`
 - `src/lib/mesh/terrain.ts(7,21): Missing declaration for @mapbox/martini`
@@ -110,5 +115,5 @@ Pre-existing `npm run build` failures (NOT caused by 01-03 changes — exist in 
 ## Session Continuity
 
 Last session: 2026-02-24
-Stopped at: Completed 03-03-PLAN.md — all tasks done including human verification checkpoint (Task 2 approved). Phase 3 Buildings complete.
+Stopped at: v1.0 roadmap re-scoped — Phases 4-9 defined and written to ROADMAP.md; REQUIREMENTS.md traceability updated; ready to begin Phase 4 planning
 Resume file: None

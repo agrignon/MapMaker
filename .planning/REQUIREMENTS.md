@@ -128,27 +128,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BLDG-02 | Phase 3 | Complete |
 | BLDG-03 | Phase 3 | Complete |
 | BLDG-04 | Phase 3 | Complete |
-| TERR-04 | TBD | Pending |
-| ROAD-01 | TBD | Pending |
-| ROAD-02 | TBD | Pending |
-| ROAD-03 | TBD | Pending |
-| WATR-01 | TBD | Pending |
-| VEGE-01 | TBD | Pending |
-| CTRL-01 | TBD | Pending |
-| CTRL-02 | TBD | Pending |
-| CTRL-03 | TBD | Pending |
-| CTRL-04 | TBD | Pending |
-| PREV-03 | TBD | Pending |
-| PREV-04 | TBD | Pending |
-| EXPT-06 | TBD | Pending |
-| FNDN-03 | TBD | Pending |
-| FNDN-04 | TBD | Pending |
+| CTRL-01 | Phase 4 | Pending |
+| CTRL-02 | Phase 4 | Pending |
+| CTRL-03 | Phase 4 | Pending |
+| CTRL-04 | Phase 4 | Pending |
+| ROAD-01 | Phase 5 | Pending |
+| ROAD-02 | Phase 5 | Pending |
+| ROAD-03 | Phase 5 | Pending |
+| WATR-01 | Phase 6 | Pending |
+| VEGE-01 | Phase 7 | Pending |
+| TERR-04 | Phase 7 | Pending |
+| PREV-03 | Phase 8 | Pending |
+| PREV-04 | Phase 8 | Pending |
+| EXPT-06 | Phase 8 | Pending |
+| FNDN-03 | Phase 9 | Pending |
+| FNDN-04 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
-- Mapped to phases: 19 (Phases 1-3 complete)
-- Unmapped: 15 (awaiting roadmap assignment)
+- Mapped to phases: 34/34 (100%)
+- Phases 1-3: 19 requirements — Complete
+- Phases 4-9: 15 requirements — Pending
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-24 after v1.0 re-scope — added TERR-04, WATR-01, VEGE-01, EXPT-06, FNDN-04; updated CTRL-01 for water+vegetation toggles*
+*Last updated: 2026-02-24 after v1.0 re-scope — added TERR-04, WATR-01, VEGE-01, EXPT-06, FNDN-04; updated CTRL-01 for water+vegetation toggles; Phases 4-9 assigned for all 15 pending requirements*
