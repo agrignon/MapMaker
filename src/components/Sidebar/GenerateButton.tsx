@@ -84,9 +84,10 @@ export function GenerateButton() {
       setGenerationStatus('ready', 'Terrain ready');
       setShowPreview(true);
 
-      // Fetch buildings and roads in parallel (non-blocking — terrain preview is already visible)
-      void fetchBuildings();
-      void fetchRoads();
+      // Fetch buildings first, then roads after buildings complete (non-blocking — terrain preview
+      // is already visible). Staggered via .finally() to avoid Overpass rate limiting when both
+      // requests fire simultaneously. .finally() ensures roads fetch even if buildings fail.
+      void fetchBuildings().finally(() => void fetchRoads());
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setGenerationStatus('error', message);
