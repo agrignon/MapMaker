@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 5 — Roads
+**Current focus:** Phase 5 — Roads (complete)
 
 ## Current Position
 
-Phase: 5 — Roads Layer (in progress)
-Plan: 1 of 2 complete — Phase 5 Plan 01 done: road library (types, overpass, parse, roadMesh) with 45 tests
-Status: v1.0 roadmap — 30/34 requirements complete (ROAD-01, ROAD-02, ROAD-03 complete), 4 remaining requirements mapped to Phases 5-9
-Last activity: 2026-02-25 — Plan 05-01 complete: road data pipeline built (Overpass fetch, OSM parse, ribbon mesh generation); geometry-extrude@0.2.1 bug patched
+Phase: 5 — Roads Layer (complete)
+Plan: 2 of 2 complete — Phase 5 Plan 02 done: road layer UI wiring (store state, RoadMesh, RoadsSection, GenerateButton, STL export)
+Status: v1.0 roadmap — 30/34 requirements complete (ROAD-01, ROAD-02, ROAD-03 complete), 4 remaining requirements mapped to Phases 6-9
+Last activity: 2026-02-25 — Plan 05-02 complete: road layer wired end-to-end; RoadMesh in 3D preview, style toggle UI, parallel fetch, STL export integration
 
-Progress: [████████░░] ~70%
+Progress: [████████░░] ~75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 2.5 min
 - Total execution time: ~0.5 hours
 
@@ -31,9 +31,10 @@ Progress: [████████░░] ~70%
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
 | 03-buildings | 3 | 19 min | 6.3 min |
 | 04-model-controls-store-foundation | 3 | 7 min | 2.3 min |
+| 05-roads-layer | 2 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 3 min, 2 min, 2 min, 1 min, 8 min
+- Last 5 plans: 2 min, 2 min, 1 min, 8 min, 4 min
 - Trend: Normal
 
 *Updated after each plan completion*
@@ -45,6 +46,7 @@ Progress: [████████░░] ~70%
 | Phase 04-model-controls-store-foundation P02 | 2 | 2 tasks | 8 files |
 | Phase 04-model-controls-store-foundation P03 | 3 | 2 tasks | 6 files |
 | Phase 05-roads-layer P01 | 6 | 2 tasks | 9 files |
+| Phase 05-roads-layer P02 | 4 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -105,6 +107,8 @@ Recent decisions affecting current work:
 - [Phase 05-roads-layer]: geometry-extrude@0.2.1 has rawVertices bug; patched via patch-package — rawVertices: vertices → rawVertices: points in convertPolylineToTriangulatedPolygon
 - [Phase 05-roads-layer]: ROAD_WIDTH_MM: highway=1.8mm, main=1.2mm, residential=0.7mm; ROAD_DEPTH_MM: highway=1.0mm, main=0.6mm, residential=0.3mm; ROAD_COLOR: #555555
 - [Phase 05-roads-layer]: Bridge lift = ROAD_DEPTH_MM[tier] * 2; UV never set on road geometry to avoid mergeGeometries attribute mismatch with terrain/buildings
+- [Phase 05-roads-layer 05-02]: Roads merged via mergeGeometries (not CSG) in export — roads are additive geometry; CSG reserved for buildings
+- [Phase 05-roads-layer 05-02]: generateFilename unified suffix builder — terrain[-buildings][-roads] covers all 4 layer combinations with hasRoads=false default for backward compat
 
 ### Pending Todos
 
@@ -113,7 +117,6 @@ None.
 ### Blockers/Concerns
 
 - Phase 1 gap closure (01-03): Automated task complete (code fixes committed, 14/14 tests pass). UAT browser verification still pending — requires user with valid MapTiler API key to verify 9 browser scenarios
-- Phase 5 (Roads): Road intersection polygon merging strategy requires a research spike — vertex displacement vs. junction polygon computation has significant mesh quality and STL validity consequences; resolve before implementation begins
 - Phase 6 (Water): Coastal/ocean handling requires a concrete v1 decision before water layer architecture is finalized — options: scope out, elevation-zero raster fallback, or osmdata.openstreetmap.de water polygons; resolve in Phase 6 research spike
 - Phase 9 (Worker): comlink + vite-plugin-comlink with shared geometry lib code — production build edge cases (Pitfall 15) warrant a spike before full implementation
 
@@ -128,5 +131,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 05-roads-layer 05-01-PLAN.md — road library complete (types, overpass, parse, roadMesh + 45 tests); geometry-extrude@0.2.1 bug patched; ready for Plan 05-02 (UI wiring)
+Stopped at: Completed 05-roads-layer 05-02-PLAN.md — road layer complete end-to-end (store, RoadMesh, RoadsSection, GenerateButton fetch, STL export); Phase 5 complete; ready for Phase 6 (Water)
 Resume file: None
