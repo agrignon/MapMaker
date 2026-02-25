@@ -85,11 +85,12 @@ Plans:
   2. User can enter maximum physical dimensions (X width, Y depth, Z height) in the sidebar, and the 3D preview and exported STL reflect the specified size
   3. User can switch measurements between mm and inches, and all dimension displays update to show the converted values
   4. Road style selector is hidden when the roads toggle is off, vegetation controls are hidden when vegetation is off, and smoothing slider is hidden when terrain is off — contextual visibility is correct for each layer
-**Plans:** 2/2 plans complete
+**Plans:** 3 plans (2 complete, 1 gap closure)
 
 Plans:
-- [ ] 04-01-PLAN.md — Extend Zustand store with layer toggles, units, targetHeightMM; wire mesh visibility and export gating
-- [ ] 04-02-PLAN.md — Rebuild PreviewSidebar with collapsible sections, ModelSizeSection, layer toggles, unit toggle, contextual visibility
+- [x] 04-01-PLAN.md — Extend Zustand store with layer toggles, units, targetHeightMM; wire mesh visibility and export gating
+- [x] 04-02-PLAN.md — Rebuild PreviewSidebar with collapsible sections, ModelSizeSection, layer toggles, unit toggle, contextual visibility
+- [ ] 04-03-PLAN.md — Gap closure: wire targetHeightMM into terrain/building mesh generation and export pipeline
 
 ### Phase 5: Roads Layer
 **Goal**: Users can see the OSM road network rendered as 3D geometry within the selected area, choose a road style, and have roads included in the exported STL
@@ -153,7 +154,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Foundation | 3/3 | Complete | 2026-02-24 |
 | 2. Terrain + Preview + Export | 5/5 | Complete | 2026-02-24 |
 | 3. Buildings | 3/3 | Complete | 2026-02-25 |
-| 4. Model Controls + Store Foundation | 2/2 | Complete   | 2026-02-25 |
+| 4. Model Controls + Store Foundation | 2/3 | Gap closure | 2026-02-25 |
 | 5. Roads Layer | 0/TBD | Not started | - |
 | 6. Water Layer | 0/TBD | Not started | - |
 | 7. Vegetation + Terrain Smoothing | 0/TBD | Not started | - |
