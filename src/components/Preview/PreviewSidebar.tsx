@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { ModelSizeSection } from './ModelSizeSection';
+import { TerrainSection } from './TerrainSection';
+import { BuildingsSection } from './BuildingsSection';
+import { LayerPlaceholderSection } from './LayerPlaceholderSection';
+import { ExportPanel } from './ExportPanel';
 
-interface PreviewSidebarProps {
-  children: React.ReactNode;
-}
-
-export function PreviewSidebar({ children }: PreviewSidebarProps) {
+export function PreviewSidebar() {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -61,15 +62,39 @@ export function PreviewSidebar({ children }: PreviewSidebarProps) {
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Header */}
+          <div style={{ marginBottom: '4px' }}>
             <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '13px' }}>
-              Preview Controls
+              Model Controls
             </span>
           </div>
-          {children}
+
+          {/* Model Size section — always visible above layers */}
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', paddingTop: '8px' }}>
+            <ModelSizeSection />
+          </div>
+
+          {/* Layers subheading */}
+          <div style={{ paddingTop: '10px', paddingBottom: '4px' }}>
+            <span style={{ color: '#6b7280', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Layers
+            </span>
+          </div>
+
+          {/* Layer sections in pipeline order */}
+          <TerrainSection />
+          <BuildingsSection />
+          <LayerPlaceholderSection label="Roads" />
+          <LayerPlaceholderSection label="Water" />
+          <LayerPlaceholderSection label="Vegetation" />
+
+          {/* Divider before export */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '8px' }} />
+
+          {/* Export panel at bottom */}
+          <ExportPanel />
         </div>
       )}
     </div>

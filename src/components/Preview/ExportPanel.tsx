@@ -1,8 +1,9 @@
 /**
  * Export panel for the 3D preview sidebar.
- * Provides: dimension inputs, Export STL button, labeled progress bar, download dialog.
+ * Provides: Export STL button, labeled progress bar, download dialog.
+ * Dimension inputs have been migrated to ModelSizeSection.
  *
- * Placed inside PreviewSidebar, below TerrainControls.
+ * Placed inside PreviewSidebar, below layer sections.
  * Export is gated: only enabled when terrain is generated (generationStatus === 'ready').
  */
 
@@ -52,11 +53,6 @@ export function ExportPanel() {
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
-  const setTargetDimensions = useMapStore((s) => s.setTargetDimensions);
-
-  // Local state for dimension inputs (avoid over-triggering store on every keystroke)
-  const [widthInput, setWidthInput] = useState(String(targetWidthMM));
-  const [depthInput, setDepthInput] = useState(String(targetDepthMM));
 
   // Error message for validation failure
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -214,87 +210,9 @@ export function ExportPanel() {
     exportBufferRef.current = null;
   }
 
-  const labelStyle: React.CSSProperties = {
-    color: '#d1d5db',
-    fontSize: '13px',
-    fontWeight: 500,
-  };
-
-  const inputStyle: React.CSSProperties = {
-    backgroundColor: '#1f2937',
-    border: '1px solid #374151',
-    borderRadius: '6px',
-    color: '#e5e7eb',
-    padding: '6px 10px',
-    fontSize: '13px',
-    outline: 'none',
-    width: '80px',
-    textAlign: 'right' as const,
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Divider */}
-      <div style={{ borderTop: '1px solid #374151' }} />
-
-      {/* Section A: Dimensions */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <span style={{ color: '#e5e7eb', fontSize: '13px', fontWeight: 600 }}>
-          Model Dimensions
-        </span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="export-width" style={labelStyle}>Width</label>
-          <input
-            id="export-width"
-            type="number"
-            min={10}
-            max={500}
-            step={1}
-            value={widthInput}
-            onChange={(e) => setWidthInput(e.target.value)}
-            onBlur={() => {
-              const v = parseInt(widthInput, 10);
-              if (!isNaN(v) && v > 0) {
-                setTargetDimensions(v, targetDepthMM);
-              } else {
-                setWidthInput(String(targetWidthMM));
-              }
-            }}
-            style={inputStyle}
-          />
-          <span style={{ color: '#9ca3af', fontSize: '13px' }}>mm</span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="export-depth" style={labelStyle}>Depth</label>
-          <input
-            id="export-depth"
-            type="number"
-            min={10}
-            max={500}
-            step={1}
-            value={depthInput}
-            onChange={(e) => setDepthInput(e.target.value)}
-            onBlur={() => {
-              const v = parseInt(depthInput, 10);
-              if (!isNaN(v) && v > 0) {
-                setTargetDimensions(targetWidthMM, v);
-              } else {
-                setDepthInput(String(targetDepthMM));
-              }
-            }}
-            style={inputStyle}
-          />
-          <span style={{ color: '#9ca3af', fontSize: '13px' }}>mm</span>
-        </div>
-
-        <p style={{ color: '#6b7280', fontSize: '11px', margin: 0 }}>
-          STL will be scaled to these dimensions
-        </p>
-      </div>
-
-      {/* Section B: Export button */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '12px' }}>
+      {/* Section A: Export button */}
       {exportStatus !== 'ready' && (
         <button
           onClick={handleExport}

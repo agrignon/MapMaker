@@ -2,8 +2,6 @@ import { useCallback, useRef, useState } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
-import { TerrainControls } from '../Preview/TerrainControls';
-import { ExportPanel } from '../Preview/ExportPanel';
 
 interface SplitLayoutProps {
   children: React.ReactNode;
@@ -59,10 +57,7 @@ export function SplitLayout({ children }: SplitLayoutProps) {
       {showPreview && (
         <div style={{ width: `${100 - splitPercent}%`, minWidth: 0, height: '100%', position: 'relative' }}>
           <PreviewCanvas />
-          <PreviewSidebar>
-            <TerrainControls />
-            <ExportPanel />
-          </PreviewSidebar>
+          <PreviewSidebar />
         </div>
       )}
     </div>
