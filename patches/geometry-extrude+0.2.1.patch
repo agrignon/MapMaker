@@ -1,0 +1,13 @@
+diff --git a/node_modules/geometry-extrude/dist/geometry-extrude.js b/node_modules/geometry-extrude/dist/geometry-extrude.js
+index 113f9d5..dbe2ee9 100644
+--- a/node_modules/geometry-extrude/dist/geometry-extrude.js
++++ b/node_modules/geometry-extrude/dist/geometry-extrude.js
+@@ -1627,7 +1627,7 @@
+       var res = splitVertices(polygonVertices, null, opts.smoothSide, opts.smoothSideThreshold);
+       return {
+         vertices: res.vertices,
+-        rawVertices: vertices,
++        rawVertices: points,
+         splittedMap: res.splittedMap,
+         indices: indices,
+         topVertices: topVertices,
