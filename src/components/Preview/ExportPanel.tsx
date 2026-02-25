@@ -17,6 +17,7 @@ import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
 import { buildAllBuildings } from '../../lib/buildings/merge';
 import { buildRoadGeometry } from '../../lib/roads/roadMesh';
+import { clipGeometryToFootprint } from '../../lib/export/clipGeometry';
 import { wgs84ToUTM } from '../../lib/utm';
 import type { BuildingGeometryParams } from '../../lib/buildings/types';
 import type { RoadGeometryParams } from '../../lib/roads/types';
@@ -143,11 +144,23 @@ export function ExportPanel() {
         );
 
         if (buildingsGeometry) {
+          setExportStatus('building', 'Clipping buildings to footprint...');
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          // Clip buildings to terrain footprint — buildings that extend past the
+          // model boundary are sliced cleanly at the edge instead of floating.
+          const clippedBuildings = clipGeometryToFootprint(
+            buildingsGeometry,
+            targetWidthMM / 2,
+            targetDepthMM / 2
+          );
+          buildingsGeometry.dispose();
+
           setExportStatus('building', 'Merging terrain and buildings...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
-          exportSolid = mergeTerrainAndBuildings(terrainSolid, buildingsGeometry);
-          buildingsGeometry.dispose();
+          exportSolid = mergeTerrainAndBuildings(terrainSolid, clippedBuildings);
+          clippedBuildings.dispose();
         }
       }
 
@@ -177,6 +190,17 @@ export function ExportPanel() {
         const roadsGeometry = buildRoadGeometry(roadFeatures, bbox, elevationData, roadParams);
 
         if (roadsGeometry) {
+          setExportStatus('building', 'Clipping roads to footprint...');
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          // Clip roads to terrain footprint (same as buildings)
+          const clippedRoads = clipGeometryToFootprint(
+            roadsGeometry,
+            targetWidthMM / 2,
+            targetDepthMM / 2
+          );
+          roadsGeometry.dispose();
+
           setExportStatus('building', 'Merging roads into model...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -186,7 +210,8 @@ export function ExportPanel() {
 
           // Ensure both geometries are non-indexed for consistent merge
           const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
-          const roadsNonIndexed = roadsGeometry.index ? roadsGeometry.toNonIndexed() : roadsGeometry;
+          // clippedRoads is already non-indexed from clipGeometryToFootprint
+          const roadsNonIndexed = clippedRoads;
 
           // Strip any attributes from roads that don't exist on terrain+buildings (uv, etc.)
           // Only keep position and normal for STL compatibility
@@ -212,8 +237,7 @@ export function ExportPanel() {
             exportSolid = merged;
           }
 
-          roadsGeometry.dispose();
-          roadsNonIndexed.dispose();
+          clippedRoads.dispose();
           if (exportNonIndexed !== exportSolid) exportNonIndexed.dispose();
         }
       }

@@ -173,13 +173,13 @@ export function buildAllBuildings(
       projectRingToMM(hole, bboxCenterUTM, horizontalScale)
     );
 
-    // Step c: Sample terrain elevation and use the MAX as a flat base for the building.
+    // Step c: Sample terrain elevation and use the MIN as a flat base for the building.
     // Using per-vertex base Z causes buildings to distort when terrain exaggeration
-    // changes (base vertices spread vertically on slopes). A flat base at the highest
-    // sampled point keeps the building shape stable — it sits on the terrain without
-    // poking through, and exaggeration only moves it up/down uniformly.
+    // changes (base vertices spread vertically on slopes). A flat base at the lowest
+    // sampled point anchors the building to the terrain — uphill walls extend below
+    // the terrain surface (hidden by occlusion), and the building never floats.
     const sampledBaseZ = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
-    const flatBaseZ = Math.max(...sampledBaseZ);
+    const flatBaseZ = Math.min(...sampledBaseZ);
     const baseZmm = sampledBaseZ.map(() => flatBaseZ);
 
     // Step d: Convert building height from meters to mm using horizontalScale only.

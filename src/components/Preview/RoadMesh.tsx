@@ -124,12 +124,19 @@ export function RoadMesh() {
   if (roadGenerationStatus !== 'ready') return null;
   if (!roadFeatures || roadFeatures.length === 0) return null;
 
+  // Lift road mesh slightly above terrain to prevent Z-fighting.
+  // Recessed roads have their top face at exact terrain Z — without this offset
+  // the terrain mesh occludes them entirely. The 0.1mm lift + polygonOffset
+  // ensures roads are always visible in the preview for all style modes.
   return (
-    <mesh ref={meshRef} visible={roadsVisible}>
+    <mesh ref={meshRef} visible={roadsVisible} position={[0, 0, 0.1]}>
       <meshStandardMaterial
         color={ROAD_COLOR}
         side={THREE.DoubleSide}
         clippingPlanes={clippingPlanes}
+        polygonOffset
+        polygonOffsetFactor={-4}
+        polygonOffsetUnits={-4}
       />
     </mesh>
   );
