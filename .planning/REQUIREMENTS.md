@@ -43,9 +43,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Model Controls
 
-- [ ] **CTRL-01**: User can toggle terrain, buildings, roads, water, and vegetation on/off individually
-- [ ] **CTRL-02**: User can set maximum physical dimensions: X width, Y depth, Z height
-- [ ] **CTRL-03**: User can switch measurements between mm and inches (default: mm)
+- [x] **CTRL-01**: User can toggle terrain, buildings, roads, water, and vegetation on/off individually
+- [x] **CTRL-02**: User can set maximum physical dimensions: X width, Y depth, Z height
+- [x] **CTRL-03**: User can switch measurements between mm and inches (default: mm)
 - [ ] **CTRL-04**: Controls are hidden/disabled when their layer is toggled off (e.g., road style hidden when roads off)
 
 ### Preview & Navigation
@@ -128,9 +128,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BLDG-02 | Phase 3 | Complete |
 | BLDG-03 | Phase 3 | Complete |
 | BLDG-04 | Phase 3 | Complete |
-| CTRL-01 | Phase 4 | Pending |
-| CTRL-02 | Phase 4 | Pending |
-| CTRL-03 | Phase 4 | Pending |
+| CTRL-01 | Phase 4 | Complete |
+| CTRL-02 | Phase 4 | Complete |
+| CTRL-03 | Phase 4 | Complete |
 | CTRL-04 | Phase 4 | Pending |
 | ROAD-01 | Phase 5 | Pending |
 | ROAD-02 | Phase 5 | Pending |

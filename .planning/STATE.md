@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 4 — Model Controls + Store Foundation
-Plan: Not started
-Status: v1.0 roadmap expanded to 9 phases — 19/34 requirements complete (Phases 1-3), 15 remaining requirements mapped to Phases 4-9
-Last activity: 2026-02-24 — v1.0 re-scope roadmap created: Phases 4-9 defined for roads, water, vegetation, smoothing, edit-iterate, and performance
+Plan: 1 of 2 complete
+Status: v1.0 roadmap expanded to 9 phases — 22/34 requirements complete (Phases 1-3 + CTRL-01/02/03), 12 remaining requirements mapped to Phases 4-9
+Last activity: 2026-02-25 — Plan 04-01 complete: store extended with layerToggles, units, targetHeightMM; BuildingMesh and ExportPanel wired to layer toggles
 
 Progress: [██████░░░░] ~56%
 
@@ -40,6 +40,7 @@ Progress: [██████░░░░] ~56%
 | Phase 03-buildings P01 | 3 | 3 tasks | 15 files |
 | Phase 03-buildings P02 | 2 | 2 tasks | 9 files |
 | Phase 03-buildings P03 | 1 | 1 task | 4 files |
+| Phase 04-model-controls-store-foundation P01 | 2 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Recent decisions affecting current work:
 - [Phase 01-foundation 01-03]: HTML overlay approach for bbox rectangle — div follows map via 'move' event listener; no MapLibre GeoJSON source required
 - [Phase 01-foundation 01-03]: maps.current vs maps[id] — without MapProvider, useMap() only populates .current key; always use maps.current inside a <Map> child
 - [Phase 01-foundation 01-03]: API key guard pattern — cast env var as string|undefined, guard with if (!KEY) return <ErrorUI>; never silently pass empty string to MapTiler
+- [Phase 04-model-controls-store-foundation]: LayerToggles interface exported from mapStore.ts; setTargetWidth uses get() for aspect-ratio-preserving depth calculation; terrain has no toggle (always on); setUnits is display-only; Three.js mesh.visible=false for instant hide without regeneration
 
 ### Pending Todos
 
@@ -114,6 +116,6 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 
 ## Session Continuity
 
-Last session: 2026-02-24
-Stopped at: v1.0 roadmap re-scoped — Phases 4-9 defined and written to ROADMAP.md; REQUIREMENTS.md traceability updated; ready to begin Phase 4 planning
+Last session: 2026-02-25
+Stopped at: Completed 04-model-controls-store-foundation 04-01-PLAN.md — store foundation complete, ready for Plan 02 (UI components)
 Resume file: None
