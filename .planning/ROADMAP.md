@@ -113,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Awaiting UAT verification | - |
 | 2. Terrain + Preview + Export | 4/5 | Gap closure | - |
-| 3. Buildings | 3/3 | Complete   | 2026-02-25 |
+| 3. Buildings | 3/3 | Complete    | 2026-02-25 |
 | 4. Roads + Controls | 0/TBD | Not started | - |
 | 5. Edit-Iterate Loop | 0/TBD | Not started | - |
 | 6. Performance Hardening | 0/TBD | Not started | - |
