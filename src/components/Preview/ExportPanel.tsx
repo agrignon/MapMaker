@@ -48,6 +48,7 @@ export function ExportPanel() {
   const exportStep = useMapStore((s) => s.exportStep);
   const exportResult = useMapStore((s) => s.exportResult);
   const buildingFeatures = useMapStore((s) => s.buildingFeatures);
+  const buildingsVisible = useMapStore((s) => s.layerToggles.buildings);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
@@ -99,8 +100,8 @@ export function ExportPanel() {
 
       const terrainSolid = buildSolidMesh(terrainGeom, basePlateThicknessMM);
 
-      // Step 2: Include building geometry if available
-      const hasBuildings = Boolean(buildingFeatures && buildingFeatures.length > 0 && utmZone);
+      // Step 2: Include building geometry if available and buildings layer is toggled on
+      const hasBuildings = Boolean(buildingFeatures && buildingFeatures.length > 0 && utmZone && buildingsVisible);
       let exportSolid = terrainSolid;
 
       if (hasBuildings && buildingFeatures && utmZone) {

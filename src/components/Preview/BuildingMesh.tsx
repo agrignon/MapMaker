@@ -18,6 +18,7 @@ import type { BuildingGeometryParams } from '../../lib/buildings/types';
 export function BuildingMesh() {
   const buildingFeatures = useMapStore((s) => s.buildingFeatures);
   const buildingGenerationStatus = useMapStore((s) => s.buildingGenerationStatus);
+  const buildingsVisible = useMapStore((s) => s.layerToggles.buildings);
   const elevationData = useMapStore((s) => s.elevationData);
   const exaggeration = useMapStore((s) => s.exaggeration);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
@@ -104,7 +105,7 @@ export function BuildingMesh() {
   if (!buildingFeatures || buildingFeatures.length === 0) return null;
 
   return (
-    <mesh ref={meshRef}>
+    <mesh ref={meshRef} visible={buildingsVisible}>
       <meshStandardMaterial color="#c0c0c0" side={THREE.DoubleSide} />
     </mesh>
   );
