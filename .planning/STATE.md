@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 4 — Model Controls + Store Foundation
-Plan: 1 of 2 complete
-Status: v1.0 roadmap expanded to 9 phases — 22/34 requirements complete (Phases 1-3 + CTRL-01/02/03), 12 remaining requirements mapped to Phases 4-9
-Last activity: 2026-02-25 — Plan 04-01 complete: store extended with layerToggles, units, targetHeightMM; BuildingMesh and ExportPanel wired to layer toggles
+Plan: 2 of 2 complete — Phase 4 COMPLETE
+Status: v1.0 roadmap — 26/34 requirements complete (Phases 1-4 fully done including CTRL-01 through CTRL-04), 8 remaining requirements mapped to Phases 5-9
+Last activity: 2026-02-25 — Plan 04-02 complete: full control panel UI built — CollapsibleSection, ModelSizeSection, TerrainSection, BuildingsSection, LayerPlaceholderSection assembled into self-contained PreviewSidebar
 
-Progress: [██████░░░░] ~56%
+Progress: [███████░░░] ~62%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 2.9 min
-- Total execution time: ~0.49 hours
+- Total plans completed: 11
+- Average duration: 2.5 min
+- Total execution time: ~0.46 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [██████░░░░] ~56%
 | 01-foundation | 2 | 7 min | 3.5 min |
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
 | 03-buildings | 3 | 19 min | 6.3 min |
+| 04-model-controls-store-foundation | 2 | 4 min | 2.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 1 min, 8 min, 6 min, 5 min
+- Last 5 plans: 2 min, 2 min, 1 min, 8 min, 6 min
 - Trend: Normal
 
 *Updated after each plan completion*
@@ -41,6 +42,7 @@ Progress: [██████░░░░] ~56%
 | Phase 03-buildings P02 | 2 | 2 tasks | 9 files |
 | Phase 03-buildings P03 | 1 | 1 task | 4 files |
 | Phase 04-model-controls-store-foundation P01 | 2 | 2 tasks | 3 files |
+| Phase 04-model-controls-store-foundation P02 | 2 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -94,6 +96,8 @@ Recent decisions affecting current work:
 - [Phase 01-foundation 01-03]: maps.current vs maps[id] — without MapProvider, useMap() only populates .current key; always use maps.current inside a <Map> child
 - [Phase 01-foundation 01-03]: API key guard pattern — cast env var as string|undefined, guard with if (!KEY) return <ErrorUI>; never silently pass empty string to MapTiler
 - [Phase 04-model-controls-store-foundation]: LayerToggles interface exported from mapStore.ts; setTargetWidth uses get() for aspect-ratio-preserving depth calculation; terrain has no toggle (always on); setUnits is display-only; Three.js mesh.visible=false for instant hide without regeneration
+- [Phase 04-model-controls-store-foundation]: CollapsibleSection uses local useState for expand/collapse (ephemeral UI state, not Zustand)
+- [Phase 04-model-controls-store-foundation]: PreviewSidebar is now self-contained with no children prop; dimension inputs migrated from ExportPanel to ModelSizeSection
 
 ### Pending Todos
 
@@ -117,5 +121,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 04-model-controls-store-foundation 04-01-PLAN.md — store foundation complete, ready for Plan 02 (UI components)
+Stopped at: Completed 04-model-controls-store-foundation 04-02-PLAN.md — Phase 4 complete, all CTRL requirements delivered; ready for Phase 5 (Roads)
 Resume file: None
