@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 
 ## Current Position
 
-Phase: 3 of 6 (Buildings) — COMPLETE
-Plan: 3 of 3 complete
-Status: Phase 3 complete — all 3 plans executed and human-verified; CSG union + STL export pipeline approved by user
-Last activity: 2026-02-24 — Human verification checkpoint approved; buildings confirmed in 3D preview and exported STL
+Phase: Not started (re-scoped roadmap, defining phases 4+)
+Plan: —
+Status: v1.0 re-scoped — 19/34 requirements complete (Phases 1-3), 15 remaining requirements awaiting roadmap
+Last activity: 2026-02-24 — v1.0 re-scope: added TERR-04, WATR-01, VEGE-01, EXPT-06, FNDN-04; updated CTRL-01
 
-Progress: [███████░░░] ~70%
+Progress: [██████░░░░] ~56%
 
 ## Performance Metrics
 

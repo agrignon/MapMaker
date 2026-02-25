@@ -18,6 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **TERR-01**: User sees real terrain elevation data rendered from DEM sources within the selected bounding box
 - [x] **TERR-02**: User can control terrain elevation exaggeration with a slider (flatten to exaggerate)
 - [x] **TERR-03**: Flat terrain areas produce a printable model with minimum height floor (not zero-thickness)
+- [ ] **TERR-04**: User can control mesh smoothing with a slider to interpolate rough elevation transitions into smooth surfaces
 
 ### Buildings
 
@@ -32,9 +33,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ROAD-02**: User can choose road style: recessed channels, raised surfaces, or flat at terrain level
 - [ ] **ROAD-03**: Road width reflects road type (highway wider than residential street)
 
+### Water
+
+- [ ] **WATR-01**: User sees water bodies (rivers, lakes, ocean) rendered as flat depressions at water level within the selected area
+
+### Vegetation
+
+- [ ] **VEGE-01**: User sees parks and forested areas rendered as a toggleable vegetation layer with distinct geometry
+
 ### Model Controls
 
-- [ ] **CTRL-01**: User can toggle terrain, buildings, and roads on/off individually
+- [ ] **CTRL-01**: User can toggle terrain, buildings, roads, water, and vegetation on/off individually
 - [ ] **CTRL-02**: User can set maximum physical dimensions: X width, Y depth, Z height
 - [ ] **CTRL-03**: User can switch measurements between mm and inches (default: mm)
 - [ ] **CTRL-04**: Controls are hidden/disabled when their layer is toggled off (e.g., road style hidden when roads off)
@@ -53,12 +62,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **EXPT-03**: Generated STL is watertight (manifold) and printable without repair in standard slicers
 - [x] **EXPT-04**: User can download the STL file directly to their local machine
 - [x] **EXPT-05**: STL dimensions match the user's specified physical dimensions in the correct unit (mm)
+- [ ] **EXPT-06**: Exported STL filename includes the searched location name when available (not just coordinates)
 
 ### Foundation (Technical)
 
 - [x] **FNDN-01**: All geometry uses local meter-space coordinates (UTM projection), not Web Mercator
 - [x] **FNDN-02**: STL export writes coordinates in millimeters (canonical unit for 3D printing)
 - [ ] **FNDN-03**: Mesh generation runs in a Web Worker to prevent UI freezing
+- [ ] **FNDN-04**: Production build (`npm run build`) compiles without TypeScript errors
 
 ## v2 Requirements
 
@@ -71,7 +82,7 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Additional Layers
 
-- **LAYR-01**: User sees water bodies rendered as depressions in the terrain
+- ~~**LAYR-01**: User sees water bodies rendered as depressions in the terrain~~ → Promoted to v1 as WATR-01
 - **LAYR-02**: User can overlay GPX tracks (hiking trails) on the model
 - **LAYR-03**: User sees elevation contour lines on the terrain surface
 
@@ -117,22 +128,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BLDG-02 | Phase 3 | Complete |
 | BLDG-03 | Phase 3 | Complete |
 | BLDG-04 | Phase 3 | Complete |
-| ROAD-01 | Phase 4 | Pending |
-| ROAD-02 | Phase 4 | Pending |
-| ROAD-03 | Phase 4 | Pending |
-| CTRL-01 | Phase 4 | Pending |
-| CTRL-02 | Phase 4 | Pending |
-| CTRL-03 | Phase 4 | Pending |
-| CTRL-04 | Phase 4 | Pending |
-| PREV-03 | Phase 5 | Pending |
-| PREV-04 | Phase 5 | Pending |
-| FNDN-03 | Phase 6 | Pending |
+| TERR-04 | TBD | Pending |
+| ROAD-01 | TBD | Pending |
+| ROAD-02 | TBD | Pending |
+| ROAD-03 | TBD | Pending |
+| WATR-01 | TBD | Pending |
+| VEGE-01 | TBD | Pending |
+| CTRL-01 | TBD | Pending |
+| CTRL-02 | TBD | Pending |
+| CTRL-03 | TBD | Pending |
+| CTRL-04 | TBD | Pending |
+| PREV-03 | TBD | Pending |
+| PREV-04 | TBD | Pending |
+| EXPT-06 | TBD | Pending |
+| FNDN-03 | TBD | Pending |
+| FNDN-04 | TBD | Pending |
 
 **Coverage:**
-- v1 requirements: 29 total
-- Mapped to phases: 29
-- Unmapped: 0
+- v1 requirements: 34 total
+- Mapped to phases: 19 (Phases 1-3 complete)
+- Unmapped: 15 (awaiting roadmap assignment)
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-24 after 01-02 completion — LOCS-02, LOCS-03 marked complete; Phase 1 fully satisfied*
+*Last updated: 2026-02-24 after v1.0 re-scope — added TERR-04, WATR-01, VEGE-01, EXPT-06, FNDN-04; updated CTRL-01 for water+vegetation toggles*
