@@ -101,7 +101,11 @@ Plans:
   2. Highway and trunk roads are visibly wider than residential and service streets — type-based width differences are noticeable in the 3D preview
   3. User can select recessed channels, raised surfaces, or flat road style, and the 3D preview updates to show roads in the chosen style
   4. Roads are included in the exported STL and the resulting file opens without repair warnings in a standard slicer
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Road data pipeline + geometry library (Overpass fetch, parse/classify, geometry-extrude ribbon mesh, terrain-following Z, unit tests)
+- [ ] 05-02-PLAN.md — RoadMesh component + RoadsSection UI + store extension + GenerateButton wiring + STL export integration
 
 ### Phase 6: Water Layer
 **Goal**: Users can see rivers, lakes, and water bodies rendered as flat depressions within the selected area, with the depression baked into the terrain mesh so the STL is correct for printing
