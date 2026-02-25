@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 4 — Model Controls + Store Foundation
+**Current focus:** Phase 5 — Roads
 
 ## Current Position
 
-Phase: 4 — Model Controls + Store Foundation
-Plan: 2 of 2 complete — Phase 4 COMPLETE
-Status: v1.0 roadmap — 26/34 requirements complete (Phases 1-4 fully done including CTRL-01 through CTRL-04), 8 remaining requirements mapped to Phases 5-9
-Last activity: 2026-02-25 — Plan 04-02 complete: full control panel UI built — CollapsibleSection, ModelSizeSection, TerrainSection, BuildingsSection, LayerPlaceholderSection assembled into self-contained PreviewSidebar
+Phase: 4 — Model Controls + Store Foundation (complete)
+Plan: 3 of 3 complete — Phase 4 COMPLETE (all gaps closed)
+Status: v1.0 roadmap — 27/34 requirements complete (Phases 1-4 fully done including CTRL-01 through CTRL-04, Z height override wired end-to-end), 7 remaining requirements mapped to Phases 5-9
+Last activity: 2026-02-25 — Plan 04-03 complete: targetHeightMM wired through TerrainMesh, BuildingMesh, ExportPanel — Z height override now affects 3D preview and STL export; CTRL-02 fully complete
 
-Progress: [███████░░░] ~62%
+Progress: [███████░░░] ~64%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 2.5 min
-- Total execution time: ~0.46 hours
+- Total execution time: ~0.5 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [███████░░░] ~62%
 | 01-foundation | 2 | 7 min | 3.5 min |
 | 02-terrain-preview-export | 4 | 9 min | 2.25 min |
 | 03-buildings | 3 | 19 min | 6.3 min |
-| 04-model-controls-store-foundation | 2 | 4 min | 2.0 min |
+| 04-model-controls-store-foundation | 3 | 7 min | 2.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 2 min, 1 min, 8 min, 6 min
+- Last 5 plans: 3 min, 2 min, 2 min, 1 min, 8 min
 - Trend: Normal
 
 *Updated after each plan completion*
@@ -43,6 +43,7 @@ Progress: [███████░░░] ~62%
 | Phase 03-buildings P03 | 1 | 1 task | 4 files |
 | Phase 04-model-controls-store-foundation P01 | 2 | 2 tasks | 3 files |
 | Phase 04-model-controls-store-foundation P02 | 2 | 2 tasks | 8 files |
+| Phase 04-model-controls-store-foundation P03 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Recent decisions affecting current work:
 - [Phase 04-model-controls-store-foundation]: LayerToggles interface exported from mapStore.ts; setTargetWidth uses get() for aspect-ratio-preserving depth calculation; terrain has no toggle (always on); setUnits is display-only; Three.js mesh.visible=false for instant hide without regeneration
 - [Phase 04-model-controls-store-foundation]: CollapsibleSection uses local useState for expand/collapse (ephemeral UI state, not Zustand)
 - [Phase 04-model-controls-store-foundation]: PreviewSidebar is now self-contained with no children prop; dimension inputs migrated from ExportPanel to ModelSizeSection
+- [Phase 04-model-controls-store-foundation 04-03]: targetReliefMM = targetHeightMM - basePlateThicknessMM; caller subtracts base plate before passing to TerrainMeshParams/BuildingGeometryParams — keeps library functions focused on surface geometry
+- [Phase 04-model-controls-store-foundation 04-03]: buildAllBuildings building heightMM refactored to heightM * zScale (instead of heightM * horizontalScale * exaggeration) — correct for targetReliefMM override, TERR-03 floor, and normal cases
 
 ### Pending Todos
 
@@ -121,5 +124,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 04-model-controls-store-foundation 04-02-PLAN.md — Phase 4 complete, all CTRL requirements delivered; ready for Phase 5 (Roads)
+Stopped at: Completed 04-model-controls-store-foundation 04-03-PLAN.md — Phase 4 gap closure complete, Z height override wired end-to-end; ready for Phase 5 (Roads)
 Resume file: None
