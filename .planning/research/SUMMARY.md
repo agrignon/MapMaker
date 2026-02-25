@@ -1,274 +1,209 @@
 # Project Research Summary
 
-**Project:** MapMaker
-**Domain:** Map-to-3D-printable-STL web application
-**Researched:** 2026-02-23
-**Confidence:** MEDIUM (stack HIGH; features MEDIUM; architecture MEDIUM; pitfalls MEDIUM)
+**Project:** MapMaker — Map-to-3D-printable-STL web application
+**Domain:** Browser-based terrain and OSM feature 3D model generator — milestone additions (roads, water, vegetation, mesh smoothing, Web Worker offload)
+**Researched:** 2026-02-24
+**Confidence:** HIGH (stack: direct npm verification + codebase inspection; architecture: existing code confirmed; pitfalls: cross-verified across OSM wiki, slicer community, Three.js discourse)
 
 ## Executive Summary
 
-MapMaker is a client-side web tool that converts a user-selected geographic bounding box into a print-ready binary STL file. Experts build this type of product as a predominantly browser-side SPA — mesh generation, coordinate projection, elevation decoding, and STL serialization all happen in the browser, with only a thin server proxy layer needed to sidestep CORS restrictions on elevation tile APIs. The recommended architecture is a sequential geo-data pipeline (bbox selection → parallel elevation + OSM fetch → coordinate projection → mesh generation in a Web Worker → Three.js preview → STL export) wired together through a central Zustand store that both the 2D map and 3D preview panels subscribe to. The stack is React 19 + TypeScript 5.9 + Vite 7 + MapLibre GL JS 5.18 + Three.js 0.183 + Zustand 5 + Tailwind 4, with `@mapbox/martini` for terrain mesh generation and MapTiler terrain-RGB tiles as the elevation data source.
+MapMaker is a client-side SPA that converts a user-selected map bounding box into a printable STL file by combining DEM elevation data (terrain) with OSM vector features (buildings, roads, water, vegetation). Phases 1-3 are shipped and verified — location search, bbox selection, terrain generation, buildings, STL export, and orbit preview are all working. The current milestone adds roads, water bodies, vegetation, terrain smoothing, layer controls, and a Web Worker offload to complete the v1 pipeline. The research-recommended approach is to extend the proven pipeline architecture incrementally: add parallel Overpass fetches for each new feature type, apply each as a lib module following the established `overpass.ts / parse.ts / geometry.ts / types.ts` pattern, and wire them into the existing store-first data flow and merge export chain. No redesign is required; all new features slot cleanly into established grooves.
 
-The competitive landscape makes clear that no existing tool combines terrain elevation, OSM buildings with real heights, and configurable road styles in a live side-by-side 2D+3D interface. TouchTerrain and Terrain2STL handle terrain only. Map2Model handles buildings but has no terrain elevation. TerraPrinter combines them but has no road style options and no live preview. MapMaker's differentiating features — the terrain+buildings+roads combination with a real-time side-by-side preview and configurable road style (recessed/raised/flat) — are all achievable in v1 and represent a genuine gap no competitor fills.
+The two new stack additions are minimal and justified: `geometry-extrude` for road polyline-to-ribbon mesh generation (earcut-based, TypedArray output, zero conflict with existing stack), and `comlink` + `vite-plugin-comlink` for ergonomic Web Worker communication (replaces raw postMessage boilerplate, provides TypeScript types). Everything else — water bodies, vegetation geometry, and terrain smoothing — reuses existing dependencies (earcut, three-bvh-csg, @mapbox/martini, osmtogeojson) through the existing pipeline patterns. No new frameworks, no dependency sprawl.
 
-The most serious risks are geometric, not architectural. Non-manifold meshes from naive building-terrain merges, coordinate system errors from using Web Mercator instead of local meter space, and STL unit ambiguity (writing meters instead of millimeters) are all "looks done but isn't" failures that only manifest at print time. These must be caught with automated validation before any STL reaches the user. A second tier of risk involves OSM data quality: the majority of buildings worldwide lack height tags, so the building pipeline must treat height-missing as the default case from day one, not as an edge case.
+The critical risk pattern for this milestone is geometry correctness under multi-layer composition. Roads at intersections produce overlapping triangle geometry unless junction handling is explicit. Water bodies encoded as OSM multipolygon relations require proper ring assembly via `osmtogeojson` (already in the project). Applying terrain smoothing after feature placement erodes building bases and road edges — avoided entirely by smoothing the DEM elevation grid before any feature geometry is generated. The secondary risk is Web Worker transfer overhead — solved by merging all geometry into three large typed arrays before postMessage rather than one ArrayBuffer per feature.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is entirely open-source and free to run. MapLibre GL JS (not Mapbox) is the correct 2D map choice — it is the actively maintained open-source fork with an identical API, no API key billing, and no proprietary SDK terms. Three.js 0.183 provides the 3D preview, terrain mesh construction via `BufferGeometry`, and STL export via the bundled `STLExporter` addon. Elevation data should come from MapTiler terrain-RGB tiles (free API key, standard tile URL pattern, no SDK lock-in) for MVP; the decode formula `height = -10000 + (R*256*256 + G*256 + B) * 0.1` is applied in a hidden canvas. OSM building and road data comes from the public Overpass API. The `@mapbox/martini` library handles RTIN terrain mesh generation from the elevation grid — the algorithm is stable despite low recent maintenance activity.
+The existing stack (Vite 6, React 19, TypeScript, Tailwind v4, MapLibre GL JS, Three.js 0.183, Zustand, @mapbox/martini, earcut 3, proj4, osmtogeojson, three-bvh-csg, manifold-3d) is not changed. Two additions are needed for this milestone:
 
-**Core technologies:**
-- React 19 + TypeScript 5.9: UI and type safety — strict types prevent coordinate/index arithmetic bugs
-- Vite 7: Build tool — WASM-friendly, fast HMR, first-class TypeScript
-- MapLibre GL JS 5.18: 2D interactive map — free, open-source, WebGL-based for GPU consistency with Three.js
-- Three.js 0.183: 3D preview, terrain mesh, and STL export — built-in `OrbitControls`, `STLExporter`, `BufferGeometry`
-- Zustand 5: Global state — lightweight, selector-based to prevent broad re-renders across heavy map and 3D canvas
-- Tailwind CSS 4: Styling — Vite plugin setup, zero config
-- `@mapbox/martini` 0.2.x: RTIN terrain mesh from elevation grid
-- `geotiff` 3.0.x: GeoTIFF decode if switching from terrain-RGB to OpenTopography
+**Core technologies (new additions only):**
+- `geometry-extrude@0.2.1`: Road centerline-to-ribbon mesh — returns TypedArrays that wire directly into `THREE.BufferGeometry`; handles miter joints at bends; earcut is its only dependency (already in project, installs its own 2.x copy automatically); only new runtime dependency
+- `comlink@4.4.2` + `vite-plugin-comlink@5.3.0`: Web Worker ergonomics — turns worker functions into async-callable main-thread methods with proper TypeScript types; eliminates postMessage/onmessage boilerplate
+- Custom separable box/Gaussian filter (no library): Terrain DEM smoothing — ~30 lines of TypeScript operating on the existing `Float32Array` elevation grid; no maintained TypeScript-native height-field smoothing library exists; `three-subdivide` is unsuitable (designed for organic mesh smoothing, causes tearing on flat grid geometries)
 
-**Critical version notes:**
-- Tailwind v4 requires `@tailwindcss/vite` plugin — the v3 PostCSS setup does not work
-- `geotiff` v3 has breaking API changes from v2; `ImageFileDirectory` replaces `fileDirectory`
-- `@types/three` is bundled with the `three` package — no separate install needed
+Water bodies, vegetation, and terrain smoothing require zero new libraries. They reuse earcut (triangulation), osmtogeojson (multipolygon assembly), three-bvh-csg (CSG merge), and @mapbox/martini already in the project.
+
+**Version compatibility confirmed:** `geometry-extrude` ships its own earcut 2.x separate from the project's earcut 3.x — npm handles the two copies automatically, no conflict. `vite-plugin-comlink@5.3.0` requires `comlink@^4.3.1` (satisfied by 4.4.2) and `vite>=2.9.6` (project uses Vite 6.0.5).
+
+See `.planning/research/STACK.md` for full rationale and alternatives considered.
 
 ### Expected Features
 
-All 11 MVP features are P1 table stakes that must ship in v1. The product does not exist without them. The competitive analysis confirms that the combination of terrain + buildings + roads + live 3D preview is the true differentiator — any subset of these features leaves MapMaker as a weaker version of an existing tool.
+**Must have (table stakes — all required for v1 milestone):**
+- Roads as 3D geometry with type-based widths — every competitor (TerraPrinter, Map2Model, TerrainForge3D) shows roads; absence makes models hard to orient
+- Road style selection (raised / recessed / flat) — unique differentiator; no competitor offers this; recessed channels support the painting workflow
+- Water bodies as flat depressions below terrain — users expect water visually distinct and lower than land
+- Vegetation as toggleable raised patches — parks and forests as OSM polygon extrusions; OSM coverage varies by region
+- Layer toggles for all feature types — terrain, buildings, roads, water, vegetation each independently on/off
+- Terrain smoothing slider (0-10 Laplacian iterations) — raw 30m SRTM produces sharp elevation steps; smoothing is now competitive table stakes; TerraPrinter added it as a headline feature
+- Full model controls — X/Y/Z dimensions in mm; unit toggle mm/inches; contextual control visibility
+- Edit-iterate loop — adjust bbox or parameters without losing cached OSM data or layer state
+- Web Worker mesh generation — complex scenes lock the main thread 2-5 seconds without offloading
+- Production build compiles — Vite/TypeScript static build must succeed for deployment
 
-**Must have (table stakes):**
-- Location search (geocoding) — users cannot find areas by panning a global map blind
-- Draggable, resizable bounding box on the 2D map — core interaction paradigm; fixed-size box was criticized as a dealbreaker in Terrain2STL
-- Terrain layer with elevation data and vertical exaggeration control — flat terrain is unreadable; auto z-scale that targets a minimum height in mm is highly valued
-- Buildings layer with OSM footprint heights — the differentiator; no purely terrain-focused tool has this
-- Roads layer with recessed/raised/flat style options — no competitor offers road style control; this is MapMaker's clearest unique feature
-- Feature layer toggles (terrain / buildings / roads individually) — enables terrain-only, city-only, or hybrid models
-- Physical dimension controls (width, depth, height in mm) + unit toggle (mm/inches) — required to fit a specific printer bed
-- Live side-by-side 3D preview with orbit/pan/zoom — users must see what they're printing before a multi-hour job
-- Edit → preview → back-to-edit iteration without losing selections — no competitor does this; it is a workflow step change
-- STL export with always-on solid base plate + direct browser download — the literal product deliverable
+**Should have (differentiators):**
+- Terrain smoothing slider with live preview (not just one-click like TerraPrinter) — visible UX advantage
+- Edit → iterate without re-fetching OSM — no competitor caches OSM data between edits
+- Location-name STL filenames (`london-uk-150mm.stl`) — minor UX win, `locationName` already in store
+- Unit toggle mm/inches — no competitor offers this
 
-**Should have (competitive differentiators for v1.x):**
-- Shareable URL encoding all current settings — replaces user accounts; low cost, high value
-- Elevation contour lines on model surface — visual appeal for educational/decorative models; TerrainForge3D already has this
-- Water body depressions — coastal and lakeside models gain significant visual clarity
+**Defer to v1.x / v2+:**
+- River/canal as linear depression channels — high geometry complexity; validate water layer first
+- GPX track overlay — request-driven, after core is proven
+- Shareable URL encoding settings — low-cost v1.x add once core works
+- Elevation contour lines — TerrainForge3D has it; low urgency for v1
+- KML import, tiling export, AR preview, 3MF multi-material — v2+
 
-**Defer (v2+):**
-- KML/polygon import for non-rectangular areas — significant UI and processing complexity; rectangle covers 90%+ of use cases
-- Tiling / split large areas into multiple print tiles — complex; slicer workaround is acceptable for v1
-- AR preview — impressive but not core; TerraPrinter has it; defer until core flow is proven
-- 3MF multi-material export — requires slicer ecosystem research; painting in slicer is the v1 philosophy
-- GPX track overlay — edge case use case; can be v2 once core terrain+buildings+roads is proven
+See `.planning/research/FEATURES.md` for full competitor matrix and implementation notes per feature.
 
 ### Architecture Approach
 
-The architecture is predominantly client-side with optional thin server proxy. All mesh generation, coordinate projection, elevation decoding, and STL serialization run in the browser. The critical path is: 2D bbox selection → Zustand store update → parallel fetch of elevation tiles and OSM features → coordinate projection to local meter space → Web Worker mesh generation → Three.js scene update → STL export on demand. Elevation tiles and OSM data are fetched in parallel since they are independent; mesh construction is sequential. The Web Worker is non-negotiable — blocking the main thread during mesh generation for a dense city block causes 500ms–3s UI freezes.
+This milestone extends the proven architecture without redesigning it. The existing four patterns are preserved: store-first data flow (Zustand as single source of truth), pipeline lib functions (`lib/<feature>/` directories with pure TypeScript), mesh component pattern (`XxxMesh.tsx` subscribes to store, builds geometry in `useEffect`), and `zScale` contract (all layers share the same scale formula).
 
-**Major components:**
-1. 2D Map Panel (MapLibre GL JS) — location search, bounding box draw tool, feature toggle UI
-2. App State (Zustand store) — single source of truth for bbox, enabled features, settings, mesh status
-3. Geo Data Pipeline (`geo/`) — parallel elevation tile fetch + Overpass OSM fetch, coordinate projection to local XY meters
-4. Mesh Generator Web Worker (`mesh/`) — terrain mesh, building extrusions, road geometry, base plate, merge to single BufferGeometry
-5. 3D Preview Panel (Three.js + OrbitControls) — renders live mesh from store geometry, subscribes to store changes
-6. STL Exporter (`export/`) — wraps Three.js STLExporter, triggers browser download
-7. API Proxy (optional thin serverless function) — CORS bypass for elevation tile requests only
+**Major components and new responsibilities:**
+1. `mapStore.ts` — extend with `roadFeatures`, `waterFeatures`, `vegetationFeatures`, `roadStyle`, `layerToggles`, `smoothingLevel`, `units`, and per-feature status fields; raw `ElevationData` stays immutable in store (smoothing is a mesh-gen parameter, not stored state)
+2. `GenerateButton.tsx` — add parallel `fetchRoadData()`, `fetchWaterData()`, `fetchVegetationData()` calls alongside existing buildings fetch; all start simultaneously; each updates store independently on completion
+3. `TerrainMesh.tsx` — apply `applyWaterToElevationGrid()` on the elevation Float32Array BEFORE calling `buildTerrainGeometry()`; accept `smoothingLevel` param and apply box blur before martini mesh generation
+4. `RoadMesh.tsx` / `WaterMesh.tsx` / `VegetationMesh.tsx` (new) — follow `BuildingMesh.tsx` pattern exactly
+5. `ExportPanel.tsx` — extend merge chain to include roads and vegetation; water depression is baked into the terrain mesh (no separate water geometry in export)
+6. `lib/worker/meshWorker.worker.ts` (new, Phase 8) — receives plain Float32Array buffers via Transferable; returns three merged typed arrays; main thread reconstructs `BufferGeometry`
 
-**Key patterns:**
-- Zustand store as the single data bus — UI, map, and pipeline never communicate directly; everything flows through the store
-- Separate geometry cache per layer — toggling buildings off hides the Three.js object; it does not re-run the full pipeline
-- Debounced pipeline trigger (300ms) — prevents thrashing during slider drag
-- Preview LOD mesh distinct from export mesh — dense city areas require a decimated preview mesh to avoid browser OOM
+**Key architectural constraint (water):** Water must be applied to the elevation grid before `buildTerrainGeometry()` is called. The depression must be baked into the terrain mesh for STL correctness. `WaterMesh.tsx` renders a visual overlay (blue polygon at water level) for preview only; the physical STL depression comes from the modified terrain.
+
+**Build order enforced by dependencies:** Model controls + store (Phase 4) → Roads (Phase 5) → Water (Phase 6) → Vegetation + Smoothing (Phase 7) → Web Worker (Phase 8). Water modifies the elevation pipeline upstream of terrain generation; smoothing must precede all feature placement; Worker refactoring requires the full feature set to be stable.
+
+See `.planning/research/ARCHITECTURE.md` for the full data flow diagram, store extension plan, and anti-pattern list.
 
 ### Critical Pitfalls
 
-1. **Non-manifold geometry from building-terrain merges** — Never concatenate geometry buffers when buildings contact terrain. Use `three-bvh-csg` for boolean union operations. Sample terrain elevation at each building footprint vertex so buildings sit exactly at terrain level. Run manifold validation (manifold-3d WASM) on every export before presenting the download button.
+1. **Road intersection overlap (Pitfall 7)** — Independent segment extrusion creates overlapping triangles at every junction. Prevent with: use `geometry-extrude.extrudePolyline()` which handles miter joints on single polylines, and choose vertex displacement on the terrain mesh over CSG ribbon geometry for export.
 
-2. **Projection mismatch (Web Mercator distortion)** — Never use Web Mercator tile coordinates for mesh geometry. Project all coordinates to local flat-earth meter space centered on the bbox center before any geometry math. At 45°N latitude, Mercator scale error is ~41%; at 60°N it exceeds 100%. This is a full-pipeline rewrite if discovered post-launch.
+2. **Smoothing applied after feature placement destroys features (Pitfall 13)** — Uniform Laplacian smoothing moves building-base and road-edge vertices, creating skirts and surface blending. Prevent with: smooth the raw DEM elevation `Float32Array` BEFORE generating any feature geometry. Never apply smoothing to the final merged mesh.
 
-3. **STL unit ambiguity (meters vs. millimeters)** — STL format stores no unit metadata; slicers assume millimeters. Establish one canonical rule from day one: all STL vertex coordinates are in millimeters. End the coordinate pipeline with explicit `meters × 1000` conversion. Write an automated test that exports a known bbox and asserts the STL bounding box matches the user-specified physical dimensions.
+3. **Water multipolygon relations break simple polygon parsing (Pitfall 10)** — Lakes with islands and river systems are OSM multipolygon relations with outer + inner rings. Prevent with: use `osmtogeojson` (already in project) to assemble relations before triangulation; test against a lake-with-islands before declaring water complete.
 
-4. **Missing OSM building height data** — Most buildings worldwide have no `height` or `building:levels` tag. The building pipeline must treat missing height as the base case, not an exception. Implement a fallback hierarchy: (1) `height` tag, (2) `building:levels × 3.5m`, (3) footprint-area heuristic, (4) type-appropriate random range. Test against a rural US location before declaring the building pipeline done.
+4. **Web Worker postMessage overhead with many small buffers (Pitfall 14)** — Passing one ArrayBuffer per feature causes 44x performance degradation in Chrome vs. three merged arrays. Prevent with: merge all geometry types into single position/normal/index arrays in the Worker before postMessage; never transfer per-feature buffers.
 
-5. **Flat terrain zero-thickness** — In flat regions, elevation variation within the bbox may be under 1 meter. After scaling to print dimensions, the terrain surface compresses to a fraction of a millimeter. Enforce a minimum 1mm of terrain relief and a minimum 1.5mm base plate on all exports. Default terrain exaggeration to "auto" — compute the multiplier needed to produce at least 2mm of relief variation.
+5. **CSG cost grows quadratically with each new layer (Pitfall 17)** — Per-feature CSG against terrain produces O(n × m) triangle intersection tests that blow up for dense city areas. Prevent with: use vertex displacement for roads and water (lower terrain vertex Z within polygon bounds); reserve CSG for building-terrain only where it is already working.
+
+6. **Vite Worker production build breaks on shared chunk imports (Pitfall 15)** — Worker works in `vite dev` but fails in `vite build` when it shares chunks with the main thread. Prevent with: keep worker entry self-contained, set `worker: { format: 'es' }` in vite config, run `vite build` and verify Worker completion as an explicit acceptance test.
+
+7. **Z-fighting between roads, water, and terrain (Pitfall 16)** — Near-coplanar geometry causes GPU flickering in preview and non-manifold edges in STL. Prevent with: unconditional Z-offset rules (water: terrain − 0.5mm minimum; roads raised: terrain + 0.8mm; roads recessed: terrain − 0.3mm) enforced in geometry generation code, not just Three.js material offsets.
 
 ## Implications for Roadmap
 
-The component dependency graph in ARCHITECTURE.md and the pitfall-to-phase mapping in PITFALLS.md strongly suggest a 6-phase structure. The first two phases must establish correct geometric foundations — any phase that skips this will propagate manifold, projection, or unit errors into every subsequent feature.
+The phase structure is dictated by the pipeline dependency graph. Water modifies the elevation grid upstream of terrain generation. Smoothing must precede feature placement. Roads are geometrically independent. Worker offload requires all feature geometry to be stable before typed-array interfaces are refactored.
 
-### Phase 1: Foundation — Map Selection + Correct Coordinate Pipeline
+### Phase 4: Model Controls + Store Foundation
 
-**Rationale:** Every other component depends on having a bbox and correct coordinate projection. The two highest-severity pitfalls (projection mismatch, STL unit ambiguity) must be solved and locked in with automated tests before any geometry feature is built. If these are wrong, all downstream phases will produce wrong-scale or non-printable models.
+**Rationale:** Every subsequent feature consumes store state (layer toggles, road style, units, smoothing level). Building store extensions and control UI first means each new feature can be immediately tested against toggle behavior. No geometry risk, no architectural risk.
+**Delivers:** `mapStore.ts` extended with all new state fields; layer toggle UI wired to existing terrain/building meshes; contextual control visibility (road style hidden when roads off; smoothing slider hidden when terrain off); unit conversion (mm/inches display-only).
+**Addresses:** Layer toggles for all feature types, model controls (X/Y/Z), unit toggle, edit-iterate loop state foundation.
+**Avoids:** Toggle-state confusion — establishes correct behavior before any new layer geometry exists.
+**Research flag:** Standard patterns — Zustand state extension is well-documented; skip research-phase.
 
-**Delivers:** Working 2D map with location search, draggable/resizable bounding box, and a tested coordinate projection pipeline (WGS84 → local XY meters). No 3D output yet — just provably correct input data.
+### Phase 5: Roads Layer
 
-**Addresses:** Location search, draggable bounding box (FEATURES.md table stakes)
+**Rationale:** Roads are geometrically independent from water and vegetation — the Overpass query, parse, geometry pipeline, and mesh component can be built and tested in isolation. Most impactful visual addition. Road intersection geometry strategy (displacement vs. ribbon) must be established here before it propagates.
+**Delivers:** `lib/roads/` module; `RoadMesh.tsx` following `BuildingMesh.tsx` pattern; roads fetched in parallel in `GenerateButton`; roads in STL export merge chain; road style (raised/recessed/flat) UI wired to store.
+**Uses:** `geometry-extrude.extrudePolyline()` for ribbon geometry; existing elevation sampler for terrain-draping; existing Overpass/osmtogeojson infrastructure.
+**Addresses:** Roads as 3D geometry, type-based widths, road style selection (key differentiator).
+**Avoids:** Pitfall 7 (intersection overlap) — establish junction strategy and minimum-width floor (0.8mm) before type-specific road work. Pitfall 8 (bridges/tunnels) — filter tunnels from Overpass; raise bridge ways by layer tag. Pitfall 9 (sub-mm widths) — enforce `Math.max(0.8, realWidth * scale)` floor. Pitfall 16 (Z-fighting) — establish road Z-offset convention unconditionally.
+**Research flag:** Needs research-phase for road intersection polygon merging — the gnarliest geometry problem in the milestone; community solutions vary and the right approach for this codebase needs a spike.
 
-**Avoids:** Projection mismatch (PITFALLS.md critical #2), STL unit ambiguity setup (PITFALLS.md critical #3)
+### Phase 6: Water Layer
 
-**Stack:** MapLibre GL JS 5.18, Zustand 5 store initialization, Nominatim geocoding, TypeScript strict mode
+**Rationale:** Water integration with the elevation grid is architecturally the most complex of the new layers — it modifies the upstream terrain pipeline, not just adds a downstream mesh. Building it after roads means the lib module pattern is established and the store integration is proven.
+**Delivers:** `lib/water/` module; `applyWaterToElevationGrid()` function that runs BEFORE terrain mesh generation; water depression baked into terrain STL geometry; `WaterMesh.tsx` visual overlay (blue, preview only); toggleable water layer.
+**Addresses:** Water bodies as flat depressions, toggleable water layer.
+**Avoids:** Pitfall 10 (multipolygon relations) — use `osmtogeojson` for ring assembly; test against lake-with-islands. Pitfall 11 (coastlines not in Overpass) — scope ocean to elevation-zero raster fallback for v1; skip raw coastline ways. Pitfall 13 (smoothing destroys water edges) — water is applied to elevation grid before smoothing, so depression is preserved through the smoothing pass. Pitfall 17 (CSG cost) — use vertex displacement (clamp terrain Z within water polygon), not CSG.
+**Research flag:** Needs research-phase for coastal/ocean handling — Pitfall 11 requires a concrete decision: elevation-zero raster fallback, osmdata.openstreetmap.de water polygon shapefile, or scope out ocean for v1. This affects water architecture and must be decided before implementation begins.
 
-**Research flag:** Standard patterns; well-documented. No phase research needed.
+### Phase 7: Vegetation Layer + Terrain Smoothing
 
----
+**Rationale:** Vegetation is geometrically the simplest new layer (earcut-triangulated flat polygon extruded upward, identical to building floor caps). Smoothing is a parameter change to `buildTerrainGeometry()` with a UI slider — no new data pipeline. They are grouped because both are lower-complexity and best tested together (smoothing quality is visible only with all layers active).
+**Delivers:** `lib/vegetation/` module; `VegetationMesh.tsx`; vegetation in STL export; `smoothingPasses` parameter in `TerrainMeshParams`; box-blur function in `lib/mesh/terrain.ts`; smoothing slider in sidebar (debounced 250ms); loading indicator during rebuild.
+**Addresses:** Vegetation as raised patches, terrain smoothing slider with live preview.
+**Avoids:** Pitfall 12 (empty vegetation results) — treat zero features as valid state; show count next to layer toggle ("Vegetation — 0 features found in this area"). Pitfall 13 (smoothing destroys features) — smooth elevation grid first (before all feature placement happens); cap slider at 5 iterations.
+**Research flag:** Standard patterns for both — skip research-phase. Vegetation follows building floor-cap pattern exactly. Smoothing is a standard 2-pass separable box filter documented in the STACK.md implementation sketch.
 
-### Phase 2: Terrain Mesh + STL Export + 3D Preview
+### Phase 8: Web Worker Offload
 
-**Rationale:** The critical path per ARCHITECTURE.md is bbox → elevation → terrain mesh → STL export → 3D preview. This phase delivers the end-to-end pipeline for the terrain-only case, which validates the full output contract (printable STL at correct physical dimensions) before adding buildings or roads. Catching manifold and unit errors here is cheap; catching them in Phase 4 requires reworking the building merge pipeline too.
-
-**Delivers:** Terrain-only STL that passes manifold validation, renders in the 3D preview with orbit controls, and exports at user-specified physical dimensions in millimeters. Auto-exaggeration for flat areas.
-
-**Addresses:** Terrain layer + elevation exaggeration, physical dimension controls, unit toggle, live 3D preview with orbit controls, STL export + download, solid base plate (FEATURES.md P1)
-
-**Avoids:** Non-manifold geometry (PITFALLS.md #1 — foundation for merge strategy), flat terrain zero-thickness (PITFALLS.md #4), STL unit ambiguity (PITFALLS.md #3)
-
-**Stack:** Three.js 0.183, `@mapbox/martini`, MapTiler terrain-RGB tiles, Web Worker, STLExporter, manifold-3d validation
-
-**Research flag:** Martini RTIN algorithm and terrain-RGB tile decoding are documented but non-trivial. Consider a focused research spike on tile zoom level selection and grid assembly before implementing.
-
----
-
-### Phase 3: Buildings Layer
-
-**Rationale:** Buildings are the primary differentiator. They depend on working coordinate projection (Phase 1) and a live 3D preview (Phase 2) to validate output. Building-terrain integration (placing buildings correctly on sloped terrain) is the most failure-prone aspect of this domain — it must be solved here, not deferred.
-
-**Delivers:** OSM buildings rendered with real heights (or estimated heights where tags are missing) extruded onto the terrain surface. Buildings sit correctly at terrain level on slopes. Building layer toggle works.
-
-**Addresses:** Buildings layer with OSM footprint heights, feature layer toggles (buildings) (FEATURES.md P1)
-
-**Avoids:** Non-manifold geometry from building-terrain merge (PITFALLS.md #1 — use three-bvh-csg), missing OSM building heights (PITFALLS.md #5 — implement fallback hierarchy), hillside building geometry errors (PITFALLS.md #6)
-
-**Stack:** Overpass API, osmtogeojson, three-bvh-csg, building height fallback logic
-
-**Research flag:** `three-bvh-csg` CSG boolean operations for terrain-building merge may require a spike to understand performance characteristics and API. Phase research recommended.
-
----
-
-### Phase 4: Roads Layer + Settings Polish
-
-**Rationale:** Roads share Overpass/OSM infrastructure with buildings (Phase 3) but have distinct geometry logic (centerlines to offset quad strips). Road style (recessed/raised/flat) is MapMaker's clearest unique feature — no competitor offers it. Settings controls (exaggeration slider, road style picker, dimension inputs) apply to existing geometry and parameterize what was built in Phases 2–3.
-
-**Delivers:** Roads rendered on terrain with user-selectable recessed/raised/flat style. Road layer toggle. Fully parameterized controls: terrain exaggeration, road style, print dimensions, unit toggle.
-
-**Addresses:** Roads layer + style options, feature layer toggles (roads), dimension controls (FEATURES.md P1)
-
-**Avoids:** Road geometry floating above terrain (PITFALLS.md "looks done but isn't" checklist — minimum 0.5mm raised / 0.3mm recessed for FDM)
-
-**Stack:** Overpass API (roads query), road geometry offset math, Zustand settings state
-
-**Research flag:** Standard patterns for road centerline-to-mesh conversion. OSM highway tag taxonomy is documented. No phase research needed.
-
----
-
-### Phase 5: Edit-Iterate Loop + UX Hardening
-
-**Rationale:** The edit → preview → back-to-edit loop with state preservation is a workflow differentiator that no competitor supports cleanly (FEATURES.md). UX pitfalls identified in PITFALLS.md — no progress indicators, no data coverage preview, no physical dimension annotations in the 3D view — significantly damage first impressions and must be addressed before public launch.
-
-**Delivers:** State-preserving navigation between edit and preview modes. Progress indicators for each pipeline stage. Data coverage overlay on 2D map. Physical dimension annotations in 3D preview. Bounding box dimension readout in km and estimated mm. OSM data coverage indicator.
-
-**Addresses:** Edit → iterate loop (FEATURES.md P1), side-by-side 2D+3D hybrid view polish
-
-**Avoids:** All UX pitfalls in PITFALLS.md (no progress indicator, defaulting z=1 exaggeration, no size feedback, non-printable STL without warning, no coverage preview)
-
-**Stack:** Zustand meshStatus state machine, React loading state components
-
-**Research flag:** Standard patterns. No phase research needed.
-
----
-
-### Phase 6: Performance + Public Launch Hardening
-
-**Rationale:** Several pitfalls only manifest at real-world scale — dense city areas (Manhattan, Tokyo) that stress Overpass query size limits, browser memory on 1000+ building scenes, and Overpass rate limiting under concurrent users. These must be addressed before public launch, not after.
-
-**Delivers:** Web Worker mesh generation, LOD preview mesh distinct from export mesh, Overpass query size guards (`[timeout:60][maxsize:32MB]`), bounding box area cap with user warning, geometry disposal for unused layers, sessionStorage elevation tile cache.
-
-**Addresses:** Performance (implicit in all P1 features being responsive)
-
-**Avoids:** Browser OOM on dense city areas (PITFALLS.md performance trap), Overpass rate limiting (PITFALLS.md integration gotcha), Overpass query injection (PITFALLS.md security), generating full-resolution preview mesh (PITFALLS.md technical debt)
-
-**Stack:** Web Workers API, Transferable ArrayBuffers, Comlink (optional Worker RPC), IndexedDB/sessionStorage elevation cache
-
-**Research flag:** Web Worker + Transferable ArrayBuffer pattern for Three.js geometry is documented but non-trivial. The Evil Martians OffscreenCanvas + Workers article is the canonical reference. Consider a spike before implementing.
-
----
+**Rationale:** Worker refactoring requires the full feature set to be stable — every geometry type (terrain, buildings, roads, vegetation) must have its typed-array interface defined before the Worker module is built. Refactoring mid-feature-development would force managing two code paths simultaneously. This phase adds no new features; it is a performance and UX improvement.
+**Delivers:** `lib/worker/meshWorker.worker.ts`; typed-array interfaces for all geometry builders; `BufferGeometry` reconstructors on main thread; non-blocking UI during generation; production artifact verified with Worker function completing without errors.
+**Uses:** `comlink@4.4.2` + `vite-plugin-comlink@5.3.0`; Vite native `{ type: 'module' }` worker pattern; `worker: { format: 'es' }` in vite config.
+**Addresses:** Web Worker mesh generation (non-blocking UI).
+**Avoids:** Pitfall 14 (many-buffer postMessage overhead) — merge all geometry into three typed arrays before transfer; never per-feature buffers. Pitfall 15 (Vite production build) — keep worker self-contained, set `worker: { format: 'es' }`, verify `vite build` + Worker completion as explicit acceptance test.
+**Research flag:** Needs research-phase for comlink + vite-plugin-comlink integration with multiple geometry entry points and shared code paths — documented edge cases warrant a focused spike before full implementation.
 
 ### Phase Ordering Rationale
 
-- **Phases 1–2 must be sequential and first.** The coordinate pipeline correctness (Phase 1) and terrain-to-STL pipeline (Phase 2) are preconditions for everything. Skipping ahead to buildings while these are unverified propagates manifold and projection bugs into all subsequent phases.
-- **Phase 3 (buildings) before Phase 4 (roads)** because buildings and roads share OSM fetch infrastructure, and buildings are architecturally harder (boolean mesh merge with terrain). Getting buildings right first makes roads straightforward.
-- **Phase 5 before public launch** because UX pitfalls (no progress indicator, no coverage preview) cause user abandonment at first contact regardless of geometric correctness.
-- **Phase 6 as hardening.** Performance and rate-limiting issues only need addressing before real concurrent usage. Developing with them deferred keeps early phases simpler.
+- **Controls before geometry (Phase 4 first):** Zustand state extensions and toggle UI must exist before any new mesh component reads them, preventing build-order breakage and enabling immediate toggle testing.
+- **Roads before water (Phase 5 before 6):** Roads are geometrically independent; water modifies the elevation pipeline which is architecturally upstream. Establishing the lib module pattern on roads first makes water integration cleaner.
+- **Water before vegetation (Phase 6 before 7):** Water modifies terrain; vegetation is placed on top of the (potentially water-modified) smoothed terrain. Correct ordering produces correct base Z for vegetation vertices.
+- **Smoothing grouped with vegetation (Phase 7):** Smoothing is a DEM-grid parameter, logically independent but visually tested with all layers active. Both are lower-complexity and group naturally.
+- **Worker last (Phase 8):** The Worker refactors all geometry builders simultaneously. Doing this before features are stable creates double maintenance burden. Feature stability is the prerequisite.
+- **Displacement over CSG for roads and water:** PITFALLS.md Pitfall 17 is explicit — per-layer CSG against terrain produces quadratic time growth for dense cities. Roads and water use vertex displacement on the DEM grid; CSG is reserved for building-terrain only.
 
 ### Research Flags
 
-Phases likely needing a `/gsd:research-phase` spike during planning:
-- **Phase 2:** Martini RTIN tile-to-grid assembly and zoom level selection — documented but enough nuance to warrant a focused spike before implementation
-- **Phase 3:** `three-bvh-csg` API and performance for building-terrain boolean operations — this is the highest-risk single integration in the project
-- **Phase 6:** Web Worker + Transferable ArrayBuffer pattern for Three.js geometry — non-trivial; Evil Martians article is the starting point
+Phases needing a research spike during planning:
+- **Phase 5 (Roads):** Road intersection polygon merging strategy — the choice between vertex displacement and junction polygon computation has significant consequences for mesh quality and STL validity; needs a focused decision spike.
+- **Phase 6 (Water):** Coastal/ocean handling — Pitfall 11 makes raw Overpass coastlines unusable; the v1 decision (scope out, raster fallback, or pre-processed shapefile) affects architecture and must be made before water implementation begins.
+- **Phase 8 (Worker):** comlink + vite-plugin-comlink with shared geometry lib code — production build edge cases (Pitfall 15) and multi-entry-point Worker configuration need a spike before full implementation.
 
-Phases with standard, well-documented patterns (skip research-phase):
-- **Phase 1:** MapLibre GL JS bounding box draw and Nominatim geocoding are thoroughly documented
-- **Phase 4:** OSM highway tag taxonomy and road centerline-to-mesh math are standard; Overpass query patterns are documented
-- **Phase 5:** React loading state and Zustand state machine patterns are standard
+Phases with standard patterns (skip research-phase):
+- **Phase 4 (Controls):** Zustand state extension and React context visibility patterns are thoroughly documented.
+- **Phase 7 (Vegetation + Smoothing):** Vegetation follows building floor-cap pattern exactly; smoothing is a standard separable box filter with implementation sketch already in STACK.md.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Core technologies (React, Three.js, MapLibre, Zustand, Vite, Tailwind) verified against official release pages. Elevation source (MapTiler terrain-RGB) confirmed as free tier with documented decode formula. `@mapbox/martini` confirmed as stable but low-maintenance. |
-| Features | MEDIUM | Competitor feature sets confirmed via live pages and GitHub repositories. User pain points from instructional content and community. Map2Model features partially confirmed via secondary articles (JS-gated page). |
-| Architecture | MEDIUM | Pipeline pattern confirmed across multiple open-source implementations (TerraSTL, map2stl, mapa, Streets GL). Web Worker pattern confirmed via Evil Martians. Specifics of three-bvh-csg integration are inferred, not directly verified. |
-| Pitfalls | MEDIUM | Non-manifold geometry, projection distortion, and STL unit issues confirmed via official slicer documentation and community. OSM height data sparseness confirmed via OSM Wiki and academic paper. Some performance thresholds (triangle counts, memory limits) are estimates from community experience. |
+| Stack | HIGH | Direct `npm info` queries verified all versions and peer deps; Vite docs confirmed worker syntax; existing codebase confirmed integration points; earcut version split confirmed via GitHub releases |
+| Features | MEDIUM-HIGH | Live competitor pages (TerraPrinter, Map2Model, TerrainForge3D) confirmed feature sets; OSM wiki authoritative for tag hierarchies; some vegetation geometry style inferred from domain context + existing building patterns |
+| Architecture | HIGH | Based on direct codebase inspection of existing `lib/`, `store/`, and `components/Preview/` patterns; all new features confirmed to slot into established grooves without redesign |
+| Pitfalls | MEDIUM | Cross-verified via OSM wiki, Three.js discourse, Chrome DevTools documentation, slicer community; some performance numbers (44x postMessage regression) from community benchmarks, not primary research |
 
-**Overall confidence:** MEDIUM
+**Overall confidence:** HIGH for implementation approach; MEDIUM for edge-case behavior (coastlines, dense-city road intersection geometry at junctions, Worker production build edge cases with shared chunks)
 
 ### Gaps to Address
 
-- **three-bvh-csg API for building-terrain merge:** The correct approach (CSG boolean union) is clear, but the specific API surface and performance characteristics of `three-bvh-csg` for terrain-scale meshes have not been directly validated. Address with a Phase 3 research spike.
-
-- **Martini tile assembly for bounding boxes spanning multiple tiles:** The per-tile decode is documented; the logic for assembling multiple tiles into a coherent elevation grid (tile stitching, handling bbox-to-tile math) needs a Phase 2 spike to confirm implementation details.
-
-- **MapTiler free tier rate limits under concurrent usage:** Free tier pauses rather than charges, but the exact request-per-day limits for terrain-RGB tile serving are not confirmed. May require a CORS proxy and caching strategy earlier than Phase 6.
-
-- **Overpass public instance reliability for production:** Public Overpass allows ~10,000 requests/day. For a publicly accessible tool, this could be exhausted quickly. A self-hosted Overpass instance should be planned for as a Phase 6 milestone before public launch, not an afterthought.
-
-- **Browser canvas CORS for terrain-RGB decode:** Reading pixel data from a cross-origin image via canvas requires CORS headers on the tile server. MapTiler serves tiles with appropriate CORS headers, but a fallback proxy may be needed. Verify early in Phase 2.
+- **Ocean / coastline handling:** The OSM Overpass coastline limitation (Pitfall 11) requires a concrete v1 decision before water layer architecture is finalized. Options: (a) scope out ocean and document it, (b) use elevation-zero raster fallback on the DEM (terrain vertices with elevation <= 0 treated as water), (c) fetch osmdata.openstreetmap.de water polygons clipped to bbox. Resolve in Phase 6 research spike.
+- **Road intersection polygon strategy:** `geometry-extrude` handles miter joints for single polylines but does not merge overlapping ribbons at multi-way junctions. The project must decide: (a) vertex displacement on terrain grid (no intersection problem, less geometrically precise), (b) junction polygon computation (correct geometry, more complex), or (c) accept minor slicer warnings at dense junctions. Resolve in Phase 5 research spike.
+- **Worker shared chunk edge cases:** `vite-plugin-comlink` + geometry lib shared-import edge cases (Pitfall 15) are documented but not fully characterized for this project's specific import graph. A production build spike must be the first deliverable of Phase 8.
+- **Overpass rate limits at scale:** Current single-user usage does not surface Overpass rate limits. The single combined Overpass query for all feature types (recommended in ARCHITECTURE.md anti-pattern 1) reduces exposure. Flagged for v1.x infrastructure if traffic grows.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [MapLibre GL JS official docs](https://maplibre.org/maplibre-gl-js/docs/) — bounding box API, BoxZoomHandler, LngLatBounds
-- [Three.js STLExporter docs](https://threejs.org/docs/pages/STLExporter.html) — binary export from BufferGeometry
-- [Three.js OrbitControls docs](https://threejs.org/docs/) — import path and capabilities
-- [React versions](https://react.dev/versions) — v19.2.4 current
-- [Vite releases](https://vite.dev/releases) — v7.3.1 current
-- [Tailwind CSS v4 announcement](https://tailwindcss.com/blog/tailwindcss-v4) — Vite plugin setup
-- [Zustand v5 announcement](https://pmnd.rs/blog/announcing-zustand-v5) — React 18+ required
-- [Mapbox terrain-RGB decode formula](https://docs.mapbox.com/data/tilesets/reference/mapbox-terrain-dem-v1/) — official formula
-- [Overpass API bounding box queries](https://wiki.openstreetmap.org/wiki/Overpass_API) — QL syntax, rate limits
-- [TouchTerrain GitHub](https://github.com/ChHarding/TouchTerrain_for_CAGEO) — feature set and version history
-- [OSM Simple 3D Buildings schema](https://wiki.openstreetmap.org/wiki/Simple_3D_buildings) — height tag coverage
+- `npm info geometry-extrude`, `npm info comlink`, `npm info vite-plugin-comlink` — version, peer deps, last modified dates (direct npm registry query)
+- Vite Web Workers official docs (vitejs.dev) — native worker syntax, TypeScript support, production build behavior
+- geometry-extrude GitHub README — extrudePolyline/extrudePolygon API, TypedArray output format
+- earcut GitHub releases — 3.0.0 ESM-only vs. 2.2.4 CJS distinction, confirming the two-copy npm behavior
+- MapMaker codebase (direct inspection) — existing `overpass.ts`, `elevationSampler.ts`, `types.ts`, `buildingMesh.ts`, `mapStore.ts` patterns
+- OSM Highway wiki (wiki.openstreetmap.org/wiki/Key:highway) — tag hierarchy and classification
+- OSM water features wiki (wiki.openstreetmap.org/wiki/Tag:natural=water) — water/waterway tags
+- OSM landuse wiki (wiki.openstreetmap.org/wiki/Key:landuse) — vegetation/park tags
+- Overpass API Language Guide — compound queries, `out geom` format, relation member assembly
 
 ### Secondary (MEDIUM confidence)
-- [TerraSTL GitHub](https://github.com/aligundogdu/TerraStl) — Nuxt/Vue + Three.js + OpenTopoData architecture
-- [Streets GL](https://github.com/StrandedKitty/streets-gl) — WebGL2 OSM rendering pipeline patterns
-- [map2stl GitHub](https://github.com/davr/map2stl) — hybrid client/server architecture model
-- [mapbox/martini GitHub](https://github.com/mapbox/martini) — RTIN algorithm, v0.2.0 stable
-- [geotiff npm](https://www.npmjs.com/package/geotiff) — v3.0.3, breaking changes from v2
-- [Evil Martians: OffscreenCanvas + Web Workers](https://evilmartians.com/chronicles/faster-webgl-three-js-3d-graphics-with-offscreencanvas-and-web-workers) — Web Worker pattern for Three.js
-- [manifold-3d GitHub](https://github.com/elalish/manifold) — WASM mesh repair
-- [three-bvh-csg Three.js Forum](https://discourse.threejs.org/t/three-bvh-csg-a-library-for-performing-fast-csg-operations/42713) — CSG approach for building-terrain merge
-- [TerraPrinter](https://terraprinter.com/) — competitor feature set
-- [Terrain2STL](https://jthatch.com/Terrain2STL/) — competitor feature set
-- [Prusa Blog: printing terrain](https://blog.prusa3d.com/how-to-print-maps-terrains-and-landscapes-on-a-3d-printer_29117/) — workflow and user pain points
-- [Estimation of missing building heights](https://gmd.copernicus.org/articles/15/7505/) — academic confirmation of OSM height data sparseness
-- [OSM Help: Missing Building Height](https://help.openstreetmap.org/questions/56351/missing-building-heightlevel-informations) — community confirmation
+- TerraPrinter, Map2Model, TerrainForge3D live pages — competitor feature analysis
+- OSM 3D printing wiki (2013, outdated) — confirmed recessed road approach as community expectation
+- Three.js discourse — smoothing discussion, Worker BufferGeometry round-trip pattern
+- Laplacian smoothing Wikipedia — algorithm description and shrinkage property of uniform Laplacian
+- vite-plugin-comlink GitHub — plugin configuration pattern, TypeScript types path
+- Evil Martians article — Three.js OffscreenCanvas + Web Worker patterns with Transferable ArrayBuffers
+- GameDev.net article (box filtering height maps) — separable box filter for height map smoothing rationale
+- Nosferalatu — Laplacian mesh smoothing implementation reference
 
 ### Tertiary (LOW confidence)
-- [All3DP: CADMapper alternatives](https://all3dp.com/2/best-cad-mapper-openstreetmap-cadmapper/) — blocked by 403; competitor landscape only partially captured
-- [Map2Model features](https://map2model.com/) — JS-gated page; features confirmed via secondary articles only
+- Chrome DevTools postMessage 44x regression benchmark (Pitfall 14) — community benchmark post, not primary research; directionally correct but specific multiplier needs validation against this project's geometry sizes
+- OSM coastline handling via osmdata.openstreetmap.de — inferred from osmdata documentation; not tested against actual coastline bbox query
 
 ---
-*Research completed: 2026-02-23*
+*Research completed: 2026-02-24*
 *Ready for roadmap: yes*

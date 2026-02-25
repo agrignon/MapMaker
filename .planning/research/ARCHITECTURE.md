@@ -1,441 +1,565 @@
 # Architecture Research
 
-**Domain:** Map-to-3D-printable-STL web application
-**Researched:** 2026-02-23
-**Confidence:** MEDIUM (based on analysis of existing tools: TerraSTL, TouchTerrain, map2stl, Streets GL, mapa library — verified against official docs where available)
-
-## Standard Architecture
-
-### System Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Browser (Client)                            │
-├──────────────────────────────┬──────────────────────────────────────┤
-│        UI Layer              │         Processing Layer             │
-│  ┌──────────┐  ┌──────────┐  │  ┌──────────────┐  ┌─────────────┐  │
-│  │  2D Map  │  │  3D      │  │  │  Geo Data    │  │   Mesh      │  │
-│  │ (Select) │  │ Preview  │  │  │  Fetcher     │  │  Generator  │  │
-│  └────┬─────┘  └────┬─────┘  │  └──────┬───────┘  └──────┬──────┘  │
-│       │             │        │         │                  │        │
-│  ┌────┴─────────────┴──────┐ │  ┌──────┴───────────────── ┴──────┐  │
-│  │     App State (Zustand) │ │  │        Web Worker Thread       │  │
-│  │  bbox, features, dims   │◄├──┤  (elevation decode + meshing)  │  │
-│  └─────────────────────────┘ │  └────────────────────────────────┘  │
-├──────────────────────────────┴──────────────────────────────────────┤
-│                        API Proxy Layer (optional)                   │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Thin server (Next.js API routes / Nuxt server routes)       │   │
-│  │  Purpose: CORS bypass for external elevation APIs only        │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-         │                          │
-         ▼                          ▼
-┌─────────────────┐      ┌────────────────────────┐
-│  Overpass API   │      │  Elevation Tile Source  │
-│  (OSM buildings,│      │  (Mapbox Terrain-DEM    │
-│   roads)        │      │   or MapTiler Terrain)  │
-└─────────────────┘      └────────────────────────┘
-```
-
-**Key decision: predominantly client-side.** Evidence from TerraSTL shows that a thin server proxy handles external API CORS issues, but actual mesh generation happens in the browser. TouchTerrain's server-side approach is a Python/GDAL pattern that suits a CLI tool but adds infrastructure complexity for a web-first product. map2stl.com's hybrid model (server generates script, client runs it in browser) confirms that heavy computation can be offloaded to the client.
+**Domain:** Map-to-3D-printable-STL web application (MapMaker v1.0 milestone — roads, water, vegetation, smoothing, controls, Worker offload)
+**Researched:** 2026-02-24
+**Confidence:** HIGH for integration patterns (based on direct codebase inspection); MEDIUM for new feature geometry specifics
 
 ---
 
-### Component Responsibilities
+## Context: Existing Architecture (Phases 1-3 Delivered)
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| 2D Map Interface | Location search, bounding box selection, feature toggles | MapLibre GL JS or Leaflet with draw plugin |
-| App State | Single source of truth: bbox, enabled features, exaggeration, dimensions | Zustand store |
-| Geo Data Fetcher | Fetch OSM buildings/roads via Overpass API, convert to GeoJSON | Browser fetch + osmtogeojson |
-| Elevation Fetcher | Retrieve terrain height grid for bounding box | Fetch terrain-RGB tiles, decode pixels to meters |
-| Coordinate Transformer | Convert WGS84 lat/lon to local XY meters for mesh | Haversine/projection math, or proj4js |
-| Mesh Generator | Build Three.js BufferGeometry from elevation + features | Web Worker, runs off main thread |
-| 3D Preview | Render live WebGL preview of the in-progress model | Three.js scene with orbit controls |
-| STL Serializer | Export final geometry to binary STL | Three.js STLExporter addon |
-| API Proxy | Forward elevation tile requests to bypass CORS | Next.js / Nuxt API route, very thin |
+This document is **milestone-scoped** — it maps new features onto the proven architecture rather than redesigning it. The existing system is well-structured and all new features slot cleanly into established patterns.
+
+### Delivered System Overview
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                       Browser (Client-Side SPA)                    │
+│                                                                    │
+│  ┌──────────────┐  ┌───────────────────────────────────────────┐   │
+│  │  MapView     │  │              PreviewCanvas                │   │
+│  │  (MapLibre   │  │  ┌──────────┐  ┌───────────┐             │   │
+│  │   + Terradraw│  │  │Terrain   │  │ Building  │  [new →]    │   │
+│  │   bbox)      │  │  │Mesh      │  │ Mesh      │  RoadMesh   │   │
+│  └──────┬───────┘  │  └──────────┘  └───────────┘  WaterMesh  │   │
+│         │          │     @react-three/fiber Canvas   VegetMesh │   │
+│         │          └──────────────────────────────────────────┘   │
+│         │                                                          │
+│  ┌──────▼───────────────────────────────────────────────────────┐  │
+│  │              Zustand mapStore (single source of truth)        │  │
+│  │  bbox · utmZone · elevationData · buildingFeatures           │  │
+│  │  exaggeration · showPreview · targetWidthMM · targetDepthMM  │  │
+│  │  [new →] roadFeatures · waterFeatures · vegetationFeatures   │  │
+│  │  [new →] roadStyle · layerToggles · smoothingLevel · units   │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    lib/ (pure pipeline functions)             │  │
+│  │  elevation/  buildings/  mesh/  export/                       │  │
+│  │  [new →] roads/  water/  vegetation/  worker/                 │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+         │                                │
+         ▼                                ▼
+┌─────────────────┐           ┌───────────────────────┐
+│  Overpass API   │           │  MapTiler Terrain-RGB  │
+│  (buildings,    │           │  (elevation tiles,     │
+│   roads, water, │           │   free tier)           │
+│   vegetation)   │           └───────────────────────┘
+└─────────────────┘
+```
+
+### Established Patterns (Must Not Break)
+
+The codebase uses four patterns consistently. All new features must follow them:
+
+1. **Store-first data flow** — OSM features live in Zustand; mesh components read from the store; no component-to-component prop drilling.
+2. **Pipeline lib function** — Each feature layer has its own `lib/<feature>/` directory with pure TypeScript functions: `overpass.ts` (query), `parse.ts` (OSM → features), `merge.ts` (features → `THREE.BufferGeometry`).
+3. **Mesh component pattern** — Each 3D layer is a React component (`XxxMesh.tsx`) inside `components/Preview/`. It subscribes to store, calls the lib merge function in `useEffect`, holds geometry in `useRef`, disposes on unmount.
+4. **zScale contract** — All mesh layers share the same `zScale` formula (`horizontalScale * exaggeration` with minHeightMM floor). Breaking this misaligns layers.
 
 ---
 
-## Recommended Project Structure
+## New Feature Integration Points
 
+### Roads (ROAD-01, ROAD-02, ROAD-03)
+
+**OSM Source:** Overpass QL — `way["highway"]` within bbox. Relevant tags: `highway` value (motorway, trunk, primary, secondary, tertiary, residential, service, footway, path), `name`, `lanes`.
+
+**New Overpass query** (extend existing buildings query or add a separate fetch):
 ```
-src/
-├── components/              # React UI components (display only)
-│   ├── MapPanel.tsx         # Leaflet/MapLibre map, bbox draw tool
-│   ├── PreviewPanel.tsx     # Three.js canvas, orbit controls
-│   ├── ControlsSidebar.tsx  # Feature toggles, sliders, export button
-│   └── SearchBar.tsx        # Geocoder input
-│
-├── store/                   # App state
-│   └── useMapMakerStore.ts  # Zustand store: bbox, features, settings
-│
-├── geo/                     # Geographic data pipeline
-│   ├── overpass.ts          # Overpass QL query builder + fetcher
-│   ├── osmToGeojson.ts      # Thin wrapper around osmtogeojson
-│   ├── elevation.ts         # Fetch terrain-RGB tiles, decode height grid
-│   └── project.ts           # WGS84 → local meter XY coordinate transform
-│
-├── mesh/                    # Geometry construction (runs in Web Worker)
-│   ├── worker.ts            # Web Worker entry point, receives geo data
-│   ├── terrain.ts           # Heightmap → THREE.PlaneGeometry mesh
-│   ├── buildings.ts         # GeoJSON footprints → extruded 3D geometry
-│   ├── roads.ts             # GeoJSON lines → recessed/raised road mesh
-│   ├── basePlate.ts         # Generate solid bottom base
-│   └── merge.ts             # Merge all geometry into single BufferGeometry
-│
-├── export/                  # Output generation
-│   └── stlExporter.ts       # Wrap THREE.js STLExporter, trigger download
-│
-├── preview/                 # Three.js scene setup
-│   ├── scene.ts             # Camera, lights, renderer setup
-│   └── usePreview.ts        # React hook bridging store → Three.js scene
-│
-└── api/                     # Server-side proxy (if needed)
-    └── elevation/route.ts   # Next.js API route: forward elevation requests
-```
-
-### Structure Rationale
-
-- **geo/**: All data fetching is isolated here. Easy to swap elevation sources (OpenTopoData → Mapbox → MapTiler) without touching mesh code.
-- **mesh/**: Runs in a Web Worker. Contains zero DOM or React references. Receives plain data, returns serializable geometry (Float32Array buffers).
-- **store/**: Zustand is the single data bus. UI components read from store; geo/mesh pipeline reads bbox and settings from store to start work.
-- **preview/**: Three.js scene management is isolated from React rendering cycle. Uses imperative refs, not JSX.
-
----
-
-## Architectural Patterns
-
-### Pattern 1: Geo Data Pipeline — Fetch → Decode → Project → Build
-
-**What:** All geographic data flows through a sequential pipeline before hitting the mesh generator. Each stage has a clear input/output contract.
-
-**When to use:** Always. This ordering is mandatory — you cannot build meshes before you have projected coordinates.
-
-**Trade-offs:** Sequential means latency adds up. Mitigation: run elevation fetch and OSM fetch in parallel (they are independent).
-
-**Example:**
-```typescript
-// Parallel fetch, sequential project+build
-const [elevationGrid, osmData] = await Promise.all([
-  fetchElevationGrid(bbox),       // terrain-RGB tiles → height[][]]
-  fetchOSMFeatures(bbox, features) // Overpass → GeoJSON
-]);
-
-// Project to local meter space (runs synchronously, fast)
-const projected = projectToLocal(bbox, osmData);
-
-// Send to Web Worker for mesh generation
-worker.postMessage({ elevationGrid, projected, settings });
-```
-
-**Confidence:** MEDIUM — pattern confirmed across multiple tools (TerraSTL, mapa, map2stl)
-
----
-
-### Pattern 2: Web Worker Isolation for Mesh Generation
-
-**What:** Move all geometry construction to a dedicated Web Worker. The main thread only receives finished `Float32Array` position/normal/index buffers via `transferable objects`.
-
-**When to use:** Always for this domain. Mesh generation for a dense city block can involve hundreds of thousands of triangles. Blocking the main thread produces an unresponsive UI.
-
-**Trade-offs:** Cannot use Three.js scene objects directly in a Worker (no DOM). Return raw typed arrays; reconstruct `BufferGeometry` on the main thread.
-
-**Example:**
-```typescript
-// worker.ts — no Three.js, pure math
-self.onmessage = ({ data }) => {
-  const positions = buildTerrainMesh(data.elevationGrid, data.settings);
-  const buildings = buildBuildingMeshes(data.projected.buildings, data.settings);
-  const merged = mergeBuffers([positions, buildings]);
-  // Transfer ownership — zero-copy
-  self.postMessage({ positions: merged.positions }, [merged.positions.buffer]);
-};
-
-// main thread — reconstruct geometry
-worker.onmessage = ({ data }) => {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
-  scene.add(new THREE.Mesh(geo, material));
-};
-```
-
-**Confidence:** MEDIUM — confirmed by three.js community discussion, Evil Martians blog on OffscreenCanvas + Workers
-
----
-
-### Pattern 3: Coordinate Origin Reset (Local Meter Space)
-
-**What:** Convert all WGS84 lat/lon coordinates to a local flat-earth meter space centered on the bounding box center before any mesh math. Do this once, early in the pipeline.
-
-**When to use:** Always. Raw lat/lon values are degrees; direct use in 3D mesh coordinates produces wildly distorted geometry.
-
-**Trade-offs:** Loses global coordinate frame, but that is irrelevant for a print artifact.
-
-**Example:**
-```typescript
-function projectToLocal(bbox: BBox, lat: number, lon: number): [number, number] {
-  // Haversine approximate: accurate enough for areas < 100km
-  const centerLat = (bbox.minLat + bbox.maxLat) / 2;
-  const centerLon = (bbox.minLon + bbox.maxLon) / 2;
-  const metersPerDegLat = 111320;
-  const metersPerDegLon = 111320 * Math.cos(centerLat * Math.PI / 180);
-  const x = (lon - centerLon) * metersPerDegLon;
-  const y = (lat - centerLat) * metersPerDegLat;
-  return [x, y];
-}
-```
-
-**Confidence:** HIGH — standard GIS practice, confirmed in OSM 3D renderer implementations
-
----
-
-### Pattern 4: Elevation from Terrain-RGB Tiles (Decode in Browser)
-
-**What:** Fetch PNG tiles from a terrain-RGB source (MapTiler, or self-hostable SRTM tiles). Decode RGB pixel values to height in meters using: `height = -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1)`.
-
-**When to use:** Preferred over point-query APIs (OpenTopoData) because tiles deliver a grid of elevation values in one request rather than N point queries.
-
-**Trade-offs:** Requires canvas context to read pixel data. Rate limited by tile server. Mapbox Terrain-DEM requires Mapbox SDK; MapTiler terrain-RGB has a free tier and no SDK restriction.
-
-**Example:**
-```typescript
-async function decodeElevationTile(tileUrl: string): Promise<Float32Array> {
-  const img = await loadImage(tileUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width; canvas.height = img.height;
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
-  const { data } = ctx.getImageData(0, 0, img.width, img.height);
-  const heights = new Float32Array(img.width * img.height);
-  for (let i = 0; i < heights.length; i++) {
-    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-    heights[i] = -10000 + ((r * 65536 + g * 256 + b) * 0.1);
-  }
-  return heights;
-}
-```
-
-**Confidence:** HIGH — formula from Mapbox official docs; decode approach confirmed by multiple web sources
-
----
-
-### Pattern 5: OSM Buildings via Overpass API + osmtogeojson
-
-**What:** Query Overpass API with a bounding box to retrieve building ways and relations. Convert OSM XML/JSON to GeoJSON with osmtogeojson. Extract `building:levels`, `height`, `min_height`, `roof:shape` for mesh extrusion.
-
-**When to use:** Always. Overpass is the standard access pattern for OSM feature extraction.
-
-**Trade-offs:** Overpass public servers can be slow under load. For production: self-host or use Overpass-API paid plans. For the initial personal project, public Overpass is fine.
-
-**Example Overpass query:**
-```
-[out:json][bbox:{{minLat}},{{minLon}},{{maxLat}},{{maxLon}}];
+[out:json][timeout:60][bbox:${s},${w},${n},${e}];
 (
-  way["building"];
-  way["building:part"];
-  way["highway"];
-  relation["building"]["type"="multipolygon"];
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|service|living_street)$"];
+);
+out geom;
+```
+Separate from buildings fetch — roads and buildings complete independently. Start both in parallel from `GenerateButton.tsx`.
+
+**Road Geometry Approach:**
+
+Roads are linestrings. Converting a centerline polyline to a ribbon mesh requires:
+1. For each segment, compute a perpendicular offset vector scaled by road width.
+2. Emit a quad (two triangles) for each segment pair.
+3. Sample terrain elevation at each vertex to pin the road to the terrain surface.
+
+Road width by OSM highway type (in real-world meters, then scale via `horizontalScale`):
+| Highway type | Width (m) |
+|---|---|
+| motorway | 7.0 |
+| trunk, primary | 6.0 |
+| secondary | 5.0 |
+| tertiary | 4.0 |
+| residential | 3.5 |
+| service, living_street | 2.5 |
+
+**Road styles** (ROAD-02):
+- **Recessed:** Road surface sits below terrain. The ribbon quads start at `terrainZ - recessDepthMM` (3mm default), creating a channel. Add inner walls as quads.
+- **Raised:** Road surface sits above terrain at `terrainZ + raiseHeightMM` (2mm default). The ribbon quads start at terrain level, adding a raised plateau.
+- **Flat:** Road surface sits at terrain level (just ribbon quads at terrainZ). Used for painting workflows.
+
+**New files:**
+```
+src/lib/roads/
+├── overpass.ts       — fetchRoadData(bbox) → raw Overpass JSON
+├── parse.ts          — parseRoadFeatures(raw) → RoadFeature[]
+├── geometry.ts       — buildRoadMesh(features, params) → THREE.BufferGeometry
+└── types.ts          — RoadFeature, RoadGeometryParams
+```
+
+**New component:** `src/components/Preview/RoadMesh.tsx` — follows `BuildingMesh.tsx` pattern exactly.
+
+**Export integration:** Road geometry participates in the STL export merge in `ExportPanel.tsx`. It slots into the merge chain after buildings: `mergeTerrainAndBuildings(terrain, buildings)` → add `mergeRoads(solid, roadsGeo)` or extend `mergeTerrainAndBuildings` to accept an array of geometries.
+
+---
+
+### Water Bodies (WATR-01)
+
+**OSM Source:** Overpass QL query for water polygons:
+```
+[out:json][timeout:60][bbox:${s},${w},${n},${e}];
+(
+  way["natural"="water"];
+  way["waterway"~"^(riverbank|canal)$"];
+  relation["natural"="water"]["type"="multipolygon"];
+  relation["waterway"~"^(riverbank|canal)$"]["type"="multipolygon"];
 );
 out geom;
 ```
 
-**Confidence:** HIGH — documented on OSM Wiki Overpass API page; osmtogeojson is the standard conversion library
+**Water Geometry Approach:**
 
----
+Water as flat depressions means lowering the terrain within water polygons to a constant Z. Two sub-approaches:
 
-## Data Flow
+- **Option A (mesh replacement):** When building terrain mesh, detect which grid cells fall inside water polygons and force those elevations to `minElevation`. Build terrain geometry normally from the modified grid.
+- **Option B (overlay geometry):** Build flat polygon geometry at `waterLevelZ` and use it as a mask/overlay in the 3D preview. For STL export, cut the water area out via CSG subtraction.
 
-### Main Pipeline: Bounding Box to STL
+**Recommendation: Option A for STL export integrity.** Modifying the elevation grid before Martini mesh generation produces clean manifold output without CSG. For the 3D preview, an overlay at water level is simpler and works visually.
 
+Concretely:
+1. `parseWaterFeatures()` returns polygon rings in WGS84.
+2. `applyWaterToElevationGrid(elevationData, waterFeatures, bbox)` — for each grid cell, if its lon/lat falls inside a water polygon, set elevation to `minElevation` (or a configured water level offset). Returns a modified `ElevationData`.
+3. Pass the modified elevation data to `buildTerrainGeometry()` — the depression appears naturally in the terrain mesh.
+4. 3D preview: render a flat `WaterMesh` overlay at water level using the polygon geometry directly (with a blue material for visual distinction).
+
+**New files:**
 ```
-User draws bbox on 2D map
-        |
-        v
-App State updated (bbox, features, settings)
-        |
-        v
-[Parallel fetch]
-  Elevation Tiles ──────────────────────────┐
-  (terrain-RGB, via API proxy if CORS issue) │
-                                             ├──► Web Worker
-  OSM Features ─────────────────────────────┘
-  (Overpass API: buildings, roads)
-        |
-        v (in Web Worker)
-Project lat/lon → local XY meters
-        |
-        v
-Build terrain mesh (heightmap → PlaneGeometry positions)
-        |
-        v
-Build building meshes (footprints → extrusions per roof type)
-        |
-        v
-Build road meshes (centerlines → offset quads, recessed/raised/flat)
-        |
-        v
-Generate base plate (flat bottom box at min elevation)
-        |
-        v
-Merge all BufferGeometry → single BufferGeometry
-        |
-        v (back to main thread)
-Three.js scene updated → 3D Preview renders
-        |
-        v (on user click "Export")
-STLExporter → binary STL Blob → browser download
+src/lib/water/
+├── overpass.ts       — fetchWaterData(bbox) → raw Overpass JSON
+├── parse.ts          — parseWaterFeatures(raw) → WaterFeature[]
+├── elevation.ts      — applyWaterToElevationGrid(elevData, features, bbox) → ElevationData
+└── types.ts          — WaterFeature
 ```
 
-### State Management Flow
+**New component:** `src/components/Preview/WaterMesh.tsx` — flat polygon at water level, blue translucent material for preview. Does not need to be in the STL export (terrain depression handles the physical shape).
+
+**Store integration:** Add `waterFeatures: WaterFeature[] | null` to `mapStore`. The elevation pipeline in `GenerateButton.tsx` applies water features to the grid before setting `elevationData` in the store.
+
+**Key constraint:** Water feature application must happen before `setElevationData()` is called so `TerrainMesh` renders with the depression already baked in. Water is not a separate layer added on top — it modifies the terrain grid.
+
+---
+
+### Vegetation (VEGE-01)
+
+**OSM Source:** Overpass QL for parks and forests:
+```
+[out:json][timeout:60][bbox:${s},${w},${n},${e}];
+(
+  way["landuse"~"^(forest|meadow|grass|greenfield|recreation_ground)$"];
+  way["leisure"~"^(park|garden|nature_reserve)$"];
+  way["natural"~"^(wood|scrub|heath|grassland)$"];
+  relation["landuse"~"^(forest|meadow|grass)$"]["type"="multipolygon"];
+  relation["leisure"="park"]["type"="multipolygon"];
+);
+out geom;
+```
+
+**Vegetation Geometry Approach:**
+
+Vegetation is a flat polygon raised slightly above terrain (`terrainZ + vegetationHeightMM` — 1mm default). This creates a printable raised texture distinct from bare terrain.
+
+Geometry: earcut-triangulate the polygon footprint in the same coordinate space as buildings/roads. Sample terrain elevation per vertex. Each vertex Z = terrain elevation + vegetation height offset.
+
+This is identical to the building floor cap in `buildingMesh.ts` — reuse `buildFloorCap()` with a uniform offset instead of per-vertex wall heights.
+
+**New files:**
+```
+src/lib/vegetation/
+├── overpass.ts       — fetchVegetationData(bbox) → raw Overpass JSON
+├── parse.ts          — parseVegetationFeatures(raw) → VegetationFeature[]
+├── geometry.ts       — buildVegetationMesh(features, params) → THREE.BufferGeometry
+└── types.ts          — VegetationFeature
+```
+
+**New component:** `src/components/Preview/VegetationMesh.tsx` — green material, slightly raised above terrain.
+
+**Export integration:** Vegetation geometry participates in the STL merge chain as an optional layer alongside buildings and roads.
+
+---
+
+### Terrain Smoothing (TERR-04)
+
+**What it is:** A user-controlled slider that applies smoothing to the `ElevationData.elevations` Float32Array before it enters `buildTerrainGeometry()`.
+
+**Algorithm:** Gaussian or box blur on the elevation grid. A box blur (averaging kernel) is simpler and sufficient:
+```typescript
+function boxBlurElevation(
+  elevations: Float32Array,
+  gridSize: number,
+  radius: number  // 0 = no blur, 1 = 1-cell radius, 2 = 2-cell radius
+): Float32Array {
+  // For each cell, average the (2*radius+1)^2 neighborhood
+  // Standard separable box blur: horizontal pass then vertical pass
+}
+```
+
+**Slider design:** `smoothingLevel: number` in the store (0–3 or 0–5). 0 = no smoothing (raw DEM), higher = more passes or larger kernel. The slider label could say "Smooth" with 0 being "Raw" and max being "Very Smooth."
+
+**Integration point:** Apply smoothing at the point where elevation data is consumed by mesh generation. Two options:
+- **Option A:** Apply in `buildTerrainGeometry()` based on a `smoothingPasses` param. Cleanest — `ElevationData` stays raw, smoothing is a mesh-gen parameter.
+- **Option B:** Apply in `TerrainMesh.tsx`'s `useEffect` before calling `buildTerrainGeometry()`. Keeps lib functions pure.
+
+**Recommendation: Option A.** Add `smoothingPasses: number` to `TerrainMeshParams`. Smoothing is part of mesh generation, not data storage. The raw elevations are preserved in the store and smoothing can change without refetching.
+
+**Store change:** Add `smoothingLevel: number` (default 0) to `mapStore`. `TerrainMesh.tsx` passes it as `maxError`/`smoothingPasses` to `buildTerrainGeometry()`.
+
+---
+
+### Web Worker Offload (FNDN-03)
+
+**Current state:** All mesh generation runs synchronously on the main thread. `ExportPanel.tsx` and `TerrainMesh.tsx`/`BuildingMesh.tsx` call geometry functions directly.
+
+**Target state:** Heavy mesh generation (terrain, buildings, roads, vegetation) runs in a dedicated Web Worker.
+
+**Vite Worker Pattern (confirmed working in this stack):**
+```typescript
+// src/lib/worker/meshWorker.ts
+const worker = new Worker(
+  new URL('./meshWorker.worker.ts', import.meta.url),
+  { type: 'module' }
+);
+```
+
+The worker receives plain-object message with all geometry parameters and returns `Float32Array` buffers via transferable objects (zero-copy):
+```typescript
+// Worker receives:
+{
+  type: 'buildTerrain',
+  elevations: Float32Array,       // transferred
+  gridSize: number,
+  params: TerrainMeshParams
+}
+
+// Worker returns:
+{
+  type: 'terrainReady',
+  positions: Float32Array,        // transferred back
+  normals: Float32Array,
+  colors: Float32Array,
+  indices: Uint32Array
+}
+```
+
+**Critical constraint:** The Worker file cannot import Three.js directly if the goal is pure geometry math (Three.js brings in DOM dependencies). Two options:
+- **Option A:** Worker does pure math, returns `Float32Array` position/normal/index arrays. Main thread reconstructs `BufferGeometry`. This is cleanest.
+- **Option B:** Worker imports Three.js (which works in Workers if Three.js doesn't touch DOM). More complex but keeps mesh construction logic in one place.
+
+**Recommendation: Option A.** The existing lib functions (`buildTerrainGeometry`, `buildAllBuildings`) already return `THREE.BufferGeometry`. Refactor them to return typed arrays, then add a thin Three.js `BufferGeometry` reconstructor on the main thread.
+
+**Worker scope for Phase 6:** Start with terrain mesh generation in the Worker (largest CPU cost). Add buildings, roads, vegetation progressively. The export pipeline (`mergeTerrainAndBuildings` with CSG) is the most expensive single operation — it's also the most important to move to a Worker.
+
+**Three.js BufferGeometry round-trip:**
+```typescript
+// Main thread: send raw arrays to worker
+worker.postMessage({
+  elevations: elevationData.elevations.buffer,
+  ...params
+}, [elevationData.elevations.buffer]); // transfer
+
+// Worker: compute, return
+self.postMessage({
+  positions: new Float32Array([...]),
+  normals: new Float32Array([...]),
+  indices: new Uint32Array([...])
+}, [positions.buffer, normals.buffer, indices.buffer]);
+
+// Main thread: reconstruct
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+geo.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+geo.setIndex(new THREE.BufferAttribute(data.indices, 1));
+```
+
+---
+
+## Store Extension Plan
+
+The current `mapStore.ts` needs new state fields. Add these incrementally, one feature at a time:
+
+```typescript
+// Roads
+roadFeatures: RoadFeature[] | null;
+roadStyle: 'recessed' | 'raised' | 'flat';
+roadGenerationStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error';
+
+// Water
+waterFeatures: WaterFeature[] | null;
+waterGenerationStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error';
+
+// Vegetation
+vegetationFeatures: VegetationFeature[] | null;
+vegetationGenerationStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error';
+
+// Layer toggles (CTRL-01)
+layerToggles: {
+  terrain: boolean;     // default true
+  buildings: boolean;   // default true
+  roads: boolean;       // default true
+  water: boolean;       // default true
+  vegetation: boolean;  // default true
+};
+
+// Smoothing (TERR-04)
+smoothingLevel: number;  // 0-3, default 0
+
+// Units (CTRL-03)
+units: 'mm' | 'inches';  // default 'mm'
+```
+
+Layer visibility uses Three.js `mesh.visible = layerToggles.terrain` — no geometry rebuild needed for toggling. This is the established anti-pattern prevention from the prior architecture.
+
+---
+
+## Updated Data Flow: Generate Pipeline
 
 ```
-[Zustand Store]
-  bbox: BBox
-  features: { terrain, buildings, roads }
-  settings: { exaggeration, roadStyle, dimensions, units }
-  meshStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error'
-  geometry: BufferGeometry | null
+User clicks "Generate Preview"
+        |
+        v
+GenerateButton.handleGenerate()
+        |
+        ├── fetchElevationForBbox()                [existing, async]
+        │       |
+        │       └── If waterFeatures already available:
+        │               applyWaterToElevationGrid()   [new, synchronous]
+        │       └── setElevationData(elevData)
+        │
+        ├── fetchBuildingData() [existing, parallel, non-blocking]
+        │
+        ├── fetchRoadData()     [new, parallel, non-blocking]
+        │
+        ├── fetchWaterData()    [new, parallel, non-blocking]
+        │       |
+        │       └── on complete: applyWaterToElevationGrid() + re-trigger terrain rebuild
+        │
+        └── fetchVegetationData() [new, parallel, non-blocking]
 
-Store changes → trigger pipeline re-run (debounced ~300ms)
-Pipeline completes → geometry written to store
-3D Preview subscribes to geometry → re-renders
+Each fetch → parse → set store state
+Store state change → Mesh component useEffect fires → geometry rebuilt
 ```
 
-### Key Data Flow Directions
-
-1. **User input (2D map) → store → pipeline → 3D preview**: All changes flow one way through the store. The 2D map never directly talks to the 3D preview.
-2. **Elevation API → browser → Web Worker**: Tile fetch happens on main thread (needs canvas for decode), then raw height array is transferred to Worker.
-3. **Web Worker → BufferGeometry → Three.js scene**: Worker returns typed arrays; main thread reconstructs geometry and attaches to scene.
-4. **Three.js scene → STLExporter → download**: Export reads the same geometry already in the preview; no re-generation needed.
+**Note on water and terrain dependency:** Water polygon data must be applied to elevation data before terrain renders with depressions. If water arrives after elevation, the store change to `waterFeatures` must trigger a re-application of water to the elevation grid. Either: (a) `TerrainMesh.tsx` subscribes to both `elevationData` and `waterFeatures` and applies water before building geometry, or (b) water application is done once at fetch-complete time and the result is stored as `processedElevationData` separate from raw `elevationData`. Option (a) is simpler and avoids duplicating elevation state.
 
 ---
 
-## Scaling Considerations
+## Export Pipeline Extension
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Personal project (1 user) | Static hosting (Vercel/Netlify), API proxy as serverless function, public Overpass |
-| Public beta (< 1K users/day) | Same stack; rate limit proxy; cache OSM responses by bbox hash |
-| Public (10K+ users/day) | Self-host Overpass mirror; cache elevation tiles via CDN edge; consider server-side STL generation for fallback on slow devices |
-| Scale beyond that | Not required per project brief; architecture supports it by extracting mesh generation to dedicated worker service |
+Current export chain in `ExportPanel.tsx`:
+```
+buildTerrainGeometry() → buildSolidMesh() → mergeTerrainAndBuildings() → validateMesh() → exportToSTL()
+```
 
-### Scaling Priorities
+Extended export chain:
+```
+buildTerrainGeometry(elevData with water applied, smoothingLevel)
+  → buildSolidMesh()
+  → mergeTerrainAndBuildings(terrainSolid, buildingsGeo?)   [existing]
+  → mergeRoads(solid, roadsGeo?)                            [new]
+  → mergeVegetation(solid, vegetationGeo?)                  [new]
+  → validateMesh()
+  → exportToSTL()
+```
 
-1. **First bottleneck:** Overpass API rate limits. Public servers allow ~10,000 req/day. At scale, deploy a self-hosted Overpass instance or cache responses.
-2. **Second bottleneck:** Elevation tile delivery. Cache decoded height arrays in sessionStorage or IndexedDB keyed by tile URL — avoids repeated CORS proxy fetches for the same area.
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Run Mesh Generation on the Main Thread
-
-**What people do:** Call `buildMesh()` synchronously in a React event handler or `useEffect`.
-
-**Why it's wrong:** For a dense city block, this can take 500ms–3s of pure CPU work. The browser UI freezes — no orbit controls, no progress indicator, page appears hung.
-
-**Do this instead:** Always offload to a Web Worker. Send the data via `postMessage` with transferable buffers. Show a loading state while the worker runs.
+Each new merge step only executes if the feature is toggled on AND has geometry. The merge pattern (try CSG ADDITION, fallback to `mergeGeometries`) is already established in `buildingSolid.ts` and can be reused.
 
 ---
 
-### Anti-Pattern 2: Use Raw Lat/Lon as 3D Coordinates
+## New Project Structure
 
-**What people do:** Use `latitude` as the Y axis and `longitude` as the X axis directly in Three.js.
-
-**Why it's wrong:** One degree of latitude ≈ 111 km. One degree of longitude varies by latitude. The aspect ratio is wrong, scale is in degrees not meters, and projection distortion is severe near the poles.
-
-**Do this instead:** Project to local flat-earth meters at pipeline start. Pick the bbox center as origin (0,0). All downstream mesh code works in meters.
+```
+src/
+├── components/
+│   ├── Layout/
+│   │   └── SplitLayout.tsx
+│   ├── Map/
+│   │   ├── MapView.tsx
+│   │   └── SearchOverlay.tsx
+│   ├── Preview/
+│   │   ├── PreviewCanvas.tsx        — add RoadMesh, WaterMesh, VegetationMesh
+│   │   ├── TerrainMesh.tsx
+│   │   ├── BuildingMesh.tsx
+│   │   ├── RoadMesh.tsx             — NEW
+│   │   ├── WaterMesh.tsx            — NEW
+│   │   ├── VegetationMesh.tsx       — NEW
+│   │   ├── ExportPanel.tsx          — extend merge chain
+│   │   ├── PreviewControls.tsx
+│   │   ├── PreviewSidebar.tsx
+│   │   └── TerrainControls.tsx
+│   └── Sidebar/
+│       ├── Sidebar.tsx              — add layer toggles, controls
+│       ├── GenerateButton.tsx       — add road/water/vegetation fetches
+│       └── SelectionInfo.tsx
+│
+├── lib/
+│   ├── buildings/                   — EXISTING (unchanged)
+│   ├── elevation/                   — EXISTING + water application hook
+│   ├── export/                      — EXISTING (unchanged)
+│   ├── mesh/                        — EXISTING + smoothing param
+│   ├── roads/                       — NEW
+│   │   ├── overpass.ts
+│   │   ├── parse.ts
+│   │   ├── geometry.ts
+│   │   └── types.ts
+│   ├── water/                       — NEW
+│   │   ├── overpass.ts
+│   │   ├── parse.ts
+│   │   ├── elevation.ts
+│   │   └── types.ts
+│   ├── vegetation/                  — NEW
+│   │   ├── overpass.ts
+│   │   ├── parse.ts
+│   │   ├── geometry.ts
+│   │   └── types.ts
+│   └── worker/                      — NEW (Phase 6)
+│       ├── meshWorker.worker.ts
+│       └── workerClient.ts
+│
+├── store/
+│   └── mapStore.ts                  — extend with road/water/vegetation/controls state
+│
+└── types/
+    └── geo.ts                       — extend with new status types
+```
 
 ---
 
-### Anti-Pattern 3: Rebuild Geometry on Every Feature Toggle
+## Component Responsibilities (Updated)
 
-**What people do:** Re-fetch all data and re-run the full pipeline whenever a checkbox changes (e.g., toggle buildings off).
-
-**Why it's wrong:** Full pipeline can take 2–5s. Toggling buildings should be near-instant.
-
-**Do this instead:** Cache each layer's geometry separately (terrain mesh, buildings mesh, roads mesh). Toggling a feature shows/hides the Three.js object; only re-run the pipeline when bbox or settings that affect the mesh shape change (not visibility).
-
----
-
-### Anti-Pattern 4: Generate Non-Manifold Meshes
-
-**What people do:** Build terrain and buildings as separate open surfaces without capping them or adding a base plate.
-
-**Why it's wrong:** STL slicers require watertight (manifold) meshes. An open terrain surface with no bottom will fail to slice or produce hollow models that won't print reliably.
-
-**Do this instead:** Always close geometry. Terrain mesh needs a bottom face and side walls. Building extrusions must have a closed top (roof) and bottom. The base plate provides a solid unified floor. Optionally, use the `manifold-3d` WASM library to validate and repair before export.
+| Component | Existing Responsibility | New Additions |
+|-----------|------------------------|---------------|
+| `mapStore.ts` | bbox, elevation, buildings, export state | road/water/vegetation features + status, layer toggles, smoothingLevel, units, roadStyle |
+| `GenerateButton.tsx` | Fetch elevation + buildings (parallel) | Fetch roads + water + vegetation in parallel |
+| `TerrainMesh.tsx` | Render terrain from elevationData | Apply water features before building geometry; accept smoothingLevel |
+| `BuildingMesh.tsx` | Render building geometry | Add visibility toggle from layerToggles |
+| `RoadMesh.tsx` | (new) | Render road ribbon geometry; use roadStyle from store |
+| `WaterMesh.tsx` | (new) | Render flat polygon overlay at water level; blue material |
+| `VegetationMesh.tsx` | (new) | Render raised polygon geometry; green material |
+| `PreviewCanvas.tsx` | Render Terrain + Buildings | Add Road + Water + Vegetation mesh components |
+| `ExportPanel.tsx` | Merge terrain + buildings → STL | Extend merge chain; include toggled-on layers |
+| `PreviewSidebar.tsx` | Exaggeration slider, export | Add smoothing slider; layer toggles panel |
 
 ---
 
-### Anti-Pattern 5: Point-Query Elevation API for Grid Sampling
+## Build Order for New Features
 
-**What people do:** Query OpenTopoData for every grid point individually (e.g., a 100x100 grid = 10,000 requests).
+The dependency graph of the new features dictates this order:
 
-**Why it's wrong:** OpenTopoData free API limits to 100 points per request and 1,000 requests per day. A single model generation exhausts the day's quota.
+**1. Model Controls + Store Extensions** (no geometry, wire first)
+- Reason: Every subsequent feature consumes controls (layer toggles, road style, units). Build controls first so features can be tested against toggles immediately.
+- Deliverable: `mapStore.ts` with all new state; sidebar control UI; layer visibility wiring to existing Terrain/Building meshes.
 
-**Do this instead:** Use terrain-RGB tile fetching. A single 256x256 tile delivers 65,536 elevation points in one image request. Calculate which tiles cover the bbox and fetch only those.
+**2. Road Layer** (adds first new geometry type)
+- Reason: Roads are geometrically independent from water/vegetation. The Overpass query, parse, geometry, and mesh component can be built and tested in isolation. Most impactful visual addition.
+- Deliverable: `lib/roads/`, `RoadMesh.tsx`, road data in `GenerateButton`, roads in STL export.
+
+**3. Water Layer** (modifies terrain pipeline)
+- Reason: Water must integrate with the elevation pipeline, which adds architectural complexity vs roads. Build after roads so the pattern is established.
+- Deliverable: `lib/water/`, `WaterMesh.tsx`, `applyWaterToElevationGrid` in terrain path, water in export.
+
+**4. Vegetation Layer** (simplest new layer — same pattern as buildings)
+- Reason: Vegetation is flat polygon geometry, structurally identical to building floors. Builds last because it is lowest priority and most OSM-data-dependent.
+- Deliverable: `lib/vegetation/`, `VegetationMesh.tsx`, vegetation in export.
+
+**5. Terrain Smoothing** (parameterize existing mesh function)
+- Reason: Smoothing is a parameter change to `buildTerrainGeometry()` — no new data pipeline. Can be done at any point but best after roads/water/vegetation to batch-test visual quality with all layers active.
+- Deliverable: `smoothingPasses` param in `TerrainMeshParams`; blur function in `lib/mesh/terrain.ts`; smoothing slider in sidebar.
+
+**6. Web Worker Offload** (Phase 6 — refactor, no new features)
+- Reason: Depends on all previous features being complete and stable. Refactoring the geometry pipeline to return typed arrays (rather than Three.js objects) must be done with the full feature set in place to avoid double-refactoring.
+- Deliverable: `lib/worker/meshWorker.worker.ts`; typed-array interfaces for terrain/buildings/roads/vegetation builders; `BufferGeometry` reconstructors on main thread.
+
+---
+
+## Anti-Patterns Specific to This Milestone
+
+### Anti-Pattern 1: Separate Overpass Queries for Each Feature
+
+**What to do instead:** Combine roads, water, and vegetation into a single Overpass query per generate call, or at minimum group them into parallel fetches. Three separate sequential queries for roads, water, vegetation triples API latency.
+
+**Recommended:** One compound query per generate (union all needed element types) or three parallel fetches that all start simultaneously. The existing buildings pattern (parallel, non-blocking) must extend to all new feature types.
+
+---
+
+### Anti-Pattern 2: Storing Smoothed Elevation in the Store
+
+**What to do instead:** Keep raw `ElevationData` in the store. Apply smoothing only at mesh-generation time, as a parameter. If smoothing is stored, changing the smoothing slider requires a store update, re-smoothing, and storage of a new elevation array — wasted memory and complexity.
+
+---
+
+### Anti-Pattern 3: Applying Water Depressions After TerrainGeometry Build
+
+**What to do instead:** Apply water polygon masking to the `elevations` Float32Array **before** passing it to `buildTerrainGeometry()`. Water depressions need to be part of the terrain surface, not layered on top (which would produce floating water planes with no depression in the print).
+
+---
+
+### Anti-Pattern 4: Moving All Mesh Generation to Worker Before Features Are Complete
+
+**What to do instead:** Build Phase 4 (roads), Phase 5 (water/vegetation/smoothing), and Phase 6 (edit-iterate) on the main thread first. Worker refactoring is a Phase 6 concern. Premature workerization forces managing two code paths (worker + main thread) during active feature development.
+
+---
+
+### Anti-Pattern 5: Rebuilding Geometry for Layer Toggle Changes
+
+**What to do instead:** Use Three.js `mesh.visible` for layer toggles. The geometry is already built; toggling visibility is a scene property, not a pipeline re-run. Only rebuild geometry when `elevationData`, `bbox`, or geometry-affecting settings change.
 
 ---
 
 ## Integration Points
 
-### External Services
+### Overpass API — Extended Query Set
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Overpass API (OSM) | HTTP GET to `overpass-api.de/api/interpreter`, Overpass QL query with bbox | CORS: public Overpass allows browser requests; add proxy if rate-limited |
-| MapTiler Terrain-RGB | Fetch PNG tiles at `api.maptiler.com/tiles/terrain-rgb/{z}/{x}/{y}.png?key=...` | Free tier available; decode RGB in canvas; no SDK lock-in like Mapbox |
-| Mapbox Terrain-DEM | Only available via Mapbox SDK (GL JS) — not as standalone tile fetch | Avoid direct dependency; use MapTiler as the terrain tile source instead |
-| Nominatim (geocoding) | HTTP GET `nominatim.openstreetmap.org/search?q=...&format=json` | Free; required User-Agent header; rate limit: 1 req/sec |
+| Query | Tags | Returns |
+|-------|------|---------|
+| Buildings (existing) | `building`, `building:part` | Polygon ways + relations |
+| Roads (new) | `highway~"motorway|trunk|primary|secondary|tertiary|residential|service"` | Way linestrings with geometry |
+| Water (new) | `natural=water`, `waterway~"riverbank|canal"` | Polygon ways + multipolygon relations |
+| Vegetation (new) | `landuse~"forest|meadow|grass"`, `leisure~"park|garden"`, `natural~"wood|scrub"` | Polygon ways + multipolygon relations |
 
-### Internal Boundaries
+All queries use `[out:json][timeout:60][bbox:${sw},{ne}]` and `out geom;` — same pattern as the existing buildings query.
+
+### Internal Boundaries (New)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| React UI ↔ Zustand Store | Direct Zustand hooks (`useMapMakerStore`) | UI reads/writes store; no prop drilling |
-| Store ↔ Pipeline | Zustand `subscribe` triggers pipeline when bbox/settings change | Debounce 300ms to avoid thrashing on slider drag |
-| Main thread ↔ Web Worker | `postMessage` / `onmessage` with Transferable ArrayBuffers | Use Comlink library to simplify Worker RPC boilerplate |
-| Web Worker ↔ Three.js scene | Worker returns `Float32Array` buffers; main reconstructs `BufferGeometry` | Worker cannot touch DOM or Three.js objects directly |
-| Three.js scene ↔ STLExporter | Direct function call: `exporter.parse(scene)` | No async needed; large scenes may stall — export from Worker if needed |
-
----
-
-## Build Order Implications for Roadmap
-
-The component dependency graph dictates a natural build sequence:
-
-1. **2D Map Interface first** — Users cannot define a bbox without it. All other components depend on having a bbox.
-2. **Coordinate projection next** — Required by every downstream mesh component. Build and test this unit in isolation with known coordinates.
-3. **Elevation pipeline** — Can be built and tested without OSM data. Terrain-only model validates the full pipeline end to end.
-4. **STL export** — Build once terrain mesh exists; validates the export mechanism before buildings/roads add complexity.
-5. **OSM buildings pipeline** — Depends on working coordinate projection and a live 3D preview to validate output.
-6. **Roads pipeline** — Roads depend on OSM fetch infrastructure (shared with buildings) but have their own geometry logic.
-7. **Settings (exaggeration, road style, dimensions, units)** — Layer on top of working geometry, parameterize existing mesh code.
-8. **Polish (loading states, error handling, UX)** — Last, once the full pipeline is proven.
-
-**Critical path:** 2D bbox selection → elevation fetch → terrain mesh → STL export → 3D preview. Everything else is additive.
+| `TerrainMesh.tsx` ↔ water features | Store subscription — `waterFeatures` from store | When waterFeatures change, TerrainMesh applies them before geometry build |
+| `GenerateButton.tsx` ↔ new fetchers | Direct async calls in `handleGenerate()` — same as buildings pattern | Each fetch updates store independently; errors are non-blocking |
+| `ExportPanel.tsx` ↔ new geometry | Reads `roadFeatures`, `waterFeatures`, `vegetationFeatures` from store | Builds and merges each layer geometry in sequence before STL export |
+| `lib/worker/meshWorker.worker.ts` ↔ main thread | `postMessage` with `Transferable` Float32Array buffers | Worker must not import Three.js scene objects; return typed arrays only |
 
 ---
 
 ## Sources
 
-- TerraSTL architecture (Nuxt/Vue + Three.js + OpenTopoData): https://github.com/aligundogdu/TerraStl
-- Streets GL rendering pipeline (WebGL2, OSM vector tiles, TypeScript): https://github.com/StrandedKitty/streets-gl
-- mapa library (Python elevation pipeline, ALOS DEM, STL): https://github.com/fgebhart/mapa
-- TouchTerrain server-side Python/GDAL/Google Earth Engine approach: https://github.com/ChHarding/TouchTerrain_for_CAGEO
-- map2stl hybrid model (Ruby server + OpenJSCAD in browser): https://github.com/davr/map2stl
-- Mapbox terrain-RGB decode formula (official docs): https://docs.mapbox.com/data/tilesets/reference/mapbox-terrain-dem-v1/
-- Three.js STLExporter (official): https://threejs.org/docs/pages/STLExporter.html
-- Web Workers for Three.js mesh generation: https://evilmartians.com/chronicles/faster-webgl-three-js-3d-graphics-with-offscreencanvas-and-web-workers
-- manifold-3d WASM mesh repair library: https://github.com/elalish/manifold
-- OSM Simple 3D Buildings schema: https://wiki.openstreetmap.org/wiki/Simple_3D_Buildings
-- Overpass API bounding box queries: https://wiki.openstreetmap.org/wiki/Overpass_API
-- OpenTopoData API (point query, rate limits): https://www.opentopodata.org/api/
-- MapTiler terrain tiles free tier: https://www.maptiler.com/terrain/
+- OSM tags reference (highway, waterway, landuse, natural): https://wiki.openstreetmap.org/wiki/Key:highway
+- Overpass API Language Guide (compound queries, out geom): https://wiki.openstreetmap.org/wiki/Overpass_API/Language_Guide
+- Vite Web Worker with TypeScript (module workers): https://vitejs.dev/guide/features#web-workers
+- Three.js Web Worker pattern (transferable buffers): https://evilmartians.com/chronicles/faster-webgl-three-js-3d-graphics-with-offscreencanvas-and-web-workers
+- Three.js BufferGeometry in Workers (community confirmed): https://discourse.threejs.org/t/trouble-reconstructing-geometry-from-web-worker/21423
+- OSM water features (natural=water, waterway tags): https://wiki.openstreetmap.org/wiki/Tag:natural=water
+- OSM vegetation / landuse tagging: https://wiki.openstreetmap.org/wiki/Key:landuse
+- Existing codebase: src/lib/buildings/, src/store/mapStore.ts, src/components/Preview/ (direct inspection, HIGH confidence)
 
 ---
-*Architecture research for: Map-to-3D-printable-STL web application (MapMaker)*
-*Researched: 2026-02-23*
+
+*Architecture research for: MapMaker v1.0 milestone — roads, water, vegetation, smoothing, controls, Worker offload*
+*Researched: 2026-02-24*

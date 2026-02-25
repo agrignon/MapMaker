@@ -1,140 +1,215 @@
 # Stack Research
 
-**Domain:** Map-to-3D-printable-STL web application
-**Researched:** 2026-02-23
-**Confidence:** MEDIUM-HIGH (core stack HIGH; elevation tile sourcing MEDIUM due to API dependencies)
+**Domain:** Map-to-3D-printable-STL web application — Milestone additions (roads, water, vegetation, mesh smoothing, Web Workers)
+**Researched:** 2026-02-24
+**Confidence:** HIGH for Web Worker approach; HIGH for road geometry; MEDIUM for mesh smoothing (implementation is custom, no dominant library)
 
-## Recommended Stack
+---
 
-### Core Technologies
+> **Scope note:** This document covers ONLY the new stack additions for the current milestone.
+> The existing validated stack (Vite 6, React 19, TypeScript, Tailwind v4, MapLibre GL JS, Three.js 0.183, Zustand, @mapbox/martini, earcut 3, proj4, osmtogeojson, three-bvh-csg, manifold-3d) is not re-researched here.
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| React | 19.2.x | UI framework | Latest stable (19.2.4 released Oct 2025). Concurrent rendering handles the expensive mesh generation without blocking the UI. No SSR needed; pure SPA fits this use case. |
-| TypeScript | 5.9.x | Type safety | Current stable. Geographic coordinate arithmetic, elevation decoding, and mesh math are all index-off-by-one landmines — strict types prevent them. |
-| Vite | 7.x | Build tool / dev server | v7.3.1 is current stable. WASM-friendly (needed if mesh generation moves to WASM), fast HMR for iterating on 3D preview, first-class TypeScript support out of the box. |
-| MapLibre GL JS | 5.18.x | Interactive 2D map | Current stable (v5.18.0, Feb 2026). Open-source fork of Mapbox GL JS maintained by the OSS community. Free — no API key required for the map renderer itself. Has `BoxZoomHandler` for drag-to-select bounding boxes, `LngLatBounds` for coordinate math, and supports custom draw layers for the selection rectangle. Choose MapLibre over Mapbox GL JS because there is no per-tile billing and no proprietary SDK terms. |
-| Three.js | 0.183.x | 3D WebGL preview and mesh | Current stable (v0.183.1, Feb 2026). Industry standard for browser 3D. Built-in `OrbitControls` addon handles orbit/zoom/pan. `BufferGeometry` is the correct API for custom terrain/building mesh construction. Built-in `STLExporter` addon exports binary STL directly in the browser. WebGPU renderer available as opt-in for future upgrade. |
-| Zustand | 5.0.x | Global state | Lightweight (2 KB), no provider boilerplate, hook-based. Manages the shared state that both the map pane and the 3D pane need to react to (bounding box coordinates, feature toggles, terrain exaggeration, dimension settings). Redux is overkill here; Context API re-renders too broadly across 3D canvas. |
-| Tailwind CSS | 4.x | Styling | v4.0+ released early 2025. Zero config, Vite plugin-based setup (`@tailwindcss/vite`). Handles the side-by-side responsive layout cleanly with flex/grid utilities. No runtime overhead. |
+---
 
-### Supporting Libraries
+## Recommended Stack — New Additions
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `three/addons/controls/OrbitControls` | bundled with Three.js | Orbit / zoom / pan for 3D preview | Always — included in Three.js package, import from `three/addons/controls/OrbitControls.js` |
-| `three/addons/exporters/STLExporter` | bundled with Three.js | Binary STL export from BufferGeometry | Always — export step. Binary STL is more compact than ASCII; use `{ binary: true }` |
-| `@mapbox/martini` | 0.2.x | RTIN terrain mesh generation from elevation grid | Use to convert a 2D elevation height array into an optimized triangle mesh. Produces level-of-detail meshes (tolerated error in meters). Last released at v0.2.0; low maintenance activity but algorithm is stable and the problem is solved. |
-| `geotiff` | 3.0.x | Decode GeoTIFF elevation rasters in the browser | Use when fetching elevation from OpenTopography or similar services that return GeoTIFF. v3.0.3 published Feb 2026; actively maintained. WebWorker pool support for decompression performance. |
-| `maplibre-draw` / custom canvas overlay | — | Draw draggable bounding box on map | MapLibre's `BoxZoomHandler` handles shift-drag but you need a custom persistent rectangle. Use a MapLibre `GeoJSON` source + `fill` + `line` layer for a persistent selection rectangle with draggable corner handles. |
+### Roads: Polyline-to-Mesh Extrusion
 
-### Development Tools
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| `geometry-extrude` | `^0.2.1` | Convert OSM road LineString coordinates to extruded 3D ribbon meshes with configurable width | Returns `{indices, position, normal, uv}` TypedArrays that wire directly into `THREE.BufferGeometry` with no intermediate conversion. Handles miter joints at road bends automatically. The `extrudePolyline(coords, { lineWidth, miterLimit })` API matches exactly the OSM road use case. earcut is its only dependency (already in the project). |
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `typescript` 5.9.x | Type checking | Set `strict: true`, `noUncheckedIndexedAccess: true` — elevation arrays out-of-bounds are a real bug source |
-| `eslint` + `@typescript-eslint` | Lint | Standard Vite template includes this; keep enabled |
-| `prettier` | Format | Add `prettier-plugin-tailwindcss` for consistent class ordering |
-| `vite-plugin-wasm` | WASM support | Optional: if mesh generation is later moved to WASM (e.g., via Rust/wasm-pack), this plugin makes it straightforward to add |
+**Integration pattern:**
+```typescript
+import { extrudePolyline } from 'geometry-extrude';
+
+const { indices, position, normal } = extrudePolyline(roadCoords, {
+  lineWidth: roadWidthInModelUnits,
+  miterLimit: 2,
+});
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+geo.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
+geo.setIndex(new THREE.Uint32BufferAttribute(indices, 1));
+```
+
+**Earcut version note (HIGH confidence):** `geometry-extrude@0.2.1` declares `"earcut": "^2.1.3"` as a dependency. The project already has `earcut@3.0.2` installed. npm will install earcut 2.x separately inside `node_modules/geometry-extrude/node_modules/` to satisfy its peer constraint. This is normal npm deduplication behavior — no conflict, two copies. No action required.
+
+### Water Bodies: No New Library Needed
+
+Water body depressions (rivers, lakes, ocean) use the same OSM polygon pipeline that buildings already use:
+
+1. Overpass query for `natural=water`, `waterway=riverbank`, `natural=coastline` within the bounding box (already done via `osmtogeojson`).
+2. `earcut` triangulates the water polygon (already installed at 3.0.2).
+3. Custom vertex displacement: find terrain mesh vertices within the polygon bounds, clamp their Z to a flat water-level elevation.
+4. `three-bvh-csg` can perform a boolean subtraction if depression geometry is needed for STL watertightness (already installed).
+
+**No new library required.** This is a data query + vertex manipulation problem, not a new geometry primitive problem.
+
+### Vegetation/Parks: No New Library Needed
+
+Parks and forest areas follow the same extruded-polygon pipeline as buildings:
+
+1. Overpass query for `leisure=park`, `landuse=forest`, `landuse=grass` etc. (extend existing Overpass queries).
+2. `earcut` triangulates the footprint polygon (already installed).
+3. `geometry-extrude` `extrudePolygon()` builds a thin prism (low depth) placed on the terrain surface.
+
+**No new library required.** The vegetation layer reuses road/building geometry infrastructure with different Overpass tags and extrusion depth.
+
+### Terrain Mesh Smoothing: Custom Implementation (No Library)
+
+There is no dominant npm library for height-field Gaussian smoothing that is maintained, TypeScript-native, and suitable for a Float32Array grid. The correct approach is a custom implementation:
+
+| Technique | What It Is | Why Use It |
+|-----------|-----------|-----------|
+| Separable box/Gaussian filter on height grid | 2-pass 1D convolution (horizontal then vertical) on the raw elevation `Float32Array` before passing to `@mapbox/martini` | Operates directly on the existing elevation grid data structure. Zero new dependencies. Controllable via a single `radius` parameter (0 = raw DEM, 1–5 = progressively smoother). Separable passes are O(n·r) not O(n·r²) so stays fast for large grids. |
+
+**Why NOT `three-subdivide`:** Loop subdivision works on triangle connectivity and applies curvature-based smoothing — it will cause noticeable tearing on flat grid geometries and is not designed for height field data. Published Aug 2023, no updates since. The problem it solves is organic model smoothing, not terrain DEM smoothing.
+
+**Why NOT a general signal-processing library:** The height array is a simple 2D grid of `Float32` values. A custom 3×3 or 5×5 Gaussian kernel is 30 lines of TypeScript and runs in < 1ms for a 512×512 grid. Adding a dependency for this is unjustified.
+
+**Implementation sketch:**
+```typescript
+function smoothHeightGrid(
+  heights: Float32Array,
+  width: number,
+  height: number,
+  radius: number   // 0 = off, 1-5 = strength
+): Float32Array {
+  if (radius === 0) return heights;
+  const out = new Float32Array(heights.length);
+  // Pass 1: horizontal box filter
+  // Pass 2: vertical box filter on Pass 1 output
+  // Each pass: for each cell, average neighbors within [-radius, +radius]
+  return out;
+}
+```
+The slider in the UI maps to `radius` (integer 0–5). This runs synchronously or can be offloaded to the Web Worker (see below).
+
+### Web Worker for Mesh Generation
+
+| Approach | Recommended? | Why |
+|----------|-------------|-----|
+| Native Vite Web Worker (`new Worker(new URL(...), { type: 'module' })`) | Yes — base approach | Vite 6 handles this natively with no plugin. Workers compile TypeScript, support ESM imports, are bundled correctly for production. URL must be static string literal. |
+| `comlink@4.4.2` + `vite-plugin-comlink@5.3.0` | Yes — add on top of native | Comlink eliminates the `postMessage`/`onmessage` boilerplate. Worker functions become async-callable from the main thread with proper TypeScript types. `vite-plugin-comlink@5.3.0` requires `comlink@^4.3.1` as a peer dep (satisfied by 4.4.2). Compatible with `vite>=2.9.6` (project uses Vite 6). |
+
+**Recommended combination:** `comlink` + `vite-plugin-comlink`. The ergonomics improvement for this use case (calling async `generateMesh()` from a React component, receiving back `ArrayBuffer`s) is significant enough to justify the small dependency.
+
+**What to offload to the worker:**
+- Elevation grid smoothing (`smoothHeightGrid`)
+- `@mapbox/martini` mesh generation
+- Road/building/vegetation geometry computation (`geometry-extrude` calls, `earcut` triangulation)
+- STL serialization (final `STLExporter` call, which serializes potentially large geometry)
+
+**What stays on the main thread:**
+- Overpass API fetch calls (HTTP is async by nature, no benefit to worker)
+- MapTiler tile fetch + RGB decode (already async, minimal CPU)
+- Three.js `BufferGeometry` object construction (Three.js objects are not `Transferable`; pass raw `ArrayBuffer` from worker, build geometry on main thread)
+
+**Vite config addition:**
+```typescript
+// vite.config.ts
+import comlink from 'vite-plugin-comlink';
+export default {
+  plugins: [comlink(), react()],
+  worker: {
+    plugins: () => [comlink()],
+  },
+};
+```
+
+**tsconfig addition:**
+```json
+// vite-env.d.ts (or global.d.ts)
+/// <reference types="vite-plugin-comlink/client" />
+```
 
 ## Installation
 
 ```bash
-# Core
-npm install react react-dom maplibre-gl three zustand
+# Road geometry extrusion (only new runtime dependency)
+npm install geometry-extrude
 
-# Supporting geo/mesh libraries
-npm install @mapbox/martini geotiff
-
-# Dev dependencies
-npm install -D vite @vitejs/plugin-react typescript tailwindcss @tailwindcss/vite @types/react @types/react-dom @types/three eslint prettier prettier-plugin-tailwindcss
+# Web Worker ergonomics
+npm install comlink
+npm install -D vite-plugin-comlink
 ```
+
+No new libraries needed for water bodies, vegetation, or terrain smoothing — these use existing dependencies.
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| MapLibre GL JS | Mapbox GL JS | Only if you need Mapbox-specific features (e.g., Mapbox Geocoding API) AND are okay with token billing and SDK terms. For this project: no benefit, adds cost and lock-in. |
-| MapLibre GL JS | Leaflet | Leaflet is fine for tile overlays but lacks native WebGL vector tile rendering. Side-by-side layout with 3D Three.js canvas risks performance issues since Leaflet uses DOM+Canvas2D. Choose MapLibre for consistency and performance. |
-| Three.js | Babylon.js | Babylon.js is a heavier full game engine. Three.js is lighter, has the ecosystem (`STLExporter`, `OrbitControls`), and has broader community examples for terrain mesh generation. |
-| Three.js | React Three Fiber (R3F) | R3F is a React renderer for Three.js. Adds convenience but also adds an abstraction layer and reconciler overhead on top of expensive mesh operations. For this app, imperative Three.js control is better — mesh updates happen in response to form changes, not every render frame. |
-| Zustand | Redux Toolkit | Redux is 10x the boilerplate for the same outcome. This app's state fits comfortably in a single Zustand store. |
-| Zustand | React Context + useState | Context re-renders all consumers on any state change. The 3D canvas and the map are both heavy — you need precise, selective re-renders. Zustand's selectors handle this cleanly. |
-| @mapbox/martini | Custom heightfield triangulation | Martini's RTIN algorithm produces optimized adaptive meshes (fewer triangles where terrain is flat, more where it's complex). Writing this from scratch is weeks of geometry math. Use Martini. |
-| geotiff | Decode elevation tiles via Canvas pixel hack | Mapbox/MapTiler terrain-RGB tiles encode elevation in RGB pixels that can be read via a hidden `<canvas>`. This works but is fragile, depends on a paid tile provider, and loses precision vs. raw GeoTIFF. Use GeoTIFF from OpenTopography for precision and free access. |
-| Tailwind CSS v4 | CSS Modules | Both are fine. Tailwind v4 wins because it has zero-config auto content detection, a Vite plugin (no PostCSS config file needed), and is the dominant pattern in 2026 React projects. |
+| `geometry-extrude` for road mesh | Three.js `ExtrudeGeometry` with `Shape` + `Path` | `ExtrudeGeometry` works but requires converting polyline to `THREE.Shape` manually, does not handle miter joints at road bends, produces more vertices. Use if `geometry-extrude` causes build issues due to earcut version conflict. |
+| `geometry-extrude` for road mesh | Custom ribbon mesh from scratch | Use only if road geometry needs to drape exactly on terrain surface (projected along Z from terrain height) — `geometry-extrude` produces flat XY ribbons that need post-processing elevation adjustment anyway. A custom implementation could do both in one pass. If draping complexity is high, go custom. |
+| Custom Gaussian height-field smoothing | `three-subdivide@1.1.5` | Do not use — causes tearing on flat grid geometries, last updated Aug 2023, designed for organic mesh smoothing not height field DEM smoothing. |
+| `comlink` + `vite-plugin-comlink` | Raw `postMessage` / `onmessage` | Use raw postMessage only if the worker API is trivially simple (single function, single return). For this project with multiple mesh generation functions and TypeScript types, Comlink is the correct choice. |
+| `comlink` + `vite-plugin-comlink` | Vite native `?worker` import | Native `?worker` import works fine for basic cases. The difference is that `vite-plugin-comlink` additionally transforms the worker module to expose Comlink's `Remote<T>` types, eliminating manual `postMessage` serialization. |
 
-## What NOT to Use
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `three-geo` (npm: `three-geo`) | Last published 3 years ago (2022/2023). Depends on Mapbox API for terrain tiles — introduces paid tile dependency. Unmaintained. | Manual elevation fetch via OpenTopography GeoTIFF + `@mapbox/martini` for mesh generation |
-| Create React App (CRA) | Deprecated, archived by Meta. Extremely slow builds, no Vite integration. | Vite |
-| `Leaflet` for the 2D map | Leaflet renders in Canvas2D/DOM. Running Two.js/Three.js canvas alongside Leaflet on a split-view layout has context conflicts and performance issues. | MapLibre GL JS (WebGL-based, same GPU pipeline) |
-| Cesium.js | Designed for globe-scale geospatial apps. Extremely heavy (hundreds of MB), complex API, overkill for a single bounding box at print scale. | Three.js |
-| OpenJSCAD / JSCAD | Built for parametric CAD modeling (CSG operations, primitives). Not designed for geographic mesh generation from elevation grids. Steep learning curve for terrain use case. | Three.js + `@mapbox/martini` + `STLExporter` |
-| Mapbox GL JS (proprietary) | API key required, tile billing applies at scale, restrictive SDK terms. MapLibre GL JS is the free, maintained fork with identical API. | MapLibre GL JS |
-| Next.js | This app is a pure client-side tool. No SEO, no auth, no server rendering needed. Next.js adds SSR complexity with no benefit. Three.js WASM and WebWorkers are simpler in a pure Vite SPA. | Vite + React |
+| `three-geo` | Unmaintained (last release 2022), requires Mapbox tiles. | Already excluded; use Overpass API + custom geometry code. |
+| `turf.js` | 68 KB+ bundle even tree-shaken. For this project the only needed geo operations are coordinate projection (proj4 already installed) and polygon bounding box checks (3 lines of math). Turf adds significant bundle size for minimal benefit. | proj4 (already installed) + inline math. |
+| Any general-purpose mesh smoothing npm library | No maintained, TypeScript-native library exists that targets height-field DEM data specifically. Available options are Python-oriented (meshpro/optimesh), academic implementations (Laplacian-Mesh-Smoothing), or unmaintained. | Custom separable Gaussian convolution on the Float32Array height grid. |
+| `worker-loader` (webpack) | Project uses Vite, not webpack. webpack plugins are incompatible. | Vite native worker support + `vite-plugin-comlink`. |
+| `Workbox` / service worker libraries | Workbox is for offline PWA caching, not computation offloading. | `comlink` for computation offloading. |
 
-## Stack Patterns by Variant
+## Stack Patterns by Feature
 
-**If terrain only (no buildings, no roads):**
-- Simplest path: OpenTopography GeoTIFF → `geotiff` → raw elevation grid → `@mapbox/martini` → Three.js BufferGeometry → STLExporter
-- No Overpass API needed; considerably simpler architecture
+**Roads (OSM highway ways):**
+- Overpass query → `osmtogeojson` → `GeoJSON.MultiLineString.coordinates` → `geometry-extrude.extrudePolyline()` → `THREE.BufferGeometry` (width driven by `highway` tag value)
+- Road style (recessed/raised/flat) controlled by Z-offset applied after mesh generation, before terrain CSG
 
-**If buildings and roads are required (full feature set):**
-- Add Overpass API calls (query OSM `building` ways + `highway` ways within bounding box) in addition to elevation
-- Parse GeoJSON-like OverpassJSON response, compute building floor heights from `building:levels` tags, extrude footprint polygons to height
-- Roads: convert polylines to extruded mesh strips (recessed/raised/flat depending on user setting)
-- Merge all geometry into a single Three.js `BufferGeometry` before STL export (required — STL is one solid)
+**Water (OSM natural=water, waterway=riverbank):**
+- Overpass query → `osmtogeojson` → `GeoJSON.MultiPolygon.coordinates` → earcut triangulation → flat mesh at water-level Z
+- For STL export: use `three-bvh-csg` boolean subtraction to cut depression into terrain mesh (same pattern as buildings)
+- Alternative simpler: stamp water-level Z onto terrain vertices inside polygon bounds (no new geometry, less watertight but simpler)
 
-**If client-side performance is a bottleneck:**
-- Move elevation decode + Martini mesh generation to a WebWorker (Three.js geometry can be built off-thread then transferred via `SharedArrayBuffer` or `Transferable`)
-- Add `vite-plugin-wasm` and compile Martini equivalent in Rust/WASM for larger grids
+**Vegetation (OSM landuse=forest, leisure=park):**
+- Overpass query → `osmtogeojson` → `GeoJSON.MultiPolygon.coordinates` → `geometry-extrude.extrudePolygon({ depth: 1-3mm equivalent })` → thin prism mesh placed on terrain surface
+- Toggled as a layer (Zustand store flag)
 
-## Elevation Data Source Decision
+**Terrain smoothing:**
+- DEM elevation `Float32Array` → `smoothHeightGrid(heights, w, h, radius)` → `@mapbox/martini` mesh generation
+- Slider (0–5) maps to `radius` parameter; 0 bypasses smoothing entirely for performance
+- Run inside Web Worker alongside martini call
 
-This is the most significant external dependency. Three options:
-
-| Source | Format | Free | Resolution | API Key | Rate Limit |
-|--------|--------|------|------------|---------|------------|
-| **OpenTopography (SRTM GL1)** | GeoTIFF | Yes | 30m (~1 arcsec) | Free key (300 req/day academic, 100 req/day others) | 100–300 req/day |
-| **Open Topo Data (self-hosted or public)** | JSON point data | Yes (public instance) | 30m SRTM | None | 1 req/sec, 1000 req/day, 100 loc/req |
-| **MapTiler Terrain RGB tiles** | PNG tiles (RGB-encoded) | Free tier | ~30m (SRTM derived) | Required (free) | Pauses on quota exhaust |
-
-**Recommendation:** Start with MapTiler terrain-RGB tiles (free API key, fast tile delivery, good DX via standard tile URL pattern) for MVP. The RGB decode formula (`elevation = -10000 + (R*256*256 + G*256 + B) * 0.1`) is straightforward via a hidden canvas. Switch to OpenTopography GeoTIFF for higher precision or offline capability if needed.
-
-Note: Mapbox terrain-RGB works identically but requires a Mapbox access token with billing risk at scale. MapTiler's free tier pauses service rather than charging — safer for a personal project.
+**Web Worker wiring:**
+```
+React component → comlink ComlinkWorker → worker.ts exposes { generateMesh }
+generateMesh({ bbox, features, smoothing, dimensions }) →
+  [fetch elevation, fetch OSM data] →
+  smoothHeightGrid → martini → extrudePolyline/extrudePolygon → earcut →
+  returns { terrainBuffer, buildingBuffer, roadBuffer, waterBuffer, vegetationBuffer }
+→ main thread builds THREE.BufferGeometry from ArrayBuffers →
+→ STLExporter serializes merged geometry
+```
 
 ## Version Compatibility
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `react@19.x` | `zustand@5.x` | Zustand v5 dropped support for React < 18; React 19 fully supported |
-| `three@0.183.x` | TypeScript `@types/three` | `@types/three` is bundled with three package itself as of recent versions; no separate `@types/three` install needed |
-| `maplibre-gl@5.x` | React 19 | MapLibre is framework-agnostic; use via `useEffect` + `useRef` in React components |
-| `vite@7.x` | `@vitejs/plugin-react@4.x` | Vite 7 requires the Vite React plugin; verify plugin version compatibility via `npm create vite@latest` template |
-| `tailwindcss@4.x` | `vite@7.x` | Use `@tailwindcss/vite` plugin (NOT PostCSS config) — the v3 PostCSS-based setup does not work with v4 |
-| `geotiff@3.x` | All modern browsers | v3.0 has breaking API changes from v2.x — `fileDirectory` is replaced with `ImageFileDirectory` class |
+| `geometry-extrude@0.2.1` | `earcut@^2.1.3` (installs its own) | Project has earcut@3.0.2 at root; geometry-extrude will get earcut 2.x in its own node_modules. npm handles this automatically. Earcut 3.x is ESM-only; 2.x is CJS — different module systems, no conflict. |
+| `comlink@4.4.2` | `vite-plugin-comlink@5.3.0` | vite-plugin-comlink requires `comlink@^4.3.1` — satisfied by 4.4.2. |
+| `vite-plugin-comlink@5.3.0` | `vite>=2.9.6` | Project uses Vite 6.0.5 — compatible. Plugin must appear before React plugin in `plugins` array. |
+| `geometry-extrude@0.2.1` | `three@0.183.x` | No direct three.js dependency in geometry-extrude. Output TypedArrays are agnostic to Three.js version. Compatible. |
 
 ## Sources
 
-- [MapLibre GL JS official docs](https://maplibre.org/maplibre-gl-js/docs/) — bounding box API, BoxZoomHandler, LngLatBounds (HIGH confidence)
-- [MapLibre GL JS npm releases](https://github.com/maplibre/maplibre-gl-js/releases) — v5.18.0 current as of Feb 2026 (HIGH confidence)
-- [Three.js npm](https://www.npmjs.com/package/three) — v0.183.1 current (HIGH confidence)
-- [Three.js OrbitControls docs](https://threejs.org/docs/pages/OrbitControls.html) — import path and capabilities (HIGH confidence)
-- [Three.js STLExporter docs](https://threejs.org/docs/pages/STLExporter.html) — binary export from BufferGeometry (HIGH confidence)
-- [React versions](https://react.dev/versions) — v19.2.4 current (HIGH confidence)
-- [Vite releases](https://vite.dev/releases) — v7.3.1 current (HIGH confidence)
-- [Tailwind CSS v4.0 announcement](https://tailwindcss.com/blog/tailwindcss-v4) — v4 Vite plugin setup (HIGH confidence)
-- [Zustand v5 announcement](https://pmnd.rs/blog/announcing-zustand-v5) — v5.0.x current, React 18+ required (HIGH confidence)
-- [geotiff npm](https://www.npmjs.com/package/geotiff) — v3.0.3 current (MEDIUM confidence — single source)
-- [mapbox/martini GitHub](https://github.com/mapbox/martini) — v0.2.0, minimal maintenance activity (MEDIUM confidence)
-- [OpenTopography API docs](https://opentopography.org/developers) — free SRTM GeoTIFF, rate limits (MEDIUM confidence)
-- [MapTiler elevation API](https://docs.maptiler.com/cloud/api/elevation/) — terrain RGB tiles free tier (MEDIUM confidence)
-- [Overpass API wiki](https://wiki.openstreetmap.org/wiki/Overpass_API) — OSM building/road query, rate limits (HIGH confidence)
-- [three-geo npm](https://www.npmjs.com/package/three-geo/v/1.4.4) — last published 3 years ago, avoid (HIGH confidence — confirmed unmaintained)
+- [geometry-extrude GitHub README](https://github.com/pissang/geometry-extrude) — extrudePolyline/extrudePolygon API, TypedArray output format (HIGH confidence, official repo)
+- `npm info geometry-extrude` — v0.2.1 latest, last modified 2022-07-21, `earcut@^2.1.3` dependency (HIGH confidence, direct npm registry query)
+- `npm info comlink` — v4.4.2 latest, last modified 2024-11-07 (HIGH confidence, direct npm registry query)
+- `npm info vite-plugin-comlink` — v5.3.0 latest, peer deps `comlink@^4.3.1`, `vite>=2.9.6` (HIGH confidence, direct npm registry query)
+- [Vite Web Workers docs](https://vite.dev/guide/features.html) — native `new Worker(new URL(...))` pattern, TypeScript support, production build behavior (HIGH confidence, official Vite docs)
+- [vite-plugin-comlink GitHub](https://github.com/mathe42/vite-plugin-comlink) — plugin config pattern, vite.config.ts setup, TypeScript types path (MEDIUM confidence, WebSearch verified)
+- [earcut GitHub Releases](https://github.com/mapbox/earcut/releases) — 3.0.0 is ESM-only, breaks CJS consumers; 2.2.4 last CJS release (HIGH confidence, official repo)
+- `npm info three-subdivide` — v1.1.5, last modified 2023-08-03; unsuitable for height-field terrain (HIGH confidence — metadata confirmed, suitability assessed from documentation)
+- [THREE.Terrain GitHub](https://github.com/IceCreamYou/THREE.Terrain) — includes height field smoothing reference implementation (MEDIUM confidence — WebSearch, older project)
+- [Box Filtering Height Maps for Smooth Rolling Hills — GameDev.net](https://www.gamedev.net/tutorials/programming/general-and-gameplay-programming/box-filtering-height-maps-for-smooth-rolling-hills-r2164/) — separable box filter for height field smoothing rationale (MEDIUM confidence — WebSearch, classic technique article)
 
 ---
-*Stack research for: Map-to-3D-printable-STL web application*
-*Researched: 2026-02-23*
+*Stack research for: MapMaker milestone — roads, water, vegetation, mesh smoothing, Web Workers*
+*Researched: 2026-02-24*
