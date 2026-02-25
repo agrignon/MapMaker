@@ -50,33 +50,57 @@ export function ModelSizeSection() {
 
   const autoHeightMM = computeAutoHeightMM();
 
-  function handleWidthBlur() {
-    const v = parseFloat(widthInput);
-    if (!isNaN(v)) {
+  function handleWidthChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    setWidthInput(raw);
+    const v = parseFloat(raw);
+    if (!isNaN(v) && v > 0) {
       const mmValue = toStoreMM(v, units);
       const clamped = Math.max(10, Math.min(500, mmValue));
       setTargetWidth(clamped);
-      // Reset display to reflect the potentially-clamped value
+    }
+  }
+
+  function handleWidthBlur() {
+    const v = parseFloat(widthInput);
+    if (!isNaN(v) && v > 0) {
+      const mmValue = toStoreMM(v, units);
+      const clamped = Math.max(10, Math.min(500, mmValue));
+      setTargetWidth(clamped);
       setWidthInput(formatDisplay(clamped, units));
     } else {
       setWidthInput(formatDisplay(targetWidthMM, units));
     }
   }
 
-  function handleHeightBlur() {
-    const trimmed = heightInput.trim();
+  function handleHeightChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    setHeightInput(raw);
+    const trimmed = raw.trim();
     if (trimmed === '') {
-      // Empty = revert to auto
       setTargetHeightMM(0);
     } else {
       const v = parseFloat(trimmed);
       if (!isNaN(v) && v > 0) {
         const mmValue = toStoreMM(v, units);
-        const clamped = Math.max(0, Math.min(200, mmValue));
+        const clamped = Math.max(1, Math.min(200, mmValue));
+        setTargetHeightMM(clamped);
+      }
+    }
+  }
+
+  function handleHeightBlur() {
+    const trimmed = heightInput.trim();
+    if (trimmed === '') {
+      setTargetHeightMM(0);
+    } else {
+      const v = parseFloat(trimmed);
+      if (!isNaN(v) && v > 0) {
+        const mmValue = toStoreMM(v, units);
+        const clamped = Math.max(1, Math.min(200, mmValue));
         setTargetHeightMM(clamped);
         setHeightInput(formatDisplay(clamped, units));
       } else {
-        // Invalid — revert to current stored value (or empty for auto)
         setHeightInput(targetHeightMM === 0 ? '' : formatDisplay(targetHeightMM, units));
       }
     }
@@ -168,14 +192,15 @@ export function ModelSizeSection() {
           max={units === 'in' ? 19.7 : 500}
           step={units === 'in' ? 0.1 : 1}
           value={widthInput}
-          onChange={(e) => setWidthInput(e.target.value)}
+          onChange={handleWidthChange}
           onBlur={handleWidthBlur}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={inputStyle}
         />
         <span style={{ color: '#9ca3af', fontSize: '13px' }}>{unitLabel}</span>
       </div>
 
-      {/* Depth (Y) — read-only computed */}
+      {/* Depth (Y) — auto-computed from width to preserve geographic aspect ratio */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={labelStyle}>Depth (Y)</span>
         <span
@@ -185,10 +210,12 @@ export function ModelSizeSection() {
             color: '#6b7280',
             cursor: 'default',
           }}
+          title="Auto-computed from width to preserve map aspect ratio"
         >
           {formatDisplay(targetDepthMM, units)}
         </span>
         <span style={{ color: '#9ca3af', fontSize: '13px' }}>{unitLabel}</span>
+        <span style={{ color: '#6b7280', fontSize: '11px', fontStyle: 'italic' }}>auto</span>
       </div>
 
       {/* Height (Z) input with auto placeholder */}
@@ -202,8 +229,9 @@ export function ModelSizeSection() {
           step={units === 'in' ? 0.1 : 1}
           value={heightInput}
           placeholder={autoHeightMM > 0 ? formatDisplay(autoHeightMM, units) : 'auto'}
-          onChange={(e) => setHeightInput(e.target.value)}
+          onChange={handleHeightChange}
           onBlur={handleHeightBlur}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{
             ...inputStyle,
             color: heightInput === '' ? '#6b7280' : '#e5e7eb',

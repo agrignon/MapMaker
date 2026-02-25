@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { PreviewControls } from './PreviewControls';
 import { TerrainMesh } from './TerrainMesh';
 import { BuildingMesh } from './BuildingMesh';
+import { BasePlateMesh } from './BasePlateMesh';
 import { Component, type ReactNode } from 'react';
 
 /** Catch R3F render errors so they don't produce a silent black screen */
@@ -33,6 +34,7 @@ export function PreviewCanvas() {
     <div style={{ position: 'absolute', inset: 0 }}>
       <Canvas
         style={{ background: '#1a1a1a' }}
+        gl={{ localClippingEnabled: true }}
         camera={{
           position: [200, -300, 250],
           fov: 50,
@@ -45,6 +47,7 @@ export function PreviewCanvas() {
           <PreviewControls />
           <TerrainMesh />
           <BuildingMesh />
+          <BasePlateMesh />
         </SceneErrorBoundary>
       </Canvas>
     </div>

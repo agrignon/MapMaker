@@ -128,8 +128,8 @@ export function buildAllBuildings(
     // (terrain.ts uses zScale=0 and sets z=minHeightMM, but for buildings we still need the scale)
     zScale = horizontalScale * exaggeration;
   } else if (params.targetReliefMM && params.targetReliefMM > 0) {
-    // Z height override: matches terrain.ts override logic exactly for alignment
-    zScale = params.targetReliefMM / elevRange;
+    // Z height override with exaggeration: matches terrain.ts override logic for alignment
+    zScale = (params.targetReliefMM / elevRange) * exaggeration;
   } else {
     // Check if terrain uses minHeightMM floor
     // TERR-03: when naturalHeightMM < minHeightMM, zScale = minHeightMM / elevRange
@@ -173,17 +173,21 @@ export function buildAllBuildings(
       projectRingToMM(hole, bboxCenterUTM, horizontalScale)
     );
 
-    // Step c: Sample terrain elevation per vertex (outer ring)
-    // baseZmm[i] = (sampledElevationM - minElevationM) * zScale
-    // CRITICAL: matches terrain.ts line 124: z = (elevation - minElevation) * zScale
-    const baseZmm = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
+    // Step c: Sample terrain elevation and use the MAX as a flat base for the building.
+    // Using per-vertex base Z causes buildings to distort when terrain exaggeration
+    // changes (base vertices spread vertically on slopes). A flat base at the highest
+    // sampled point keeps the building shape stable — it sits on the terrain without
+    // poking through, and exaggeration only moves it up/down uniformly.
+    const sampledBaseZ = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
+    const flatBaseZ = Math.max(...sampledBaseZ);
+    const baseZmm = sampledBaseZ.map(() => flatBaseZ);
 
-    // Step d: Convert building height from meters to mm using zScale.
-    // heightMM = heightM * zScale is algebraically equivalent to
-    // heightM * horizontalScale * exaggeration in the non-override case, and
-    // correctly handles both TERR-03 floor and targetReliefMM override cases.
-    const heightMM = heightM * zScale;
-    const roofHeightMM = roofHeightM * zScale;
+    // Step d: Convert building height from meters to mm using horizontalScale only.
+    // Building bases use zScale (with exaggeration) to stay flush with terrain,
+    // but building wall heights should NOT scale with terrain exaggeration —
+    // exaggeration is a terrain-only effect.
+    const heightMM = heightM * horizontalScale;
+    const roofHeightMM = roofHeightM * horizontalScale;
 
     // Step e: Build single building geometry
     try {

@@ -78,7 +78,10 @@ export function TerrainSection() {
               max={20}
               step={1}
               value={basePlateThicknessMM}
-              onChange={(e) => setBasePlateThicknessMM(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1) setBasePlateThicknessMM(Math.min(20, v));
+              }}
               style={{
                 flex: 1,
                 backgroundColor: '#1f2937',

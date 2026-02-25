@@ -5,10 +5,11 @@
  * Calls buildAllBuildings() when features or elevation change,
  * and rebuilds when exaggeration changes (building Z depends on terrain zScale).
  *
- * Pattern follows TerrainMesh.tsx: useRef geometry, useEffect for rebuild, dispose on unmount.
+ * Buildings are clipped at the terrain edges using Four Three.js clipping planes
+ * so that edge buildings are sliced cleanly rather than overhanging.
  */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
 import { buildAllBuildings } from '../../lib/buildings/merge';
@@ -32,6 +33,14 @@ export function BuildingMesh() {
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
 
+  // Clipping planes at terrain edges — slice buildings cleanly at the model boundary
+  const clippingPlanes = useMemo(() => [
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), targetWidthMM / 2),  // +X edge
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), targetWidthMM / 2),   // -X edge
+    new THREE.Plane(new THREE.Vector3(0, -1, 0), targetDepthMM / 2),  // +Y edge
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), targetDepthMM / 2),   // -Y edge
+  ], [targetWidthMM, targetDepthMM]);
+
   useEffect(() => {
     // Only build when we have all required data and buildings are ready
     if (
@@ -50,10 +59,9 @@ export function BuildingMesh() {
     const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
     const centerUTM = wgs84ToUTM(centerLon, centerLat);
 
-    // Compute targetReliefMM: must match TerrainMesh.tsx formula exactly for alignment
-    const targetReliefMM = targetHeightMM > 0
-      ? Math.max(1, targetHeightMM - basePlateThicknessMM)
-      : 0;
+    // targetReliefMM: must match TerrainMesh.tsx formula exactly for alignment.
+    // No basePlateThicknessMM subtraction — preview doesn't render a base plate.
+    const targetReliefMM = targetHeightMM > 0 ? targetHeightMM : 0;
 
     const params: BuildingGeometryParams = {
       widthMM: targetWidthMM,
@@ -116,7 +124,11 @@ export function BuildingMesh() {
 
   return (
     <mesh ref={meshRef} visible={buildingsVisible}>
-      <meshStandardMaterial color="#c0c0c0" side={THREE.DoubleSide} />
+      <meshStandardMaterial
+        color="#c0c0c0"
+        side={THREE.DoubleSide}
+        clippingPlanes={clippingPlanes}
+      />
     </mesh>
   );
 }

@@ -94,9 +94,10 @@ export function buildTerrainGeometry(
   if (elevRange === 0) {
     zScale = 0; // special case: perfectly flat — handled below
   } else if (targetReliefMM && targetReliefMM > 0) {
-    // Z height override: scale so max terrain surface Z == targetReliefMM
-    // targetReliefMM = targetHeightMM - basePlateThicknessMM (caller subtracts base)
-    zScale = targetReliefMM / elevRange;
+    // Z height override with exaggeration: targetReliefMM sets the base height
+    // at exaggeration=1.0; the exaggeration multiplier scales on top so the
+    // slider always produces a visible change even when height is set.
+    zScale = (targetReliefMM / elevRange) * exaggeration;
   } else {
     // Natural Z height at exaggeration=1 would be elevRange * horizontalScale mm
     // With exaggeration applied: elevRange * horizontalScale * exaggeration mm
@@ -179,8 +180,8 @@ export function updateTerrainElevation(
   if (elevRange === 0) {
     zScale = 0;
   } else if (targetReliefMM && targetReliefMM > 0) {
-    // Z height override: matches buildTerrainGeometry override logic exactly
-    zScale = targetReliefMM / elevRange;
+    // Z height override with exaggeration: matches buildTerrainGeometry logic
+    zScale = (targetReliefMM / elevRange) * exaggeration;
   } else {
     const naturalHeightMM = elevRange * horizontalScale * exaggeration;
     if (naturalHeightMM < minHeightMM) {
