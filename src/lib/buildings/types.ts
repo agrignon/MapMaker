@@ -57,4 +57,11 @@ export interface BuildingGeometryParams {
   exaggeration: number;
   /** Minimum elevation in meters (matches terrain minElevation — used as Z base) */
   minElevationM: number;
+  /**
+   * Optional override for terrain surface Z height in mm.
+   * When > 0, overrides zScale so max terrain Z == targetReliefMM.
+   * Must match the value passed to TerrainMeshParams.targetReliefMM for alignment.
+   * When 0 or undefined, natural zScale is used.
+   */
+  targetReliefMM?: number;
 }

@@ -120,16 +120,16 @@ export function buildAllBuildings(
   const horizontalScale = widthMM / geographicWidthM;
 
   // Compute zScale: matches terrain.ts lines 86-98
-  // For now we use the standard formula (no minHeightMM floor — buildings have their own floor logic)
-  // terrain.ts may apply a minHeightMM floor for flat areas, but buildings always use the
-  // straight formula: zScale = horizontalScale * exaggeration
-  // This is safe because buildings always have a real height above terrain.
+  // Must produce the same zScale as terrain.ts for building-terrain alignment.
   const elevRange = elevData.maxElevation - elevData.minElevation;
   let zScale: number;
   if (elevRange === 0) {
     // Flat terrain: use horizontalScale * exaggeration as the scale
     // (terrain.ts uses zScale=0 and sets z=minHeightMM, but for buildings we still need the scale)
     zScale = horizontalScale * exaggeration;
+  } else if (params.targetReliefMM && params.targetReliefMM > 0) {
+    // Z height override: matches terrain.ts override logic exactly for alignment
+    zScale = params.targetReliefMM / elevRange;
   } else {
     // Check if terrain uses minHeightMM floor
     // TERR-03: when naturalHeightMM < minHeightMM, zScale = minHeightMM / elevRange
@@ -178,10 +178,12 @@ export function buildAllBuildings(
     // CRITICAL: matches terrain.ts line 124: z = (elevation - minElevation) * zScale
     const baseZmm = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
 
-    // Step d: Convert building height from meters to mm
-    // heightMM = heightM * horizontalScale * exaggeration (same scale as Z)
-    const heightMM = heightM * horizontalScale * exaggeration;
-    const roofHeightMM = roofHeightM * horizontalScale * exaggeration;
+    // Step d: Convert building height from meters to mm using zScale.
+    // heightMM = heightM * zScale is algebraically equivalent to
+    // heightM * horizontalScale * exaggeration in the non-override case, and
+    // correctly handles both TERR-03 floor and targetReliefMM override cases.
+    const heightMM = heightM * zScale;
+    const roofHeightMM = roofHeightM * zScale;
 
     // Step e: Build single building geometry
     try {

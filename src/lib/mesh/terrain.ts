@@ -15,6 +15,13 @@ export interface TerrainMeshParams {
   exaggeration: number;   // vertical exaggeration multiplier (default 1.5)
   minHeightMM: number;    // TERR-03 minimum floor height in mm (default 5)
   maxError: number;       // RTIN error threshold (default 5, lower = more triangles)
+  /**
+   * Optional override for terrain surface Z height in mm.
+   * When > 0, overrides natural zScale so max terrain Z == targetReliefMM.
+   * targetReliefMM = targetHeightMM - basePlateThicknessMM (caller's responsibility).
+   * When 0 or undefined, natural zScale (horizontalScale * exaggeration) is used.
+   */
+  targetReliefMM?: number;
 }
 
 /**
@@ -66,7 +73,7 @@ export function buildTerrainGeometry(
   params: TerrainMeshParams
 ): THREE.BufferGeometry {
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { widthMM, depthMM, geographicWidthM, geographicDepthM, exaggeration, minHeightMM, maxError } = params;
+  const { widthMM, depthMM, geographicWidthM, geographicDepthM, exaggeration, minHeightMM, maxError, targetReliefMM } = params;
 
   // 1. Build martini mesh using RTIN algorithm
   const martini = new Martini(gridSize);
@@ -86,6 +93,10 @@ export function buildTerrainGeometry(
   let zScale: number;
   if (elevRange === 0) {
     zScale = 0; // special case: perfectly flat — handled below
+  } else if (targetReliefMM && targetReliefMM > 0) {
+    // Z height override: scale so max terrain surface Z == targetReliefMM
+    // targetReliefMM = targetHeightMM - basePlateThicknessMM (caller subtracts base)
+    zScale = targetReliefMM / elevRange;
   } else {
     // Natural Z height at exaggeration=1 would be elevRange * horizontalScale mm
     // With exaggeration applied: elevRange * horizontalScale * exaggeration mm
@@ -156,7 +167,7 @@ export function updateTerrainElevation(
   params: TerrainMeshParams
 ): void {
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { widthMM, depthMM, geographicWidthM, exaggeration, minHeightMM } = params;
+  const { widthMM, depthMM, geographicWidthM, exaggeration, minHeightMM, targetReliefMM } = params;
 
   const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
   const vertexCount = positionAttribute.count;
@@ -167,6 +178,9 @@ export function updateTerrainElevation(
   let zScale: number;
   if (elevRange === 0) {
     zScale = 0;
+  } else if (targetReliefMM && targetReliefMM > 0) {
+    // Z height override: matches buildTerrainGeometry override logic exactly
+    zScale = targetReliefMM / elevRange;
   } else {
     const naturalHeightMM = elevRange * horizontalScale * exaggeration;
     if (naturalHeightMM < minHeightMM) {
