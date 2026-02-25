@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 
 ## Current Position
 
-Phase: 3 of 6 (Buildings) — IN PROGRESS
-Plan: 3 of 4 complete
-Status: Phase 3 Plan 03 complete — CSG union module, building-aware STL export pipeline, 6 new tests; awaiting human verification (Task 2 checkpoint)
-Last activity: 2026-02-25 — Buildings included in STL export via three-bvh-csg union with fallback; all 115 tests pass
+Phase: 3 of 6 (Buildings) — COMPLETE
+Plan: 3 of 3 complete
+Status: Phase 3 complete — all 3 plans executed and human-verified; CSG union + STL export pipeline approved by user
+Last activity: 2026-02-24 — Human verification checkpoint approved; buildings confirmed in 3D preview and exported STL
 
 Progress: [███████░░░] ~70%
 
@@ -96,7 +96,7 @@ None.
 ### Blockers/Concerns
 
 - Phase 1 gap closure (01-03): Automated task complete (code fixes committed, 14/14 tests pass). UAT browser verification still pending — requires user with valid MapTiler API key to verify 9 browser scenarios
-- Phase 3 Plan 03-03: Human verification checkpoint pending — user needs to visually confirm buildings in 3D preview and verify exported STL opens without repair warnings in a slicer (PrusaSlicer / Bambu Studio)
+- Phase 3 complete: all 3 plans executed and human-verified
 - Phase 6: MapTiler free tier rate limits under concurrent usage unconfirmed — may require CORS proxy earlier than Phase 6
 
 ## Deferred Issues
@@ -109,6 +109,6 @@ Pre-existing `npm run build` failures (NOT caused by 01-03 changes — exist in 
 
 ## Session Continuity
 
-Last session: 2026-02-25
-Stopped at: Completed 03-03-PLAN.md automated Task 1 — CSG union module, building-aware export pipeline, 6 new tests. Awaiting human verification checkpoint (Task 2) for visual STL confirmation in slicer.
+Last session: 2026-02-24
+Stopped at: Completed 03-03-PLAN.md — all tasks done including human verification checkpoint (Task 2 approved). Phase 3 Buildings complete.
 Resume file: None

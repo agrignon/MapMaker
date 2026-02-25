@@ -86,6 +86,7 @@ completed: 2026-02-24
 Each task was committed atomically:
 
 1. **Task 1: Create CSG union module and update ExportPanel to include buildings in STL export** - `dc6cede` (feat)
+2. **Task 2: Visual verification — buildings in 3D preview and exported STL** - Human verification checkpoint: APPROVED (2026-02-24)
 
 **Fix (deviation):** `9a96f9d` — non-manifold seam warning (non-blocking) for buildings+terrain export instead of hard block
 
@@ -131,9 +132,9 @@ None — CSG is client-side. No new API keys, environment variables, or external
 ## Next Phase Readiness
 
 - Full building pipeline complete: fetch → parse → geometry → 3D preview → CSG union → STL export
-- Human verification (Task 2) is a checkpoint: user needs to visually confirm buildings render in preview and exported STL opens without repair warnings in a slicer
+- Human verification (Task 2) approved: buildings confirmed in 3D preview and exported STL opens without repair warnings in slicer
 - Backward compatible: areas without OSM building data export terrain-only STL unchanged
-- Phase 3 is functionally complete pending human verification
+- Phase 3 is complete — all 3 plans executed and human-verified
 
 ## Self-Check: PASSED
 

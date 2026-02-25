@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - Map, location search, bounding box, and correct coordinate projection pipeline
 - [ ] **Phase 2: Terrain + Preview + Export** - Terrain-only end-to-end pipeline: elevation data to 3D preview to STL download (gap closure: tile boundary seam bug)
-- [ ] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain
+- [x] **Phase 3: Buildings** - OSM buildings with real heights extruded correctly onto terrain (completed 2026-02-25)
 - [ ] **Phase 4: Roads + Controls** - OSM roads with configurable styles and fully parameterized layer controls
 - [ ] **Phase 5: Edit-Iterate Loop** - State-preserving back-to-edit navigation and live preview updates
 - [ ] **Phase 6: Performance Hardening** - Web Worker mesh generation and browser memory/rate-limit safeguards
@@ -66,7 +66,7 @@ Plans:
   2. Buildings with detailed OSM roof geometry (gabled, hipped, flat) render with the correct roof shape rather than a flat top
   3. Buildings missing OSM height tags still render with plausible heights derived from the fallback hierarchy (levels tag, then footprint-area heuristic, then type default) — a rural US area shows buildings rather than empty terrain
   4. Buildings sit exactly at terrain level at their geographic location — a building on a slope has its base flush with the slope, not floating above or cutting below it
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Building data pipeline + geometry core library (Overpass fetch, height resolver, elevation sampler, earcut triangulation, wall/roof construction, merge)
@@ -113,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Awaiting UAT verification | - |
 | 2. Terrain + Preview + Export | 4/5 | Gap closure | - |
-| 3. Buildings | 3/3 | Awaiting human verification | - |
+| 3. Buildings | 3/3 | Complete   | 2026-02-25 |
 | 4. Roads + Controls | 0/TBD | Not started | - |
 | 5. Edit-Iterate Loop | 0/TBD | Not started | - |
 | 6. Performance Hardening | 0/TBD | Not started | - |
