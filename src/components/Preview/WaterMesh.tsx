@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import earcut from 'earcut';
 import { useMapStore } from '../../store/mapStore';
 import { WATER_DEPRESSION_M, pointInRing } from '../../lib/water/depression';
+import { smoothElevations } from '../../lib/mesh/terrain';
 import { wgs84ToUTM } from '../../lib/utm';
 
 /** Water overlay color — a distinct blue that contrasts with terrain greens/browns */
@@ -54,6 +55,7 @@ export function WaterMesh() {
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const targetHeightMM = useMapStore((s) => s.targetHeightMM);
+  const smoothingLevel = useMapStore((s) => s.smoothingLevel);
 
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -68,6 +70,13 @@ export function WaterMesh() {
 
   useEffect(() => {
     if (!waterFeatures || waterFeatures.length === 0 || !elevationData || !bbox || !dimensions) return;
+
+    // Apply caller-side smoothing to match TerrainMesh elevation grid
+    // This ensures water overlay Z aligns with the smoothed terrain surface
+    const radius = Math.round((smoothingLevel / 100) * 8);
+    const smoothedElevations = radius > 0
+      ? smoothElevations(elevationData.elevations, elevationData.gridSize, radius)
+      : elevationData.elevations;
 
     // Compute scaling parameters (same formula as terrain/roads/buildings)
     const horizontalScale = targetWidthMM / dimensions.widthM;
@@ -113,7 +122,7 @@ export function WaterMesh() {
         const gy = (1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1);
         if (gx < 0 || gx > gridSize - 1 || gy < 0 || gy > gridSize - 1) continue;
         const idx = Math.round(gy) * gridSize + Math.round(gx);
-        shorelineMin = Math.min(shorelineMin, elevationData.elevations[idx]);
+        shorelineMin = Math.min(shorelineMin, smoothedElevations[idx]);
       }
 
       // Fallback: water body envelops the entire bbox (no outer ring vertices in grid).
@@ -124,7 +133,7 @@ export function WaterMesh() {
             const slon = bboxSw.lon + (sgx / (gridSize - 1)) * lonRange;
             const slat = bboxNe.lat - (sgy / (gridSize - 1)) * latRange;
             if (pointInRing(slon, slat, feature.outerRing)) {
-              shorelineMin = Math.min(shorelineMin, elevationData.elevations[sgy * gridSize + sgx]);
+              shorelineMin = Math.min(shorelineMin, smoothedElevations[sgy * gridSize + sgx]);
             }
           }
         }
@@ -189,7 +198,7 @@ export function WaterMesh() {
       meshRef.current.geometry = geo;
     }
     if (oldGeometry) oldGeometry.dispose();
-  }, [waterFeatures, elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, bbox]);
+  }, [waterFeatures, elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, bbox, smoothingLevel]);
 
   // Cleanup on unmount
   useEffect(() => {

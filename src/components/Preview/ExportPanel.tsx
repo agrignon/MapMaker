@@ -10,7 +10,7 @@
 import { useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
-import { buildTerrainGeometry } from '../../lib/mesh/terrain';
+import { buildTerrainGeometry, smoothElevations } from '../../lib/mesh/terrain';
 import { buildSolidMesh } from '../../lib/mesh/solid';
 import { mergeTerrainAndBuildings } from '../../lib/mesh/buildingSolid';
 import { validateMesh } from '../../lib/export/validate';
@@ -60,6 +60,7 @@ export function ExportPanel() {
   const roadStyle = useMapStore((s) => s.roadStyle);
   const waterFeatures = useMapStore((s) => s.waterFeatures);
   const waterVisible = useMapStore((s) => s.layerToggles.water);
+  const smoothingLevel = useMapStore((s) => s.smoothingLevel);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
@@ -101,11 +102,18 @@ export function ExportPanel() {
       setExportStatus('building', 'Building solid mesh...');
       await new Promise(resolve => setTimeout(resolve, 0)); // Yield to React render
 
-      // Apply water depression before terrain mesh generation (matches TerrainMesh.tsx flow)
+      // Step 1: Apply caller-side smoothing (matches TerrainMesh.tsx pipeline order)
+      // CRITICAL: smooth → water depression → buildTerrainGeometry
+      const radius = Math.round((smoothingLevel / 100) * 8);
+      const smoothedElevData = radius > 0
+        ? { ...elevationData, elevations: smoothElevations(elevationData.elevations, elevationData.gridSize, radius) }
+        : elevationData;
+
+      // Step 2: Apply water depression before terrain mesh generation
       const hasWater = Boolean(waterFeatures && waterFeatures.length > 0 && waterVisible);
       const effectiveElevData = hasWater
-        ? applyWaterDepressions(elevationData, waterFeatures!, bbox)
-        : elevationData;
+        ? applyWaterDepressions(smoothedElevData, waterFeatures!, bbox)
+        : smoothedElevData;
 
       const terrainGeom = buildTerrainGeometry(effectiveElevData, {
         widthMM: targetWidthMM,

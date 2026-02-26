@@ -7,8 +7,9 @@
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
-import { buildTerrainGeometry } from '../../lib/mesh/terrain';
+import { buildTerrainGeometry, smoothElevations } from '../../lib/mesh/terrain';
 import type { TerrainMeshParams } from '../../lib/mesh/terrain';
+import type { ElevationData } from '../../types/geo';
 import { applyWaterDepressions } from '../../lib/water/depression';
 
 export function TerrainMesh() {
@@ -21,6 +22,7 @@ export function TerrainMesh() {
   const waterFeatures = useMapStore((s) => s.waterFeatures);
   const waterVisible = useMapStore((s) => s.layerToggles.water);
   const bbox = useMapStore((s) => s.bbox);
+  const smoothingLevel = useMapStore((s) => s.smoothingLevel);
 
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -44,12 +46,19 @@ export function TerrainMesh() {
       targetReliefMM,
     };
 
-    // Apply water depression to elevation grid before terrain mesh generation.
+    // Step 1: Apply caller-side smoothing to the elevation grid.
+    // CRITICAL pipeline order: smooth → water depression → buildTerrainGeometry
+    const radius = Math.round((smoothingLevel / 100) * 8);
+    const smoothedElevData: ElevationData = radius > 0
+      ? { ...elevationData, elevations: smoothElevations(elevationData.elevations, elevationData.gridSize, radius) }
+      : elevationData;
+
+    // Step 2: Apply water depression to smoothed elevation grid before terrain mesh generation.
     // CRITICAL: Must use a COPY — store's elevationData stays unmodified so
     // toggling water off restores original terrain.
     const effectiveElevData = (waterFeatures && waterFeatures.length > 0 && waterVisible && bbox)
-      ? applyWaterDepressions(elevationData, waterFeatures, bbox)
-      : elevationData;
+      ? applyWaterDepressions(smoothedElevData, waterFeatures, bbox)
+      : smoothedElevData;
 
     // Always do full rebuild — ensures R3F picks up geometry changes reliably.
     const oldGeometry = geometryRef.current;
@@ -64,7 +73,7 @@ export function TerrainMesh() {
     if (oldGeometry) {
       oldGeometry.dispose();
     }
-  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, waterFeatures, waterVisible, bbox]);
+  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, waterFeatures, waterVisible, bbox, smoothingLevel]);
 
   // Cleanup geometry on unmount
   useEffect(() => {
