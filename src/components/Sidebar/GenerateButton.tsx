@@ -12,11 +12,9 @@
 
 import { useMapStore } from '../../store/mapStore';
 import { fetchElevationForBbox } from '../../lib/elevation/stitch';
-import { fetchBuildingData } from '../../lib/buildings/overpass';
+import { fetchAllOsmData } from '../../lib/overpass';
 import { parseBuildingFeatures } from '../../lib/buildings/parse';
-import { fetchRoadData } from '../../lib/roads/overpass';
 import { parseRoadFeatures } from '../../lib/roads/parse';
-import { fetchWaterData } from '../../lib/water/overpass';
 import { parseWaterFeatures } from '../../lib/water/parse';
 
 export function GenerateButton() {
@@ -46,47 +44,39 @@ export function GenerateButton() {
   const isBuildingFetching = buildingGenerationStatus === 'fetching' || buildingGenerationStatus === 'building';
   const isRoadFetching = roadGenerationStatus === 'fetching' || roadGenerationStatus === 'building';
   const isWaterFetching = waterGenerationStatus === 'fetching';
+  const isOsmFetching = isBuildingFetching || isRoadFetching || isWaterFetching;
 
-  async function fetchBuildings() {
+  /**
+   * Fetch all OSM layers (buildings, roads, water) in a single Overpass request,
+   * then parse each layer from the combined response. One request eliminates 429
+   * rate limiting that occurred with three sequential requests.
+   */
+  async function fetchOsmLayers() {
     if (!bbox) return;
+
+    setBuildingGenerationStatus('fetching', 'Fetching OSM data...');
+    setRoadGenerationStatus('fetching', 'Fetching OSM data...');
+    setWaterGenerationStatus('fetching', 'Fetching OSM data...');
+
     try {
-      setBuildingGenerationStatus('fetching', 'Fetching building data...');
-      const overpassData = await fetchBuildingData(bbox);
-      const features = parseBuildingFeatures(overpassData);
-      setBuildingFeatures(features);
-      setBuildingGenerationStatus('ready', `${features.length} buildings found`);
+      const osmData = await fetchAllOsmData(bbox);
+
+      // Parse each layer from the combined response — parsers filter by tag
+      const buildings = parseBuildingFeatures(osmData);
+      setBuildingFeatures(buildings);
+      setBuildingGenerationStatus('ready', `${buildings.length} buildings found`);
+
+      const roads = parseRoadFeatures(osmData);
+      setRoadFeatures(roads);
+      setRoadGenerationStatus('ready', `${roads.length} roads found`);
+
+      const water = parseWaterFeatures(osmData);
+      setWaterFeatures(water);
+      setWaterGenerationStatus('ready', `${water.length} water bodies found`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Building fetch failed';
+      const message = err instanceof Error ? err.message : 'OSM fetch failed';
       setBuildingGenerationStatus('error', message);
-      // Buildings are optional — terrain preview is still usable
-    }
-  }
-
-  async function fetchRoads() {
-    if (!bbox) return;
-    try {
-      setRoadGenerationStatus('fetching', 'Fetching road data...');
-      const overpassData = await fetchRoadData(bbox);
-      const features = parseRoadFeatures(overpassData);
-      setRoadFeatures(features);
-      setRoadGenerationStatus('ready', `${features.length} roads found`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Road fetch failed';
       setRoadGenerationStatus('error', message);
-      // Roads are optional — terrain preview is still usable
-    }
-  }
-
-  async function fetchWater() {
-    if (!bbox) return;
-    try {
-      setWaterGenerationStatus('fetching', 'Fetching water data...');
-      const overpassData = await fetchWaterData(bbox);
-      const features = parseWaterFeatures(overpassData);
-      setWaterFeatures(features);
-      setWaterGenerationStatus('ready', `${features.length} water bodies found`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Water fetch failed';
       setWaterGenerationStatus('error', message);
     }
   }
@@ -105,9 +95,8 @@ export function GenerateButton() {
       setGenerationStatus('ready', 'Terrain ready');
       setShowPreview(true);
 
-      // Fetch buildings first, then roads, then water — staggered via .finally() to avoid
-      // Overpass rate limiting. Each step runs even if the previous one fails (optional layers).
-      void fetchBuildings().finally(() => void fetchRoads().finally(() => void fetchWater()));
+      // Single Overpass request for all OSM layers — no rate limiting
+      void fetchOsmLayers();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setGenerationStatus('error', message);
@@ -183,74 +172,41 @@ export function GenerateButton() {
         </p>
       )}
 
-      {/* Building fetch status — shown after terrain is ready */}
-      {showPreview && !hasError && buildingGenerationStep && (
+      {/* OSM layer fetch status — single combined request */}
+      {showPreview && !hasError && isOsmFetching && (
+        <p className="text-center text-xs mt-1" style={{ color: '#9ca3af' }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              border: '1.5px solid rgba(156,163,175,0.3)',
+              borderTopColor: '#9ca3af',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+              marginRight: '4px',
+              verticalAlign: 'middle',
+            }}
+            aria-hidden="true"
+          />
+          Fetching OSM data...
+        </p>
+      )}
+      {showPreview && !hasError && !isOsmFetching && buildingGenerationStep && (
         <p className="text-center text-xs mt-1"
            style={{ color: buildingGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
-          {isBuildingFetching && (
-            <span
-              style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                border: '1.5px solid rgba(156,163,175,0.3)',
-                borderTopColor: '#9ca3af',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-                marginRight: '4px',
-                verticalAlign: 'middle',
-              }}
-              aria-hidden="true"
-            />
-          )}
           {buildingGenerationStep}
         </p>
       )}
-
-      {/* Road fetch status — shown after terrain is ready */}
-      {showPreview && !hasError && roadGenerationStep && (
+      {showPreview && !hasError && !isOsmFetching && roadGenerationStep && (
         <p className="text-center text-xs mt-1"
            style={{ color: roadGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
-          {isRoadFetching && (
-            <span
-              style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                border: '1.5px solid rgba(156,163,175,0.3)',
-                borderTopColor: '#9ca3af',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-                marginRight: '4px',
-                verticalAlign: 'middle',
-              }}
-              aria-hidden="true"
-            />
-          )}
           {roadGenerationStep}
         </p>
       )}
-
-      {/* Water fetch status — shown after terrain is ready */}
-      {showPreview && !hasError && waterGenerationStep && (
+      {showPreview && !hasError && !isOsmFetching && waterGenerationStep && (
         <p className="text-center text-xs mt-1"
            style={{ color: waterGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
-          {isWaterFetching && (
-            <span
-              style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                border: '1.5px solid rgba(156,163,175,0.3)',
-                borderTopColor: '#9ca3af',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-                marginRight: '4px',
-                verticalAlign: 'middle',
-              }}
-              aria-hidden="true"
-            />
-          )}
           {waterGenerationStep}
         </p>
       )}

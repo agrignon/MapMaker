@@ -11,7 +11,7 @@ import { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import earcut from 'earcut';
 import { useMapStore } from '../../store/mapStore';
-import { WATER_DEPRESSION_M } from '../../lib/water/depression';
+import { WATER_DEPRESSION_M, pointInRing } from '../../lib/water/depression';
 import { wgs84ToUTM } from '../../lib/utm';
 
 /** Water overlay color — a distinct blue that contrasts with terrain greens/browns */
@@ -50,7 +50,7 @@ export function WaterMesh() {
 
     let zScale: number;
     if (targetReliefMM > 0 && elevRange > 0) {
-      zScale = targetReliefMM / elevRange;
+      zScale = (targetReliefMM / elevRange) * exaggeration;
     } else if (elevRange > 0) {
       zScale = horizontalScale * exaggeration;
       const naturalHeightMM = elevRange * zScale;
@@ -78,15 +78,34 @@ export function WaterMesh() {
       const latRange = bboxNe.lat - bboxSw.lat;
       const gridSize = elevationData.gridSize;
 
+      // Only sample outer ring vertices that fall inside the grid.
+      // Large water bodies extend far beyond the bbox — clamping out-of-bounds
+      // vertices to grid edges corrupts shorelineMin and puts the overlay at wrong Z.
       let shorelineMin = Infinity;
       for (const [lon, lat] of feature.outerRing) {
-        const gx = Math.round(((lon - bboxSw.lon) / lonRange) * (gridSize - 1));
-        const gy = Math.round((1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1));
-        const clampedGx = Math.max(0, Math.min(gridSize - 1, gx));
-        const clampedGy = Math.max(0, Math.min(gridSize - 1, gy));
-        const idx = clampedGy * gridSize + clampedGx;
+        const gx = ((lon - bboxSw.lon) / lonRange) * (gridSize - 1);
+        const gy = (1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1);
+        if (gx < 0 || gx > gridSize - 1 || gy < 0 || gy > gridSize - 1) continue;
+        const idx = Math.round(gy) * gridSize + Math.round(gx);
         shorelineMin = Math.min(shorelineMin, elevationData.elevations[idx]);
       }
+
+      // Fallback: water body envelops the entire bbox (no outer ring vertices in grid).
+      // Sample interior grid cells to find a representative elevation.
+      if (shorelineMin === Infinity) {
+        for (let sgy = 0; sgy < gridSize; sgy += Math.max(1, gridSize >> 3)) {
+          for (let sgx = 0; sgx < gridSize; sgx += Math.max(1, gridSize >> 3)) {
+            const slon = bboxSw.lon + (sgx / (gridSize - 1)) * lonRange;
+            const slat = bboxNe.lat - (sgy / (gridSize - 1)) * latRange;
+            if (pointInRing(slon, slat, feature.outerRing)) {
+              shorelineMin = Math.min(shorelineMin, elevationData.elevations[sgy * gridSize + sgx]);
+            }
+          }
+        }
+      }
+
+      if (shorelineMin === Infinity) continue; // polygon doesn't intersect grid
+
       const depressionElevM = shorelineMin - WATER_DEPRESSION_M;
       const depressionZ = (depressionElevM - elevationData.minElevation) * zScale;
 

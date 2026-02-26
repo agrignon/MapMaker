@@ -26,7 +26,11 @@ export function parseWaterFeatures(osmJson: unknown): WaterFeature[] {
 
   for (const feature of geoJSON.features) {
     if (!feature.geometry || !feature.properties) continue;
+    const props = feature.properties as Record<string, unknown>;
     const geom = feature.geometry;
+
+    // Filter: only features with natural=water or waterway=riverbank tag
+    if (props['natural'] !== 'water' && props['waterway'] !== 'riverbank') continue;
 
     if (geom.type === 'Polygon') {
       const coords = geom.coordinates as number[][][];

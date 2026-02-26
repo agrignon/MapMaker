@@ -65,6 +65,9 @@ export function parseBuildingFeatures(overpassData: unknown): BuildingFeature[] 
     const props = feature.properties as Record<string, unknown>;
     const geometry = feature.geometry;
 
+    // Filter: only features with building or building:part tag
+    if (!props['building'] && !props['building:part']) continue;
+
     if (geometry.type === 'Polygon') {
       const coords = geometry.coordinates as GeoJSONRing[];
       const [outerRing, ...holeRings] = coords;
