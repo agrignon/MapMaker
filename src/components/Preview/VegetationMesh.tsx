@@ -107,35 +107,38 @@ export function VegetationMesh() {
     const latRange = bboxNe.lat - bboxSw.lat;
     const gridSize = elevationData.gridSize;
 
-    // Build flat raised patch geometry for each vegetation polygon
+    // Helper: sample smoothed elevation grid at a lon/lat and return Z in model space
+    const elevMin = elevationData.minElevation;
+    const sampleZ = (lon: number, lat: number): number => {
+      const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((lon - bboxSw.lon) / lonRange) * (gridSize - 1))));
+      const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1))));
+      const elev = smoothedElevations[gy * gridSize + gx];
+      return (elev - elevMin) * zScale + VEGE_HEIGHT_MM;
+    };
+
+    // Build terrain-following vegetation geometry for each polygon
     const allPositions: number[] = [];
     const allIndices: number[] = [];
     let vertexOffset = 0;
 
     for (const feature of vegetationFeatures) {
-      // Centroid Z from smoothed elevation grid
-      const cx = feature.outerRing.reduce((s, p) => s + p[0], 0) / feature.outerRing.length;
-      const cy = feature.outerRing.reduce((s, p) => s + p[1], 0) / feature.outerRing.length;
-      const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((cx - bboxSw.lon) / lonRange) * (gridSize - 1))));
-      const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (cy - bboxSw.lat) / latRange) * (gridSize - 1))));
-      const centerElev = smoothedElevations[gy * gridSize + gx];
-      const vegeZ = (centerElev - elevationData.minElevation) * zScale + VEGE_HEIGHT_MM;
-
       // Smooth polygon edges with Chaikin corner-cutting before projection
       const smoothedOuter = smoothRing(feature.outerRing, CHAIKIN_ITERATIONS);
       const smoothedHoles = feature.holes.map(h => smoothRing(h, CHAIKIN_ITERATIONS));
 
-      // Flatten outer ring + holes for earcut
+      // Flatten outer ring + holes for earcut, computing per-vertex Z from terrain
       const coords2d: number[] = [];
+      const vertexZs: number[] = [];
       const holeIndices: number[] = [];
 
-      // Outer ring — project to model coordinates
+      // Outer ring — project to model coordinates with per-vertex terrain Z
       for (const [lon, lat] of smoothedOuter) {
         const utm = wgs84ToUTM(lon, lat);
         coords2d.push(
           (utm.x - centerUTM.x) * horizontalScale,
           (utm.y - centerUTM.y) * horizontalScale
         );
+        vertexZs.push(sampleZ(lon, lat));
       }
 
       // Hole rings
@@ -147,16 +150,17 @@ export function VegetationMesh() {
             (utm.x - centerUTM.x) * horizontalScale,
             (utm.y - centerUTM.y) * horizontalScale
           );
+          vertexZs.push(sampleZ(lon, lat));
         }
       }
 
       // Triangulate with earcut
       const indices = earcut(coords2d, holeIndices.length > 0 ? holeIndices : undefined, 2);
 
-      // Build 3D positions at vegetation Z
+      // Build 3D positions with per-vertex Z (terrain-following)
       const numPts = coords2d.length / 2;
       for (let i = 0; i < numPts; i++) {
-        allPositions.push(coords2d[i * 2], coords2d[i * 2 + 1], vegeZ);
+        allPositions.push(coords2d[i * 2], coords2d[i * 2 + 1], vertexZs[i]);
       }
       for (const idx of indices) {
         allIndices.push(idx + vertexOffset);

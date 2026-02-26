@@ -2,19 +2,28 @@
  * Three.js road mesh rendered inside an R3F Canvas.
  *
  * Reads roadFeatures and elevationData from the Zustand store.
- * Calls buildRoadGeometry() when features, elevation, or road style change,
- * and rebuilds when exaggeration changes (road Z depends on terrain zScale).
+ * Builds road geometry off-thread via a Web Worker when features,
+ * elevation, or road style change. Rebuilds when exaggeration changes
+ * (road Z depends on terrain zScale).
+ *
+ * Rebuilds are debounced (250ms) so dragging the exaggeration slider doesn't
+ * queue excessive worker requests. Progress is reported via the store's
+ * rebuildingLayers field.
  *
  * Roads are clipped at the terrain edges using four Three.js clipping planes
  * so that edge roads are sliced cleanly rather than overhanging.
  */
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
-import { buildRoadGeometry, ROAD_COLOR } from '../../lib/roads/roadMesh';
+import { ROAD_COLOR } from '../../lib/roads/roadMesh';
+import { buildRoadsInWorker, getRoadSeqId } from '../../workers/meshBuilderClient';
+import type { TerrainMeshParams } from '../../lib/mesh/terrain';
 import { wgs84ToUTM } from '../../lib/utm';
-import type { RoadGeometryParams } from '../../lib/roads/types';
+
+/** Debounce delay in ms — prevents expensive rebuilds while slider is being dragged. */
+const REBUILD_DEBOUNCE_MS = 250;
 
 export function RoadMesh() {
   const roadFeatures = useMapStore((s) => s.roadFeatures);
@@ -23,16 +32,19 @@ export function RoadMesh() {
   const roadStyle = useMapStore((s) => s.roadStyle);
   const elevationData = useMapStore((s) => s.elevationData);
   const exaggeration = useMapStore((s) => s.exaggeration);
+  const smoothingLevel = useMapStore((s) => s.smoothingLevel);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
-  const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
   const targetHeightMM = useMapStore((s) => s.targetHeightMM);
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const utmZone = useMapStore((s) => s.utmZone);
+  const setRebuildingLayers = useMapStore((s) => s.setRebuildingLayers);
 
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seqRef = useRef(0);
 
   // Clipping planes at terrain edges — slice roads cleanly at the model boundary
   const clippingPlanes = useMemo(() => [
@@ -42,8 +54,7 @@ export function RoadMesh() {
     new THREE.Plane(new THREE.Vector3(0, 1, 0), targetDepthMM / 2),   // -Y edge
   ], [targetWidthMM, targetDepthMM]);
 
-  useEffect(() => {
-    // Only build when we have all required data and roads are ready
+  const doRebuild = useCallback(async () => {
     if (
       !roadFeatures ||
       roadFeatures.length === 0 ||
@@ -55,64 +66,122 @@ export function RoadMesh() {
       return;
     }
 
+    setRebuildingLayers('Rebuilding roads...');
+
     // Compute bbox center in UTM space for mesh centering
     const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
     const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
     const centerUTM = wgs84ToUTM(centerLon, centerLat);
 
-    // targetReliefMM: must match TerrainMesh.tsx and BuildingMesh.tsx formula exactly.
-    // No basePlateThicknessMM subtraction — preview doesn't render a base plate.
     const targetReliefMM = targetHeightMM > 0 ? targetHeightMM : 0;
 
-    const params: RoadGeometryParams = {
+    const terrainParams: TerrainMeshParams = {
       widthMM: targetWidthMM,
       depthMM: targetDepthMM,
       geographicWidthM: dimensions.widthM,
       geographicDepthM: dimensions.heightM,
       exaggeration,
-      minElevationM: elevationData.minElevation,
-      bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
-      roadStyle,
+      minHeightMM: 5,
+      maxError: 5,
       targetReliefMM,
     };
 
-    // Dispose previous geometry before building new one
-    const oldGeometry = geometryRef.current;
+    const { promise, seqId } = buildRoadsInWorker(
+      roadFeatures,
+      bbox,
+      elevationData,
+      terrainParams,
+      {
+        widthMM: targetWidthMM,
+        depthMM: targetDepthMM,
+        geographicWidthM: dimensions.widthM,
+        geographicDepthM: dimensions.heightM,
+        exaggeration,
+        minElevationM: elevationData.minElevation,
+        bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
+        roadStyle,
+        targetReliefMM,
+        topFaceOnly: true,
+      },
+      smoothingLevel
+    );
+    seqRef.current = seqId;
 
-    const newGeometry = buildRoadGeometry(roadFeatures, bbox, elevationData, params);
+    try {
+      const arrays = await promise;
 
-    if (newGeometry) {
-      geometryRef.current = newGeometry;
-      if (meshRef.current) {
-        meshRef.current.geometry = newGeometry;
+      // Reject stale result — a newer request was dispatched while we waited
+      if (seqId !== getRoadSeqId()) return;
+
+      const oldGeometry = geometryRef.current;
+
+      if (arrays) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(arrays.positions, 3));
+        if (arrays.normals) {
+          geo.setAttribute('normal', new THREE.BufferAttribute(arrays.normals, 3));
+        }
+        if (arrays.index) {
+          geo.setIndex(new THREE.BufferAttribute(arrays.index, 1));
+        }
+        if (!arrays.normals) {
+          geo.computeVertexNormals();
+        }
+
+        geometryRef.current = geo;
+        if (meshRef.current) {
+          meshRef.current.geometry = geo;
+        }
+      } else {
+        geometryRef.current = null;
+        if (meshRef.current) {
+          meshRef.current.geometry = new THREE.BufferGeometry();
+        }
       }
-    } else {
-      geometryRef.current = null;
-      if (meshRef.current) {
-        meshRef.current.geometry = new THREE.BufferGeometry();
+
+      if (oldGeometry) {
+        oldGeometry.dispose();
       }
+    } catch {
+      // Worker error — leave current geometry in place
     }
 
-    if (oldGeometry) {
-      oldGeometry.dispose();
+    // Only clear status if this is still the latest request
+    if (seqId === getRoadSeqId()) {
+      setRebuildingLayers(null);
     }
   }, [
     roadFeatures,
     roadStyle,
     elevationData,
     exaggeration,
+    smoothingLevel,
     targetWidthMM,
     targetDepthMM,
-    basePlateThicknessMM,
     targetHeightMM,
     dimensions,
     bbox,
     utmZone,
+    setRebuildingLayers,
   ]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    // Debounce: wait for params to stabilize before starting worker request
+    debounceRef.current = setTimeout(() => {
+      doRebuild();
+    }, REBUILD_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [doRebuild]);
 
   // Cleanup geometry on unmount
   useEffect(() => {
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       if (geometryRef.current) {
         geometryRef.current.dispose();
         geometryRef.current = null;

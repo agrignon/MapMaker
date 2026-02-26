@@ -266,6 +266,8 @@ export function ExportPanel() {
       }
 
       // Step 2c: Include vegetation geometry if available and vegetation layer is toggled on
+      // Vegetation is built as enclosed solid slabs (top + bottom + side walls) so
+      // each patch is a watertight shell suitable for 3D printing.
       const hasVegetation = Boolean(vegetationFeatures && vegetationFeatures.length > 0 && vegetationVisible);
 
       if (hasVegetation && vegetationFeatures) {
@@ -294,48 +296,106 @@ export function ExportPanel() {
           vegeZScale = horizontalScale * exaggeration;
         }
 
-        // Build flat raised patch geometry for each vegetation polygon
-        const allVegePositions: number[] = [];
-        const allVegeIndices: number[] = [];
-        let vegeVertexOffset = 0;
         const gridSize = elevationData.gridSize;
         const lonRange = bbox.ne.lon - bbox.sw.lon;
         const latRange = bbox.ne.lat - bbox.sw.lat;
 
-        for (const feature of vegetationFeatures) {
-          // Centroid Z from smoothed elevation grid
-          const cx = feature.outerRing.reduce((s, p) => s + p[0], 0) / feature.outerRing.length;
-          const cy = feature.outerRing.reduce((s, p) => s + p[1], 0) / feature.outerRing.length;
-          const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((cx - bbox.sw.lon) / lonRange) * (gridSize - 1))));
-          const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (cy - bbox.sw.lat) / latRange) * (gridSize - 1))));
-          const centerElev = vegeSmoothed[gy * gridSize + gx];
-          const vegeZ = (centerElev - elevationData.minElevation) * vegeZScale + VEGE_HEIGHT_MM;
+        // Helper: sample terrain Z at lon/lat
+        const sampleTerrainZ = (lon: number, lat: number): number => {
+          const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((lon - bbox.sw.lon) / lonRange) * (gridSize - 1))));
+          const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (lat - bbox.sw.lat) / latRange) * (gridSize - 1))));
+          const elev = vegeSmoothed[gy * gridSize + gx];
+          return (elev - elevationData.minElevation) * vegeZScale;
+        };
 
-          // Flatten outer ring + holes for earcut (same as WaterMesh)
+        // Build enclosed solid slab geometry for each vegetation polygon:
+        // top face (terrain Z + height), bottom face (terrain Z), side walls
+        const allVegePositions: number[] = [];
+        const allVegeIndices: number[] = [];
+        let vegeVertexOffset = 0;
+
+        for (const feature of vegetationFeatures) {
+          // Flatten outer ring + holes for earcut
           const coords2d: number[] = [];
+          const topZs: number[] = [];
+          const botZs: number[] = [];
           const holeIndices: number[] = [];
 
+          // Outer ring — project and compute per-vertex terrain Z
           for (const [lon, lat] of feature.outerRing) {
             const utm = wgs84ToUTM(lon, lat);
             coords2d.push((utm.x - centerUTM.x) * horizontalScale, (utm.y - centerUTM.y) * horizontalScale);
+            const tZ = sampleTerrainZ(lon, lat);
+            topZs.push(tZ + VEGE_HEIGHT_MM);
+            botZs.push(tZ);
           }
           for (const hole of feature.holes) {
             holeIndices.push(coords2d.length / 2);
             for (const [lon, lat] of hole) {
               const utm = wgs84ToUTM(lon, lat);
               coords2d.push((utm.x - centerUTM.x) * horizontalScale, (utm.y - centerUTM.y) * horizontalScale);
+              const tZ = sampleTerrainZ(lon, lat);
+              topZs.push(tZ + VEGE_HEIGHT_MM);
+              botZs.push(tZ);
             }
           }
 
-          const indices = earcut(coords2d, holeIndices.length > 0 ? holeIndices : undefined, 2);
+          const triIndices = earcut(coords2d, holeIndices.length > 0 ? holeIndices : undefined, 2);
           const numPts = coords2d.length / 2;
+
+          // --- Top face (outward normal +Z) ---
+          const topBase = vegeVertexOffset;
           for (let i = 0; i < numPts; i++) {
-            allVegePositions.push(coords2d[i * 2], coords2d[i * 2 + 1], vegeZ);
+            allVegePositions.push(coords2d[i * 2], coords2d[i * 2 + 1], topZs[i]);
           }
-          for (const idx of indices) {
-            allVegeIndices.push(idx + vegeVertexOffset);
+          for (const idx of triIndices) {
+            allVegeIndices.push(idx + topBase);
           }
           vegeVertexOffset += numPts;
+
+          // --- Bottom face (outward normal -Z, reversed winding) ---
+          const botBase = vegeVertexOffset;
+          for (let i = 0; i < numPts; i++) {
+            allVegePositions.push(coords2d[i * 2], coords2d[i * 2 + 1], botZs[i]);
+          }
+          // Reversed winding: swap second and third vertex of each triangle
+          for (let t = 0; t < triIndices.length; t += 3) {
+            allVegeIndices.push(triIndices[t] + botBase);
+            allVegeIndices.push(triIndices[t + 2] + botBase);
+            allVegeIndices.push(triIndices[t + 1] + botBase);
+          }
+          vegeVertexOffset += numPts;
+
+          // --- Side walls around each ring boundary ---
+          // Builds quads connecting top and bottom perimeter vertices.
+          // Outer ring: outward-facing normals. Hole rings: inward-facing.
+          const outerLen = feature.outerRing.length;
+          const buildWalls = (ringStart: number, ringLen: number, outward: boolean) => {
+            for (let i = 0; i < ringLen; i++) {
+              const j = (i + 1) % ringLen;
+              const ti = topBase + ringStart + i;
+              const tj = topBase + ringStart + j;
+              const bi = botBase + ringStart + i;
+              const bj = botBase + ringStart + j;
+              if (outward) {
+                // CCW from outside: ti → bi → bj, ti → bj → tj
+                allVegeIndices.push(ti, bi, bj);
+                allVegeIndices.push(ti, bj, tj);
+              } else {
+                // Reversed for holes: ti → bj → bi, ti → tj → bj
+                allVegeIndices.push(ti, bj, bi);
+                allVegeIndices.push(ti, tj, bj);
+              }
+            }
+          };
+
+          buildWalls(0, outerLen, true);
+          // Hole walls
+          let holeStart = outerLen;
+          for (const hole of feature.holes) {
+            buildWalls(holeStart, hole.length, false);
+            holeStart += hole.length;
+          }
         }
 
         if (allVegePositions.length > 0) {
@@ -348,7 +408,7 @@ export function ExportPanel() {
           const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2, targetDepthMM / 2);
           vegeGeo.dispose();
 
-          // Merge vegetation into export (same additive merge as roads)
+          // Merge vegetation into export (each patch is an enclosed solid shell)
           const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
           const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
           const vegeNonIndexed = clippedVege.index ? clippedVege.toNonIndexed() : clippedVege;
