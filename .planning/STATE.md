@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: active
-last_updated: "2026-02-26T07:51:00.000Z"
+status: unknown
+last_updated: "2026-02-26T07:59:25.185Z"
 progress:
   total_phases: 7
-  completed_phases: 6
-  total_plans: 20
-  completed_plans: 20
+  completed_phases: 7
+  total_plans: 21
+  completed_plans: 21
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 7 — Vegetation / Terrain Smoothing (in progress)
+**Current focus:** Phase 7 — Vegetation / Terrain Smoothing (complete)
 
 ## Current Position
 
-Phase: 7 — Vegetation / Terrain Smoothing (in progress)
-Plan: 1 of 1 complete — Phase 7 Plan 01 done: Terrain smoothing slider (smoothElevations exported, caller-side pipeline, store field, TerrainSection UI)
-Status: Phase 7 Plan 01 complete; TERR-04 done; 176 total tests passing
-Last activity: 2026-02-26 — Plan 07-01 complete: user-controlled terrain smoothing slider (0-100%) wired end-to-end in preview and export pipeline
+Phase: 7 — Vegetation / Terrain Smoothing (complete)
+Plan: 2 of 2 complete — Phase 7 Plan 02 done: Vegetation layer (VegetationMesh, VegetationSection, export integration, VEGE-01)
+Status: Phase 7 complete; TERR-04 + VEGE-01 done; 176 total tests passing
+Last activity: 2026-02-26 — Plan 07-02 complete: vegetation layer end-to-end (parks/forests as green raised patches in preview and STL export)
 
 Progress: [██████████] 100%
 
@@ -63,6 +63,7 @@ Progress: [██████████] 100%
 | Phase 06-water-layer P01 | 3 | 2 tasks | 6 files |
 | Phase 06-water-layer P02 | 4 | 2 tasks | 9 files |
 | Phase 07-vegetation-terrain-smoothing P01 | 2 | 2 tasks | 6 files |
+| Phase 07-vegetation-terrain-smoothing P02 | 4 | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,9 @@ Recent decisions affecting current work:
 - [Phase 06-water-layer]: generateFilename hasWater param adds -water suffix — extends terrain[-buildings][-roads] pattern; no breaking change (default false)
 - [Phase 07-vegetation-terrain-smoothing 07-01]: smoothElevations moved to caller-side — buildTerrainGeometry receives pre-smoothed data; pipeline order: smoothElevations → applyWaterDepressions → buildTerrainGeometry
 - [Phase 07-vegetation-terrain-smoothing 07-01]: Radius formula Math.round((smoothingLevel/100)*8) — level=25 → radius=2 (matches old default), level=0 → no smoothing, level=100 → radius=8
+- [Phase 07-vegetation-terrain-smoothing]: VegetationMesh Z uses polygon centroid sampled from smoothed elevation grid — flat plateau per feature, tracks smoothing slider
+- [Phase 07-vegetation-terrain-smoothing]: polygonOffsetFactor=-4 for vegetation (less than water's -6) ensures vegetation renders below water at overlaps without exclusion logic
+- [Phase 07-vegetation-terrain-smoothing]: MIN_VEGE_AREA_M2=2500 (50m x 50m) filters pocket parks too small to print at typical 150mm model scale
 
 ### Pending Todos
 
@@ -157,5 +161,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 07-01-PLAN.md — Terrain smoothing slider (smoothElevations exported, hardcoded smoothing removed, smoothingLevel store field, TerrainSection slider UI, caller-side pipeline in TerrainMesh/ExportPanel/WaterMesh); 176 total tests passing
+Stopped at: Completed 07-02-PLAN.md — Vegetation layer end-to-end (VegetationFeature type, parseVegetationFeatures parser, Overpass extension, store fields, GenerateButton wiring, VegetationMesh, VegetationSection, PreviewCanvas/Sidebar wiring, ExportPanel export, generateFilename -vegetation suffix); VEGE-01 done; 176 total tests passing
 Resume file: None
