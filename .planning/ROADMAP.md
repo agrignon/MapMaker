@@ -127,7 +127,11 @@ Plans:
   2. User can drag a smoothing slider, and the 3D terrain preview updates to show smoother elevation transitions — raw 30m SRTM step artifacts are visibly reduced at higher smoothing values
   3. Smoothing is applied to the DEM elevation grid before feature placement — buildings, roads, and water depressions remain correctly positioned after smoothing is increased
   4. Vegetation layer count is displayed next to the vegetation toggle — a zero-feature result ("Vegetation — 0 features found") is shown rather than a silent empty layer
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Terrain smoothing slider: export smoothElevations, remove hardcoded smoothing from buildTerrainGeometry, add smoothingLevel store field + slider UI, wire caller-side smoothing into TerrainMesh/ExportPanel/WaterMesh
+- [ ] 07-02-PLAN.md — Vegetation layer: data pipeline (types, parser, Overpass extension), VegetationMesh preview component, VegetationSection sidebar UI, STL export integration
 
 ### Phase 8: Edit-Iterate + Export Polish
 **Goal**: Users can navigate between editing and preview without losing state, the preview reflects changes live, and exported STL filenames include the searched location name
@@ -162,6 +166,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Model Controls + Store Foundation | 3/3 | Complete   | 2026-02-25 |
 | 5. Roads Layer | 3/3 | Complete   | 2026-02-26 |
 | 6. Water Layer | 2/2 | Complete   | 2026-02-26 |
-| 7. Vegetation + Terrain Smoothing | 0/TBD | Not started | - |
+| 7. Vegetation + Terrain Smoothing | 0/2 | Not started | - |
 | 8. Edit-Iterate + Export Polish | 0/TBD | Not started | - |
 | 9. Performance Hardening | 0/TBD | Not started | - |
