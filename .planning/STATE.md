@@ -1,3 +1,16 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-02-26T02:28:22.335Z"
+progress:
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 17
+  completed_plans: 17
+---
+
 # Project State
 
 ## Project Reference
@@ -10,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 5 — Roads Layer (complete)
-Plan: 2 of 2 complete — Phase 5 Plan 02 done: road layer UI wiring (store state, RoadMesh, RoadsSection, GenerateButton, STL export)
+Plan: 3 of 3 complete — Phase 5 Plan 03 done: UAT gap closure — Z-fighting fix, Overpass staggering, building base Z, export clipping, all 6 UAT tests passing
 Status: v1.0 roadmap — 30/34 requirements complete (ROAD-01, ROAD-02, ROAD-03 complete), 4 remaining requirements mapped to Phases 6-9
-Last activity: 2026-02-25 — Plan 05-02 complete: road layer wired end-to-end; RoadMesh in 3D preview, style toggle UI, parallel fetch, STL export integration
+Last activity: 2026-02-25 — Plan 05-03 complete: all 6 phase-5 road UAT failures closed; roads visible, toggleable, exportable; building base and export clipping fixed
 
 Progress: [████████░░] ~75%
 
@@ -109,6 +122,10 @@ Recent decisions affecting current work:
 - [Phase 05-roads-layer]: Bridge lift = ROAD_DEPTH_MM[tier] * 2; UV never set on road geometry to avoid mergeGeometries attribute mismatch with terrain/buildings
 - [Phase 05-roads-layer 05-02]: Roads merged via mergeGeometries (not CSG) in export — roads are additive geometry; CSG reserved for buildings
 - [Phase 05-roads-layer 05-02]: generateFilename unified suffix builder — terrain[-buildings][-roads] covers all 4 layer combinations with hasRoads=false default for backward compat
+- [Phase 05-roads-layer]: Road mesh Z-fighting fix combines position offset (0.1 world units) + polygonOffset material flags — dual approach covers all GPU depth-buffer scenarios
+- [Phase 05-roads-layer]: Road fetch chained via .finally() not .then() — buildings and roads are both optional; building failure must not silently skip road fetch
+- [Phase 05-roads-layer]: Building base Z uses Math.min (lowest terrain sample) — uphill walls extend below terrain and are hidden by occlusion; gives flush base without extra geometry
+- [Phase 05-roads-layer]: Sutherland-Hodgman clipping applied only in export path (ExportPanel) — preview mesh unclipped for speed; STL clips to ±width/2, ±depth/2 footprint
 
 ### Pending Todos
 
@@ -131,5 +148,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-25
-Stopped at: Completed 05-roads-layer 05-02-PLAN.md — road layer complete end-to-end (store, RoadMesh, RoadsSection, GenerateButton fetch, STL export); Phase 5 complete; ready for Phase 6 (Water)
+Stopped at: Completed 05-03-PLAN.md — Phase 5 UAT gap closure (all 6 tests passing, SUMMARY.md created)
 Resume file: None
