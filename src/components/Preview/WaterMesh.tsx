@@ -17,6 +17,32 @@ import { wgs84ToUTM } from '../../lib/utm';
 /** Water overlay color — a distinct blue that contrasts with terrain greens/browns */
 const WATER_COLOR = '#3b82f6';
 
+/** Chaikin corner-cutting iterations — smooths angular OSM polygon edges. */
+const CHAIKIN_ITERATIONS = 3;
+
+/**
+ * Chaikin's corner-cutting algorithm: replaces each edge with two points at
+ * 25% and 75%, producing a smooth curve after a few iterations. The ring
+ * is kept closed (first === last).
+ */
+function smoothRing(ring: [number, number][], iterations: number): [number, number][] {
+  let pts = ring;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next: [number, number][] = [];
+    // Closed ring: last point === first, iterate up to length - 1
+    const n = pts.length - 1; // exclude closing duplicate
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % n];
+      next.push([x0 * 0.75 + x1 * 0.25, y0 * 0.75 + y1 * 0.25]);
+      next.push([x0 * 0.25 + x1 * 0.75, y0 * 0.25 + y1 * 0.75]);
+    }
+    next.push(next[0]); // close the ring
+    pts = next;
+  }
+  return pts;
+}
+
 export function WaterMesh() {
   const waterFeatures = useMapStore((s) => s.waterFeatures);
   const waterGenerationStatus = useMapStore((s) => s.waterGenerationStatus);
@@ -109,12 +135,16 @@ export function WaterMesh() {
       const depressionElevM = shorelineMin - WATER_DEPRESSION_M;
       const depressionZ = (depressionElevM - elevationData.minElevation) * zScale;
 
+      // Smooth polygon edges with Chaikin corner-cutting before projection
+      const smoothedOuter = smoothRing(feature.outerRing, CHAIKIN_ITERATIONS);
+      const smoothedHoles = feature.holes.map(h => smoothRing(h, CHAIKIN_ITERATIONS));
+
       // Flatten outer ring + holes for earcut
       const coords2d: number[] = [];
       const holeIndices: number[] = [];
 
       // Outer ring — project to model coordinates
-      for (const [lon, lat] of feature.outerRing) {
+      for (const [lon, lat] of smoothedOuter) {
         const utm = wgs84ToUTM(lon, lat);
         const x = (utm.x - centerUTM.x) * horizontalScale;
         const y = (utm.y - centerUTM.y) * horizontalScale;
@@ -122,7 +152,7 @@ export function WaterMesh() {
       }
 
       // Hole rings
-      for (const hole of feature.holes) {
+      for (const hole of smoothedHoles) {
         holeIndices.push(coords2d.length / 2);
         for (const [lon, lat] of hole) {
           const utm = wgs84ToUTM(lon, lat);
