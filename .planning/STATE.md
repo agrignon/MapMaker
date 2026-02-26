@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T02:31:49.463Z"
+last_updated: "2026-02-26T06:10:28.131Z"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 19
+  completed_plans: 18
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 5 — Roads (complete)
+**Current focus:** Phase 6 — Water Layer (in progress)
 
 ## Current Position
 
-Phase: 5 — Roads Layer (complete)
-Plan: 3 of 3 complete — Phase 5 Plan 03 done: UAT gap closure — Z-fighting fix, Overpass staggering, building base Z, export clipping, all 6 UAT tests passing
-Status: v1.0 roadmap — 30/34 requirements complete (ROAD-01, ROAD-02, ROAD-03 complete), 4 remaining requirements mapped to Phases 6-9
-Last activity: 2026-02-25 — Plan 05-03 complete: all 6 phase-5 road UAT failures closed; roads visible, toggleable, exportable; building base and export clipping fixed
+Phase: 6 — Water Layer (in progress)
+Plan: 1 of 2 complete — Phase 6 Plan 01 done: Water library TDD — types, overpass, parse, depression; 14 unit tests passing
+Status: v1.0 roadmap — WATR-01 complete, 1 remaining requirement (WATR-02) mapped to Phase 6 Plan 02
+Last activity: 2026-02-26 — Plan 06-01 complete: water data pipeline built (fetchWaterData, parseWaterFeatures, applyWaterDepressions); 176 total tests passing
 
-Progress: [████████░░] ~75%
+Progress: [████████░░] ~78%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [████████░░] ~75%
 | Phase 04-model-controls-store-foundation P03 | 3 | 2 tasks | 6 files |
 | Phase 05-roads-layer P01 | 6 | 2 tasks | 9 files |
 | Phase 05-roads-layer P02 | 4 | 2 tasks | 8 files |
+| Phase 06-water-layer P01 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,8 @@ Recent decisions affecting current work:
 - [Phase 05-roads-layer]: Road fetch chained via .finally() not .then() — buildings and roads are both optional; building failure must not silently skip road fetch
 - [Phase 05-roads-layer]: Building base Z uses Math.min (lowest terrain sample) — uphill walls extend below terrain and are hidden by occlusion; gives flush base without extra geometry
 - [Phase 05-roads-layer]: Sutherland-Hodgman clipping applied only in export path (ExportPanel) — preview mesh unclipped for speed; STL clips to ±width/2, ±depth/2 footprint
+- [Phase 06-water-layer]: Water depression baked into elevation grid at WATER_DEPRESSION_M=3.0m below shoreline minimum; island holes excluded via ray-cast point-in-ring
+- [Phase 06-water-layer]: Overpass water query uses relation member recursion (>;out skel qt;) to reconstruct MultiPolygon water bodies from OSM relations
 
 ### Pending Todos
 
@@ -147,6 +150,6 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 
 ## Session Continuity
 
-Last session: 2026-02-25
-Stopped at: Completed 05-03-PLAN.md — Phase 5 UAT gap closure (all 6 tests passing, SUMMARY.md created)
+Last session: 2026-02-26
+Stopped at: Completed 06-01-PLAN.md — Water library module TDD (types, overpass, parse, depression); 14 unit tests, 176 total passing
 Resume file: None

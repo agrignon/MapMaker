@@ -35,7 +35,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Water
 
-- [ ] **WATR-01**: User sees water bodies (rivers, lakes, ocean) rendered as flat depressions at water level within the selected area
+- [x] **WATR-01**: User sees water bodies (rivers, lakes, ocean) rendered as flat depressions at water level within the selected area
 
 ### Vegetation
 
@@ -135,7 +135,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ROAD-01 | Phase 5 | Complete |
 | ROAD-02 | Phase 5 | Complete |
 | ROAD-03 | Phase 5 | Complete |
-| WATR-01 | Phase 6 | Pending |
+| WATR-01 | Phase 6 | Complete |
 | VEGE-01 | Phase 7 | Pending |
 | TERR-04 | Phase 7 | Pending |
 | PREV-03 | Phase 8 | Pending |

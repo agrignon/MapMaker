@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Buildings | 3/3 | Complete | 2026-02-25 |
 | 4. Model Controls + Store Foundation | 3/3 | Complete   | 2026-02-25 |
 | 5. Roads Layer | 3/3 | Complete   | 2026-02-26 |
-| 6. Water Layer | 0/TBD | Not started | - |
+| 6. Water Layer | 1/2 | In Progress|  |
 | 7. Vegetation + Terrain Smoothing | 0/TBD | Not started | - |
 | 8. Edit-Iterate + Export Polish | 0/TBD | Not started | - |
 | 9. Performance Hardening | 0/TBD | Not started | - |
