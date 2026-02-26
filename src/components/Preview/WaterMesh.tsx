@@ -78,9 +78,18 @@ export function WaterMesh() {
       ? smoothElevations(elevationData.elevations, elevationData.gridSize, radius)
       : elevationData.elevations;
 
+    // Compute smoothed min/max to match terrain.ts (buildTerrainGeometry:149-154)
+    // CRITICAL: terrain uses smoothed min/max for elevRange and Z offset.
+    // Using raw elevationData.min/max causes Z mismatch → floating water overlay.
+    let smoothedMin = Infinity, smoothedMax = -Infinity;
+    for (let i = 0; i < smoothedElevations.length; i++) {
+      if (smoothedElevations[i] < smoothedMin) smoothedMin = smoothedElevations[i];
+      if (smoothedElevations[i] > smoothedMax) smoothedMax = smoothedElevations[i];
+    }
+
     // Compute scaling parameters (same formula as terrain/roads/buildings)
     const horizontalScale = targetWidthMM / dimensions.widthM;
-    const elevRange = elevationData.maxElevation - elevationData.minElevation;
+    const elevRange = smoothedMax - smoothedMin;
     const targetReliefMM = targetHeightMM > 0 ? targetHeightMM : 0;
 
     let zScale: number;
@@ -142,7 +151,7 @@ export function WaterMesh() {
       if (shorelineMin === Infinity) continue; // polygon doesn't intersect grid
 
       const depressionElevM = shorelineMin - WATER_DEPRESSION_M;
-      const depressionZ = (depressionElevM - elevationData.minElevation) * zScale;
+      const depressionZ = (depressionElevM - smoothedMin) * zScale;
 
       // Smooth polygon edges with Chaikin corner-cutting before projection
       const smoothedOuter = smoothRing(feature.outerRing, CHAIKIN_ITERATIONS);

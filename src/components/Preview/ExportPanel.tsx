@@ -278,13 +278,22 @@ export function ExportPanel() {
         const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
         const centerUTM = wgs84ToUTM(centerLon, centerLat);
         const horizontalScale = targetWidthMM / dimensions.widthM;
-        const elevRange = elevationData.maxElevation - elevationData.minElevation;
 
         // Use same smoothed data as terrain for Z sampling
         const vegeRadius = Math.round((smoothingLevel / 100) * 8);
         const vegeSmoothed = vegeRadius > 0
           ? smoothElevations(elevationData.elevations, elevationData.gridSize, vegeRadius)
           : elevationData.elevations;
+
+        // Compute smoothed min/max to match terrain.ts (buildTerrainGeometry:149-154)
+        // CRITICAL: terrain uses smoothed min/max for elevRange and Z offset.
+        // Using raw elevationData.min/max causes Z mismatch → floating vegetation.
+        let vegeSmoothedMin = Infinity, vegeSmoothedMax = -Infinity;
+        for (let i = 0; i < vegeSmoothed.length; i++) {
+          if (vegeSmoothed[i] < vegeSmoothedMin) vegeSmoothedMin = vegeSmoothed[i];
+          if (vegeSmoothed[i] > vegeSmoothedMax) vegeSmoothedMax = vegeSmoothed[i];
+        }
+        const elevRange = vegeSmoothedMax - vegeSmoothedMin;
 
         let vegeZScale: number;
         if (targetReliefMM > 0 && elevRange > 0) {
@@ -305,7 +314,7 @@ export function ExportPanel() {
           const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((lon - bbox.sw.lon) / lonRange) * (gridSize - 1))));
           const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (lat - bbox.sw.lat) / latRange) * (gridSize - 1))));
           const elev = vegeSmoothed[gy * gridSize + gx];
-          return (elev - elevationData.minElevation) * vegeZScale;
+          return (elev - vegeSmoothedMin) * vegeZScale;
         };
 
         // Build enclosed solid slab geometry for each vegetation polygon:

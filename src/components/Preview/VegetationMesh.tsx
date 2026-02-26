@@ -80,9 +80,18 @@ export function VegetationMesh() {
       ? smoothElevations(elevationData.elevations, elevationData.gridSize, radius)
       : elevationData.elevations;
 
+    // Compute smoothed min/max to match terrain.ts (buildTerrainGeometry:149-154)
+    // CRITICAL: terrain uses smoothed min/max for elevRange and Z offset.
+    // Using raw elevationData.min/max causes Z mismatch → floating vegetation.
+    let smoothedMin = Infinity, smoothedMax = -Infinity;
+    for (let i = 0; i < smoothedElevations.length; i++) {
+      if (smoothedElevations[i] < smoothedMin) smoothedMin = smoothedElevations[i];
+      if (smoothedElevations[i] > smoothedMax) smoothedMax = smoothedElevations[i];
+    }
+
     // Compute scaling parameters (same formula as terrain/roads/buildings/water)
     const horizontalScale = targetWidthMM / dimensions.widthM;
-    const elevRange = elevationData.maxElevation - elevationData.minElevation;
+    const elevRange = smoothedMax - smoothedMin;
     const targetReliefMM = targetHeightMM > 0 ? targetHeightMM : 0;
 
     let zScale: number;
@@ -108,7 +117,7 @@ export function VegetationMesh() {
     const gridSize = elevationData.gridSize;
 
     // Helper: sample smoothed elevation grid at a lon/lat and return Z in model space
-    const elevMin = elevationData.minElevation;
+    const elevMin = smoothedMin;
     const sampleZ = (lon: number, lat: number): number => {
       const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((lon - bboxSw.lon) / lonRange) * (gridSize - 1))));
       const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1))));
