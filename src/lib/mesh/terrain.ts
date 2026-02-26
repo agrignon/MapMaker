@@ -63,6 +63,72 @@ export function elevationToColor(t: number): [number, number, number] {
 }
 
 /**
+ * Smooth an elevation grid using a separable Gaussian blur (two 1D passes).
+ * Edge pixels are handled via weight normalization (no padding needed).
+ *
+ * @param elevations  Flat Float32Array of gridSize×gridSize elevation samples
+ * @param gridSize    Side length of the square grid
+ * @param radius      Kernel radius (effective kernel width = 2*radius + 1)
+ * @returns           New Float32Array with smoothed elevations
+ */
+export function smoothElevations(
+  elevations: Float32Array,
+  gridSize: number,
+  radius: number
+): Float32Array {
+  if (radius <= 0) return new Float32Array(elevations);
+
+  const sigma = radius / 2;
+  const kernelSize = 2 * radius + 1;
+  const kernel = new Float32Array(kernelSize);
+
+  // Build 1D Gaussian kernel
+  for (let i = 0; i < kernelSize; i++) {
+    const x = i - radius;
+    kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+  }
+
+  const temp = new Float32Array(gridSize * gridSize);
+  const out = new Float32Array(gridSize * gridSize);
+
+  // Horizontal pass → temp
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      let sum = 0;
+      let wt = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const c = col + k;
+        if (c >= 0 && c < gridSize) {
+          const w = kernel[k + radius];
+          sum += elevations[row * gridSize + c] * w;
+          wt += w;
+        }
+      }
+      temp[row * gridSize + col] = sum / wt;
+    }
+  }
+
+  // Vertical pass → out
+  for (let col = 0; col < gridSize; col++) {
+    for (let row = 0; row < gridSize; row++) {
+      let sum = 0;
+      let wt = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const r = row + k;
+        if (r >= 0 && r < gridSize) {
+          const w = kernel[k + radius];
+          sum += temp[r * gridSize + col] * w;
+          wt += w;
+        }
+      }
+      out[row * gridSize + col] = sum / wt;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Build a Three.js BufferGeometry terrain mesh from elevation data using Martini RTIN.
  *
  * The mesh is centered at origin (X and Y centered, Z=0 at base).
@@ -75,15 +141,27 @@ export function buildTerrainGeometry(
   const { gridSize, elevations, minElevation, maxElevation } = elevationData;
   const { widthMM, depthMM, geographicWidthM, geographicDepthM, exaggeration, minHeightMM, maxError, targetReliefMM } = params;
 
+  // 0. Callers are responsible for smoothing before calling buildTerrainGeometry.
+  //    smoothElevations is exported for caller-side use.
+  const smoothed = elevations;
+
+  // Recompute min/max from smoothed data
+  let smoothedMin = Infinity;
+  let smoothedMax = -Infinity;
+  for (let i = 0; i < smoothed.length; i++) {
+    if (smoothed[i] < smoothedMin) smoothedMin = smoothed[i];
+    if (smoothed[i] > smoothedMax) smoothedMax = smoothed[i];
+  }
+
   // 1. Build martini mesh using RTIN algorithm
   const martini = new Martini(gridSize);
-  const tile = martini.createTile(elevations);
+  const tile = martini.createTile(smoothed);
   const { vertices, triangles } = tile.getMesh(maxError);
 
   const vertexCount = vertices.length / 2;
 
-  // 2. Compute elevation range
-  const elevRange = maxElevation - minElevation;
+  // 2. Compute elevation range (from smoothed data)
+  const elevRange = smoothedMax - smoothedMin;
 
   // 3. Compute Z scaling proportional to horizontal scale
   // horizontalScale = mm per meter of real-world distance
@@ -118,8 +196,8 @@ export function buildTerrainGeometry(
     const vx = vertices[i * 2];
     const vy = vertices[i * 2 + 1];
 
-    // Sample elevation at this vertex
-    const elevation = elevations[vy * gridSize + vx];
+    // Sample elevation at this vertex (from smoothed grid)
+    const elevation = smoothed[vy * gridSize + vx];
 
     // X: map to widthMM, centered
     const x = (vx / (gridSize - 1)) * widthMM - widthMM / 2;
@@ -133,7 +211,7 @@ export function buildTerrainGeometry(
     if (elevRange === 0) {
       z = minHeightMM;
     } else {
-      z = (elevation - minElevation) * zScale;
+      z = (elevation - smoothedMin) * zScale;
     }
 
     positions[i * 3]     = x;
@@ -141,7 +219,7 @@ export function buildTerrainGeometry(
     positions[i * 3 + 2] = z;
 
     // Vertex color from hypsometric tint
-    const t = elevRange > 0 ? (elevation - minElevation) / elevRange : 0;
+    const t = elevRange > 0 ? (elevation - smoothedMin) / elevRange : 0;
     const [r, g, b] = elevationToColor(t);
     colors[i * 3]     = r;
     colors[i * 3 + 1] = g;
@@ -167,13 +245,23 @@ export function updateTerrainElevation(
   elevationData: ElevationData,
   params: TerrainMeshParams
 ): void {
-  const { gridSize, elevations, minElevation, maxElevation } = elevationData;
+  const { gridSize, elevations } = elevationData;
   const { widthMM, depthMM, geographicWidthM, exaggeration, minHeightMM, targetReliefMM } = params;
+
+  // Callers are responsible for smoothing before calling updateTerrainElevation.
+  const smoothed = elevations;
+
+  let smoothedMin = Infinity;
+  let smoothedMax = -Infinity;
+  for (let i = 0; i < smoothed.length; i++) {
+    if (smoothed[i] < smoothedMin) smoothedMin = smoothed[i];
+    if (smoothed[i] > smoothedMax) smoothedMax = smoothed[i];
+  }
 
   const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
   const vertexCount = positionAttribute.count;
 
-  const elevRange = maxElevation - minElevation;
+  const elevRange = smoothedMax - smoothedMin;
   const horizontalScale = widthMM / geographicWidthM;
 
   let zScale: number;
@@ -203,13 +291,13 @@ export function updateTerrainElevation(
     // => vy = (1 - (y + depthMM/2) / depthMM) * (gridSize-1)
     const vy = Math.round((1 - (y + depthMM / 2) / depthMM) * (gridSize - 1));
 
-    const elevation = elevations[vy * gridSize + vx];
+    const elevation = smoothed[vy * gridSize + vx];
 
     let z: number;
     if (elevRange === 0) {
       z = minHeightMM;
     } else {
-      z = (elevation - minElevation) * zScale;
+      z = (elevation - smoothedMin) * zScale;
     }
 
     positionAttribute.setZ(i, z);

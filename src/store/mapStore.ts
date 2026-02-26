@@ -48,6 +48,8 @@ interface MapState {
   waterFeatures: WaterFeature[] | null;
   waterGenerationStatus: 'idle' | 'fetching' | 'ready' | 'error';
   waterGenerationStep: string;
+  // Terrain smoothing level (0-100, default 25)
+  smoothingLevel: number;
 }
 
 interface MapActions {
@@ -79,6 +81,7 @@ interface MapActions {
   // Water actions
   setWaterFeatures: (features: WaterFeature[] | null) => void;
   setWaterGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
+  setSmoothingLevel: (value: number) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -123,6 +126,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   waterFeatures: null,
   waterGenerationStatus: 'idle',
   waterGenerationStep: '',
+  // Terrain smoothing defaults
+  smoothingLevel: 25,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -211,4 +216,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setRebuildingLayers: (status) => set({ rebuildingLayers: status }),
   setWaterFeatures: (features) => set({ waterFeatures: features }),
   setWaterGenerationStatus: (status, step = '') => set({ waterGenerationStatus: status, waterGenerationStep: step }),
+  setSmoothingLevel: (value) => set({ smoothingLevel: value }),
 }));

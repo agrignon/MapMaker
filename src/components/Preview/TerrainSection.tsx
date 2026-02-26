@@ -4,10 +4,12 @@ import { CollapsibleSection } from './CollapsibleSection';
 export function TerrainSection() {
   const exaggeration = useMapStore((s) => s.exaggeration);
   const basePlateThicknessMM = useMapStore((s) => s.basePlateThicknessMM);
+  const smoothingLevel = useMapStore((s) => s.smoothingLevel);
   const setExaggeration = useMapStore((s) => s.setExaggeration);
   const setBasePlateThicknessMM = useMapStore((s) => s.setBasePlateThicknessMM);
+  const setSmoothingLevel = useMapStore((s) => s.setSmoothingLevel);
 
-  const summary = `${exaggeration.toFixed(1)}x exag, ${basePlateThicknessMM}mm base`;
+  const summary = `${exaggeration.toFixed(1)}x exag, ${smoothingLevel}% smooth, ${basePlateThicknessMM}mm base`;
 
   return (
     <CollapsibleSection
@@ -59,6 +61,52 @@ export function TerrainSection() {
           >
             <span>0.5x</span>
             <span>5.0x</span>
+          </div>
+        </div>
+
+        {/* Terrain Smoothing */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <label
+              htmlFor="smoothing-slider"
+              style={{ color: '#d1d5db', fontSize: '13px', fontWeight: 500 }}
+            >
+              Smoothing
+            </label>
+            <span style={{ color: '#93c5fd', fontSize: '13px', fontWeight: 600 }}>
+              {smoothingLevel}%
+            </span>
+          </div>
+          <input
+            id="smoothing-slider"
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={smoothingLevel}
+            onChange={(e) => setSmoothingLevel(parseInt(e.target.value, 10))}
+            style={{
+              width: '100%',
+              accentColor: '#3b82f6',
+              cursor: 'pointer',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              color: '#6b7280',
+              fontSize: '11px',
+            }}
+          >
+            <span>Raw</span>
+            <span>Smooth</span>
           </div>
         </div>
 
