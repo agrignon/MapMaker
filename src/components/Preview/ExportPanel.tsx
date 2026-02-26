@@ -20,6 +20,8 @@ import { buildRoadGeometry } from '../../lib/roads/roadMesh';
 import { clipGeometryToFootprint } from '../../lib/export/clipGeometry';
 import { wgs84ToUTM } from '../../lib/utm';
 import { applyWaterDepressions } from '../../lib/water/depression';
+import { VEGE_HEIGHT_MM } from '../../lib/vegetation/elevation';
+import earcut from 'earcut';
 import type { BuildingGeometryParams } from '../../lib/buildings/types';
 import type { RoadGeometryParams } from '../../lib/roads/types';
 
@@ -60,6 +62,8 @@ export function ExportPanel() {
   const roadStyle = useMapStore((s) => s.roadStyle);
   const waterFeatures = useMapStore((s) => s.waterFeatures);
   const waterVisible = useMapStore((s) => s.layerToggles.water);
+  const vegetationFeatures = useMapStore((s) => s.vegetationFeatures);
+  const vegetationVisible = useMapStore((s) => s.layerToggles.vegetation);
   const smoothingLevel = useMapStore((s) => s.smoothingLevel);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
@@ -261,13 +265,120 @@ export function ExportPanel() {
         }
       }
 
+      // Step 2c: Include vegetation geometry if available and vegetation layer is toggled on
+      const hasVegetation = Boolean(vegetationFeatures && vegetationFeatures.length > 0 && vegetationVisible);
+
+      if (hasVegetation && vegetationFeatures) {
+        setExportStatus('building', 'Building vegetation mesh...');
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const centerLon = (bbox.sw.lon + bbox.ne.lon) / 2;
+        const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
+        const centerUTM = wgs84ToUTM(centerLon, centerLat);
+        const horizontalScale = targetWidthMM / dimensions.widthM;
+        const elevRange = elevationData.maxElevation - elevationData.minElevation;
+
+        // Use same smoothed data as terrain for Z sampling
+        const vegeRadius = Math.round((smoothingLevel / 100) * 8);
+        const vegeSmoothed = vegeRadius > 0
+          ? smoothElevations(elevationData.elevations, elevationData.gridSize, vegeRadius)
+          : elevationData.elevations;
+
+        let vegeZScale: number;
+        if (targetReliefMM > 0 && elevRange > 0) {
+          vegeZScale = (targetReliefMM / elevRange) * exaggeration;
+        } else if (elevRange > 0) {
+          vegeZScale = horizontalScale * exaggeration;
+          if (elevRange * vegeZScale < 5) vegeZScale = 5 / elevRange;
+        } else {
+          vegeZScale = horizontalScale * exaggeration;
+        }
+
+        // Build flat raised patch geometry for each vegetation polygon
+        const allVegePositions: number[] = [];
+        const allVegeIndices: number[] = [];
+        let vegeVertexOffset = 0;
+        const gridSize = elevationData.gridSize;
+        const lonRange = bbox.ne.lon - bbox.sw.lon;
+        const latRange = bbox.ne.lat - bbox.sw.lat;
+
+        for (const feature of vegetationFeatures) {
+          // Centroid Z from smoothed elevation grid
+          const cx = feature.outerRing.reduce((s, p) => s + p[0], 0) / feature.outerRing.length;
+          const cy = feature.outerRing.reduce((s, p) => s + p[1], 0) / feature.outerRing.length;
+          const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((cx - bbox.sw.lon) / lonRange) * (gridSize - 1))));
+          const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (cy - bbox.sw.lat) / latRange) * (gridSize - 1))));
+          const centerElev = vegeSmoothed[gy * gridSize + gx];
+          const vegeZ = (centerElev - elevationData.minElevation) * vegeZScale + VEGE_HEIGHT_MM;
+
+          // Flatten outer ring + holes for earcut (same as WaterMesh)
+          const coords2d: number[] = [];
+          const holeIndices: number[] = [];
+
+          for (const [lon, lat] of feature.outerRing) {
+            const utm = wgs84ToUTM(lon, lat);
+            coords2d.push((utm.x - centerUTM.x) * horizontalScale, (utm.y - centerUTM.y) * horizontalScale);
+          }
+          for (const hole of feature.holes) {
+            holeIndices.push(coords2d.length / 2);
+            for (const [lon, lat] of hole) {
+              const utm = wgs84ToUTM(lon, lat);
+              coords2d.push((utm.x - centerUTM.x) * horizontalScale, (utm.y - centerUTM.y) * horizontalScale);
+            }
+          }
+
+          const indices = earcut(coords2d, holeIndices.length > 0 ? holeIndices : undefined, 2);
+          const numPts = coords2d.length / 2;
+          for (let i = 0; i < numPts; i++) {
+            allVegePositions.push(coords2d[i * 2], coords2d[i * 2 + 1], vegeZ);
+          }
+          for (const idx of indices) {
+            allVegeIndices.push(idx + vegeVertexOffset);
+          }
+          vegeVertexOffset += numPts;
+        }
+
+        if (allVegePositions.length > 0) {
+          const vegeGeo = new THREE.BufferGeometry();
+          vegeGeo.setAttribute('position', new THREE.Float32BufferAttribute(allVegePositions, 3));
+          vegeGeo.setIndex(allVegeIndices);
+          vegeGeo.computeVertexNormals();
+
+          // Clip to footprint
+          const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2, targetDepthMM / 2);
+          vegeGeo.dispose();
+
+          // Merge vegetation into export (same additive merge as roads)
+          const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
+          const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
+          const vegeNonIndexed = clippedVege.index ? clippedVege.toNonIndexed() : clippedVege;
+
+          // Strip extra attributes (keep only position + normal for STL)
+          for (const attr of Object.keys(vegeNonIndexed.attributes)) {
+            if (attr !== 'position' && attr !== 'normal') vegeNonIndexed.deleteAttribute(attr);
+          }
+          for (const attr of Object.keys(exportNonIndexed.attributes)) {
+            if (attr !== 'position' && attr !== 'normal') exportNonIndexed.deleteAttribute(attr);
+          }
+
+          const merged = mergeGeometries([exportNonIndexed, vegeNonIndexed], false);
+          if (merged) {
+            merged.computeVertexNormals();
+            exportSolid.dispose();
+            exportSolid = merged;
+          }
+          clippedVege.dispose();
+          if (exportNonIndexed !== exportSolid) exportNonIndexed.dispose();
+        }
+      }
+
       // Step 3: Validate mesh
       setExportStatus('validating', 'Validating mesh...');
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const validation = await validateMesh(exportSolid);
 
-      if (!validation.isManifold && !hasBuildings && !hasRoads) {
+      if (!validation.isManifold && !hasBuildings && !hasRoads && !hasVegetation) {
         // Terrain-only (even with water depression baked in) must be manifold — block export
         const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
         setValidationError(errMsg);
@@ -275,7 +386,7 @@ export function ExportPanel() {
         return;
       }
 
-      if (!validation.isManifold && (hasBuildings || hasRoads)) {
+      if (!validation.isManifold && (hasBuildings || hasRoads || hasVegetation)) {
         // Features + terrain may have non-manifold seams — warn but allow export
         // Slicers (PrusaSlicer, Bambu Studio) auto-repair these meshes
         setValidationError(
@@ -302,7 +413,7 @@ export function ExportPanel() {
       const heightMM = maxZ + basePlateThicknessMM;
 
       // Generate filename (reflects which layers are included)
-      const filename = generateFilename(bbox, locationName, hasBuildings, hasRoads, hasWater);
+      const filename = generateFilename(bbox, locationName, hasBuildings, hasRoads, hasWater, hasVegetation);
       pendingFilenameRef.current = filename;
 
       // Store buffer for download

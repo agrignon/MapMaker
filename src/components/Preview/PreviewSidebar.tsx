@@ -4,7 +4,7 @@ import { TerrainSection } from './TerrainSection';
 import { BuildingsSection } from './BuildingsSection';
 import { RoadsSection } from './RoadsSection';
 import { WaterSection } from './WaterSection';
-import { LayerPlaceholderSection } from './LayerPlaceholderSection';
+import { VegetationSection } from './VegetationSection';
 import { ExportPanel } from './ExportPanel';
 
 export function PreviewSidebar() {
@@ -90,7 +90,7 @@ export function PreviewSidebar() {
           <BuildingsSection />
           <RoadsSection />
           <WaterSection />
-          <LayerPlaceholderSection label="Vegetation" />
+          <VegetationSection />
 
           {/* Divider before export */}
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '8px' }} />

@@ -55,6 +55,7 @@ export function downloadSTL(buffer: ArrayBuffer, filename: string): void {
  *   locationName="Mount Rainier", hasBuildings=true, hasRoads=false, hasWater=false  → "mount-rainier-terrain-buildings.stl"
  *   locationName="Mount Rainier", hasBuildings=false, hasRoads=true, hasWater=false  → "mount-rainier-terrain-roads.stl"
  *   locationName="Mount Rainier", hasBuildings=true, hasRoads=true, hasWater=true    → "mount-rainier-terrain-buildings-roads-water.stl"
+ *   locationName="Mount Rainier", hasVegetation=true                                → "mount-rainier-terrain-vegetation.stl"
  *   no locationName, bbox at 46.85°N 121.73°W                                       → "terrain-46.85--121.73.stl"
  */
 export function generateFilename(
@@ -62,13 +63,15 @@ export function generateFilename(
   locationName: string | null,
   hasBuildings = false,
   hasRoads = false,
-  hasWater = false
+  hasWater = false,
+  hasVegetation = false
 ): string {
   // Build suffix based on which layers are included
   let suffix = 'terrain';
   if (hasBuildings) suffix += '-buildings';
   if (hasRoads) suffix += '-roads';
   if (hasWater) suffix += '-water';
+  if (hasVegetation) suffix += '-vegetation';
 
   if (locationName && locationName.trim().length > 0) {
     // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse multiple hyphens

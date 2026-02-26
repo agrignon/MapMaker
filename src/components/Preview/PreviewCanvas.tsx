@@ -4,6 +4,7 @@ import { TerrainMesh } from './TerrainMesh';
 import { BuildingMesh } from './BuildingMesh';
 import { RoadMesh } from './RoadMesh';
 import { WaterMesh } from './WaterMesh';
+import { VegetationMesh } from './VegetationMesh';
 import { BasePlateMesh } from './BasePlateMesh';
 import { Component, type ReactNode } from 'react';
 import { useMapStore } from '../../store/mapStore';
@@ -112,6 +113,7 @@ export function PreviewCanvas() {
           <BuildingMesh />
           <RoadMesh />
           <WaterMesh />
+          <VegetationMesh />
           <BasePlateMesh />
         </SceneErrorBoundary>
       </Canvas>
