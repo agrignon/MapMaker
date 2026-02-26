@@ -1,17 +1,32 @@
 ---
 phase: 05-roads-layer
-verified: 2026-02-24T22:52:00Z
+verified: 2026-02-25T18:32:00Z
 status: passed
-score: 11/11 must-haves verified
-re_verification: false
+score: 6/6 must-haves verified
+re_verification: true
+  previous_status: gaps_found (UAT)
+  previous_score: 0/6 (UAT — 6 browser failures)
+  gaps_closed:
+    - "Road ribbons visible on terrain in 3D preview after generating a map"
+    - "Road style toggle (recessed/raised/flat) changes visible road appearance"
+    - "Road layer toggle hides/shows road ribbons"
+    - "Road generation status shows progress and road count after Generate"
+    - "STL export includes road geometry merged with terrain"
+    - "Export filename includes -roads suffix when roads are present"
+  gaps_remaining: []
+  regressions: []
 ---
 
-# Phase 5: Roads Layer Verification Report
+# Phase 5: Roads Layer Verification Report (Re-Verification)
 
 **Phase Goal:** Users can see the OSM road network rendered as 3D geometry within the selected area, choose a road style, and have roads included in the exported STL
-**Verified:** 2026-02-24T22:52:00Z
+**Verified:** 2026-02-25T18:32:00Z
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — after UAT gap closure (Plan 05-03)
+
+## Background
+
+Initial automated verification passed (2026-02-24). Browser UAT then found all 6 road behaviours broken. A diagnosis session identified two root causes: Z-fighting making roads invisible, and simultaneous Overpass requests causing rate limiting on road fetch. Plan 05-03 applied four fixes — Z-fighting, sequential fetch, building base Z anchoring, and Sutherland-Hodgman export clipping — and obtained user UAT sign-off. This re-verification confirms the fixes are committed and the code is in the correct state.
 
 ---
 
@@ -21,19 +36,14 @@ re_verification: false
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Road data fetched from Overpass API for highway ways within a bbox | VERIFIED | `src/lib/roads/overpass.ts` — `fetchRoadData()` issues POST with correct QL query; bbox order sw.lat,sw.lon,ne.lat,ne.lon confirmed in source |
-| 2 | Road features parsed from OSM JSON with correct tier classification (highway/main/residential) | VERIFIED | `src/lib/roads/parse.ts` — `classifyTier()` maps all 12 OSM highway values; 31 parse tests pass |
-| 3 | Tunnels excluded and bridges flagged during parsing | VERIFIED | `parse.ts` lines 72/79: `props['tunnel'] === 'yes'` → skip; `props['bridge'] === 'yes'` → `isBridge: true`; covered by tests |
-| 4 | Road geometry produced as Three.js BufferGeometry with per-vertex terrain Z | VERIFIED | `src/lib/roads/roadMesh.ts` — `buildRoadGeometry()` calls `sampleElevationAtLonLat` per vertex, produces merged BufferGeometry; 14 tests pass |
-| 5 | Road width varies by tier — highway is wider than residential | VERIFIED | `ROAD_WIDTH_MM = {highway: 1.8, main: 1.2, residential: 0.7}`; test "highway geometry has wider X/Y spread than residential" passes |
-| 6 | Road style (recessed/raised/flat) controls Z offset direction | VERIFIED | `roadMesh.ts` lines 355–370: recessed → `-ROAD_DEPTH_MM[tier]`, raised → `+ROAD_DEPTH_MM[tier]`, flat → `0`; 4 style offset tests pass |
-| 7 | User sees OSM road network rendered as 3D geometry on terrain in the 3D preview | VERIFIED | `RoadMesh.tsx` — R3F component calls `buildRoadGeometry()` in `useEffect`; wired into `PreviewCanvas.tsx` scene after `BuildingMesh` |
-| 8 | Road style toggle (recessed/raised/flat) updates the 3D preview | VERIFIED | `RoadsSection.tsx` calls `setRoadStyle(style)` on button click; `roadStyle` is a `useEffect` dependency in `RoadMesh.tsx` — triggers rebuild |
-| 9 | Roads are included in the exported STL file | VERIFIED | `ExportPanel.tsx` lines 154–218: road merge step (Step 2b) calls `buildRoadGeometry()` and merges via `mergeGeometries` when `hasRoads` is true |
-| 10 | Toggling roads off hides them from preview and excludes them from export | VERIFIED | `RoadMesh.tsx`: `<mesh visible={roadsVisible}>`; `ExportPanel.tsx`: `hasRoads = Boolean(... && roadsVisible)` guards merge step |
-| 11 | Road generation status shown below Generate button alongside building status | VERIFIED | `GenerateButton.tsx` lines 190–209: `roadGenerationStep` rendered in JSX with error/normal color per `roadGenerationStatus` |
+| 1 | Road ribbons are visible on terrain in the 3D preview after generating a map | VERIFIED | `RoadMesh.tsx` line 198: `position={[0, 0, 0.1]}` mesh Z lift; lines 203-205: `polygonOffset`, `polygonOffsetFactor={-4}`, `polygonOffsetUnits={-4}` on material — eliminates Z-fighting. Committed in `49affb2`. |
+| 2 | Road style toggle (recessed/raised/flat) changes visible road appearance | VERIFIED | `roadStyle` is a `useCallback` dependency in `RoadMesh.tsx` (line 153) — changes trigger `doRebuild`, which passes `roadStyle` to `buildRoadsInWorker`. Style-dependent Z offset in `roadMesh.ts` lines 355-370 controls recessed/raised/flat geometry. |
+| 3 | Road layer toggle hides/shows road ribbons | VERIFIED | `RoadMesh.tsx` line 198: `visible={roadsVisible}` where `roadsVisible = useMapStore((s) => s.layerToggles.roads)` — correctly gates mesh visibility. Z-fighting fix (Truth 1) makes the toggle effect now visible to the user. |
+| 4 | Road generation status shows progress and road count after Generate | VERIFIED | `GenerateButton.tsx` line 90: `void fetchBuildings().finally(() => void fetchRoads())` — road fetch is sequentially chained after buildings complete. `fetchRoads()` calls `setRoadGenerationStatus('fetching', 'Fetching road data...')` then `setRoadGenerationStatus('ready', `${features.length} roads found`)`. Progress rendered lines 191-211. Committed in `bc717b4`. |
+| 5 | STL export includes road geometry merged with terrain | VERIFIED | `ExportPanel.tsx` lines 168-244: `hasRoads` guard, `buildRoadGeometry()` call, `clipGeometryToFootprint()` applied, attribute-stripped merge via `mergeGeometries`. `clipGeometry.ts` is a substantive 160-line Sutherland-Hodgman implementation. |
+| 6 | Export filename includes -roads suffix when roads are present | VERIFIED | `ExportPanel.tsx` line 288: `generateFilename(bbox, locationName, hasBuildings, hasRoads)`. `stlExport.ts` line 64-69: `generateFilename(... hasRoads = false)` — appends `-roads` to suffix when `hasRoads` is true. All 4 combinations documented in JSDoc (lines 54-57). |
 
-**Score:** 11/11 truths verified
+**Score:** 6/6 truths verified
 
 ---
 
@@ -41,18 +51,11 @@ re_verification: false
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `src/lib/roads/types.ts` | RoadFeature, RoadTier, RoadStyle, RoadGeometryParams type definitions | VERIFIED | All 4 types exported; 57 lines of substantive TypeScript |
-| `src/lib/roads/overpass.ts` | fetchRoadData function for Overpass API | VERIFIED | Exports `fetchRoadData`; real Overpass QL query with all 12 highway types, correct bbox order |
-| `src/lib/roads/parse.ts` | parseRoadFeatures function with tier classification | VERIFIED | Exports `parseRoadFeatures` and `classifyTier`; imports `osmtogeojson`; 89 lines |
-| `src/lib/roads/roadMesh.ts` | buildRoadGeometry function producing Three.js BufferGeometry | VERIFIED | Exports `buildRoadGeometry`, `ROAD_WIDTH_MM`, `ROAD_DEPTH_MM`, `ROAD_COLOR`; 401 lines; full implementation |
-| `src/lib/roads/__tests__/parse.test.ts` | Unit tests for road parsing and tier classification | VERIFIED | 31 tests, all pass: tier classification (8 cases), tunnel exclusion, bridge flagging, geometry type filtering |
-| `src/lib/roads/__tests__/roadMesh.test.ts` | Unit tests for road geometry generation, style offsets, and width tiers | VERIFIED | 14 tests, all pass: null handling, BufferGeometry output, width tiers, style offsets, bridge Z interpolation |
-| `src/components/Preview/RoadMesh.tsx` | R3F mesh component rendering road geometry | VERIFIED | Exports `RoadMesh`; full useEffect implementation with geometry rebuild, clipping planes, dispose on unmount |
-| `src/components/Preview/RoadsSection.tsx` | Sidebar section with road style toggle and feature count | VERIFIED | Exports `RoadsSection`; 3-button style toggle, feature count summary, CTRL-04 conditional rendering |
-| `src/store/mapStore.ts` | roadFeatures, roadStyle, roadGenerationStatus, roadGenerationStep state + setters | VERIFIED | All 4 state fields + 3 setters present at lines 40-43, 68-70, 106-109, 192-194 |
-| `src/components/Preview/ExportPanel.tsx` | Road geometry included in STL export merge | VERIFIED | `buildRoadGeometry` imported; road merge Step 2b implemented with attribute stripping, validation tolerance, filename update |
-| `src/lib/export/stlExport.ts` | generateFilename with hasRoads param | VERIFIED | `hasRoads = false` default added; suffix builder covers all 4 combinations: terrain[-buildings][-roads] |
-| `patches/geometry-extrude+0.2.1.patch` | Bug fix for geometry-extrude rawVertices ReferenceError | VERIFIED | Patch file present; `postinstall: patch-package` in package.json; documented in SUMMARY |
+| `src/components/Preview/RoadMesh.tsx` | Z-fighting fix: position offset + polygonOffset | VERIFIED | Line 198: `position={[0, 0, 0.1]}`; lines 203-205: `polygonOffset`, `polygonOffsetFactor={-4}`, `polygonOffsetUnits={-4}`. Full 209-line component, not a stub. Committed `49affb2`. |
+| `src/components/Sidebar/GenerateButton.tsx` | Sequential Overpass fetch via `.finally()` | VERIFIED | Line 90: `void fetchBuildings().finally(() => void fetchRoads())` — replaces the simultaneous `void fetchBuildings(); void fetchRoads()` that caused rate limiting. Committed `bc717b4`. |
+| `src/lib/export/clipGeometry.ts` | Sutherland-Hodgman triangle clipping | VERIFIED | 160-line new file; exports `clipGeometryToFootprint(geometry, halfWidth, halfDepth)`. Full implementation with fast path (all-inside triangles), polygon clipping loop, and fan triangulation. |
+| `src/components/Preview/ExportPanel.tsx` | Clip + merge roads in export pipeline | VERIFIED | Lines 199-244: `clipGeometryToFootprint` applied to roads before merge; attribute stripping for STL compatibility; `mergeGeometries` call; correct `hasRoads` passed to `generateFilename`. |
+| `src/lib/buildings/merge.ts` | Building base Z uses Math.min (lowest terrain sample) | VERIFIED | Line 203: `const flatBaseZ = Math.min(...sampledBaseZ)` — anchors buildings to the lowest terrain point under their footprint. |
 
 ---
 
@@ -60,16 +63,11 @@ re_verification: false
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `src/lib/roads/parse.ts` | `osmtogeojson` | `import osmtogeojson` | WIRED | Line 7: `import osmtogeojson from 'osmtogeojson'`; called at line 55 |
-| `src/lib/roads/roadMesh.ts` | `geometry-extrude` | `import { extrudePolyline }` | WIRED | Line 14: `import geometryExtrude from 'geometry-extrude'`; `geometryExtrude.extrudePolyline()` called at line 328 |
-| `src/lib/roads/roadMesh.ts` | `src/lib/buildings/elevationSampler.ts` | `import { sampleElevationAtLonLat }` | WIRED | Line 17: import confirmed; `sampleElevationAtLonLat(lon, lat, bbox, elevData)` called at line 318 |
-| `src/components/Preview/RoadMesh.tsx` | `src/lib/roads/roadMesh.ts` | `import { buildRoadGeometry }` | WIRED | Line 15: imported; called at line 82 inside useEffect |
-| `src/components/Preview/RoadMesh.tsx` | `src/store/mapStore.ts` | `useMapStore` selectors for roadFeatures, roadStyle, layerToggles.roads | WIRED | Lines 20-32: all 11 store values read; `roadFeatures` passed to `buildRoadGeometry`, `roadStyle` in effect deps, `roadsVisible` gates `<mesh visible>` |
-| `src/components/Sidebar/GenerateButton.tsx` | `src/lib/roads/overpass.ts` | `import { fetchRoadData }` | WIRED | Line 17: imported; called at line 62 inside `fetchRoads()` async function |
-| `src/components/Preview/ExportPanel.tsx` | `src/lib/roads/roadMesh.ts` | `import { buildRoadGeometry }` | WIRED | Line 19: imported; called at line 177 inside `handleExport()` |
-| `src/components/Preview/RoadsSection.tsx` | `src/store/mapStore.ts` | `useMapStore` selectors for roadStyle, setRoadStyle | WIRED | Lines 9-11: `roadStyle` read, `setRoadStyle` called on button click at line 45 |
-| `src/components/Preview/PreviewCanvas.tsx` | `src/components/Preview/RoadMesh.tsx` | `<RoadMesh />` in R3F scene | WIRED | Line 5: imported; line 51: `<RoadMesh />` rendered after `<BuildingMesh />` |
-| `src/components/Preview/PreviewSidebar.tsx` | `src/components/Preview/RoadsSection.tsx` | `<RoadsSection />` replacing LayerPlaceholderSection | WIRED | Line 5: imported; line 90: `<RoadsSection />` rendered in layer stack |
+| `GenerateButton.tsx` | Overpass API (road fetch) | `fetchBuildings().finally(() => fetchRoads())` | WIRED | Line 90 confirmed. Roads never fire simultaneously with buildings — natural delay from building fetch (~2-5s) prevents rate limiting. |
+| `RoadMesh.tsx` | Three.js renderer | `position={[0,0,0.1]}` + `polygonOffset` material flags | WIRED | Lines 198, 203-205 confirmed. Both mechanisms active: coarse position lift + fine polygonOffset for all GPU depth-buffer scenarios. |
+| `ExportPanel.tsx` | `clipGeometry.ts` | `import { clipGeometryToFootprint }` | WIRED | Line 20: import confirmed. Applied to both buildings (line 153) and roads (line 199). |
+| `ExportPanel.tsx` | `stlExport.ts` | `generateFilename(... hasRoads)` | WIRED | Line 288: `generateFilename(bbox, locationName, hasBuildings, hasRoads)`. `hasRoads` is computed dynamically at line 169 from live store state. |
+| `RoadMesh.tsx` | `meshBuilderClient.ts` | `buildRoadsInWorker` | WIRED | Line 21: `import { buildRoadsInWorker, getRoadSeqId }`. Called at line 88 with `roadStyle` in params — style changes trigger worker rebuild. |
 
 ---
 
@@ -77,71 +75,71 @@ re_verification: false
 
 | Requirement | Source Plan(s) | Description | Status | Evidence |
 |-------------|---------------|-------------|--------|----------|
-| ROAD-01 | 05-01, 05-02 | User sees OSM road network rendered as 3D geometry within the selected area | SATISFIED | `RoadMesh.tsx` renders terrain-following road ribbons in R3F Canvas; roads fetched via Overpass, parsed, and geometry built via `buildRoadGeometry()` |
-| ROAD-02 | 05-01, 05-02 | User can choose road style: recessed channels, raised surfaces, or flat at terrain level | SATISFIED | `RoadsSection.tsx` provides 3-button recessed/raised/flat toggle; `setRoadStyle` updates store; `roadStyle` triggers `RoadMesh.tsx` geometry rebuild |
-| ROAD-03 | 05-01, 05-02 | Road width reflects road type (highway wider than residential street) | SATISFIED | `ROAD_WIDTH_MM = {highway: 1.8, main: 1.2, residential: 0.7}` in `roadMesh.ts`; test "highway geometry has wider X/Y spread than residential" passes |
+| ROAD-01 | 05-01, 05-02, 05-03 | User sees OSM road network rendered as 3D geometry within the selected area | SATISFIED | Roads fetched via sequenced Overpass call; parsed into `roadFeatures`; `RoadMesh.tsx` builds and renders geometry with position lift. Z-fighting fix (Plan 03) ensures roads are actually visible on terrain. |
+| ROAD-02 | 05-01, 05-02, 05-03 | User can choose road style: recessed channels, raised surfaces, or flat at terrain level | SATISFIED | `RoadsSection.tsx` 3-button toggle calls `setRoadStyle`; `roadStyle` in `RoadMesh.tsx` effect deps triggers worker rebuild with the chosen style. Style offset applied in `roadMesh.ts`. |
+| ROAD-03 | 05-01, 05-02, 05-03 | Road width reflects road type (highway wider than residential street) | SATISFIED | `ROAD_WIDTH_MM = {highway: 1.8, main: 1.2, residential: 0.7}` in `roadMesh.ts`; 16 unit tests pass including width-tier test. |
 
-No orphaned requirements: ROAD-01, ROAD-02, ROAD-03 all claimed in both plans and confirmed satisfied.
+No orphaned requirements. ROAD-01, ROAD-02, ROAD-03 all claimed across plans 01-03 and confirmed satisfied.
 
-Note: REQUIREMENTS.md also references CTRL-04 ("Controls are hidden/disabled when their layer is toggled off") as applicable to roads. This is satisfied: `RoadsSection.tsx` line 34 conditionally renders the style toggle body only when `roadsVisible === true`.
+REQUIREMENTS.md marks all three as `[x]` (Complete) at Phase 5, consistent with this verification.
 
 ---
 
 ### Anti-Patterns Found
 
-None detected. Scanned: `src/lib/roads/`, `src/components/Preview/RoadMesh.tsx`, `src/components/Preview/RoadsSection.tsx`, `src/components/Sidebar/GenerateButton.tsx`, `src/components/Preview/ExportPanel.tsx`.
+None. Scanned `RoadMesh.tsx`, `ExportPanel.tsx`, `GenerateButton.tsx`, `clipGeometry.ts`, `merge.ts`.
 
-- No TODO/FIXME/placeholder comments in any phase-5 files
-- `return null` in `roadMesh.ts` (lines 276, 388) are correct guard clauses for empty input / no road geometry — not stubs
-- `return null` in `classifyTier` (line 37) is a valid sentinel for unrecognized highway types
+- No TODO/FIXME/XXX/HACK/placeholder comments
+- `return null` at `RoadMesh.tsx` lines 190-191 are guard clauses (status not ready / no features) — correct behavior, not stubs
 - No console.log-only handlers
-- No empty React components or API routes
+- No empty React components or API stubs
+- No simultaneous Overpass requests (fixed)
 
 ---
 
-### Human Verification Required
+### Test Suite
 
-The following behaviors cannot be verified programmatically:
+162 tests pass (13 files). TypeScript compiles clean (`tsc --noEmit` exits 0).
 
-#### 1. Road ribbons visible on terrain in 3D preview
+No regressions introduced by Plan 03 fixes.
 
-**Test:** Start dev server, generate a terrain for a town center (e.g., downtown area with mixed road types). Verify road ribbons appear overlaid on terrain in the 3D canvas.
-**Expected:** Dark gray (#555555) ribbon geometry follows terrain contours, width varies visibly between highway and residential streets.
-**Why human:** Visual rendering result; Three.js Canvas output cannot be inspected via grep.
+---
 
-#### 2. Road style toggle causes live preview update
+### Human Verification
 
-**Test:** With roads generated, click Recessed, then Raised, then Flat in the Roads section.
-**Expected:** Road ribbons visually shift — recessed roads appear sunken into terrain, raised roads protrude above it, flat roads sit level.
-**Why human:** Visual geometry displacement requires eyeball inspection; the wiring is verified but the perceptual outcome needs a human.
+The following items were verified by the user during UAT re-test (Plan 05-03 Task 3, approved):
 
-#### 3. Roads present in exported STL
+- Road ribbons visible on terrain in 3D preview after generating a map
+- Road style toggle (recessed/raised/flat) updates road appearance visually
+- Road layer toggle hides and shows road ribbons
+- Road generation status shows progress then road count below Generate button
+- STL export contains road geometry (opened in slicer)
+- Export filename includes `-roads` suffix when roads are present
 
-**Test:** Export STL with roads toggled on. Open in PrusaSlicer or Bambu Studio.
-**Expected:** Road geometry appears as distinct ribbons on the terrain surface; no critical mesh repair errors from the slicer.
-**Why human:** Requires loading binary STL in 3D slicer software.
-
-#### 4. Toggling roads off excludes them from export
-
-**Test:** Toggle roads off in sidebar, then export. Open the STL.
-**Expected:** Terrain and buildings present; road geometry absent.
-**Why human:** Requires STL inspection in slicer.
+UAT sign-off recorded in `05-03-SUMMARY.md`: "All 6 UAT tests from 05-UAT.md pass — roads visible, toggleable, fetchable, exportable with correct filename."
 
 ---
 
 ## Summary
 
-Phase 5 goal is fully achieved. All 11 observable truths are verified against the actual codebase. The complete roads pipeline is implemented end-to-end:
+Phase 5 goal is fully achieved. All 6 UAT failures from the initial browser testing have been resolved and verified.
 
-- **Library layer (Plan 01):** `types.ts`, `overpass.ts`, `parse.ts`, `roadMesh.ts` all substantive with real implementations. 45 unit tests prove tier classification (all 12 OSM highway types), tunnel exclusion, bridge flagging, geometry production, width tiers, style offsets, and bridge Z interpolation. A bug in `geometry-extrude@0.2.1` was discovered and patched via `patch-package`.
+**Plan 05-03 closed all 6 gaps with two root-cause fixes:**
 
-- **UI wiring layer (Plan 02):** Zustand store extended with 4 state fields and 3 setters. `RoadMesh.tsx` is a full R3F component (not a stub) that rebuilds on any relevant state change. `RoadsSection.tsx` provides a real style toggle that calls `setRoadStyle`. `GenerateButton.tsx` fetches roads in parallel with buildings. `ExportPanel.tsx` includes a complete road merge step (Step 2b) with attribute stripping, UV cleanup, and validation tolerance. `generateFilename` supports all 4 layer combinations.
+1. **Z-fighting fix** (`RoadMesh.tsx`) — `position={[0, 0, 0.1]}` mesh Z lift plus `polygonOffset`/`polygonOffsetFactor`/`polygonOffsetUnits` on material. Roads were always built correctly but the terrain depth buffer occluded them entirely. This single fix resolved UAT tests 1, 2, and 3 (roads visible, style toggle works, layer toggle works).
 
-- **Test suite:** 160 total tests pass (45 new road tests + 115 pre-existing = zero regressions). TypeScript compiles clean.
+2. **Sequential Overpass fetch** (`GenerateButton.tsx`) — `fetchBuildings().finally(() => void fetchRoads())` instead of simultaneous `void fetchBuildings(); void fetchRoads()`. Simultaneous requests triggered Overpass rate limiting, silently failing the road fetch. This fixed UAT tests 4, 5, and 6 (generation status, STL export, filename).
 
-Requirements ROAD-01, ROAD-02, and ROAD-03 are all satisfied. No gaps found in automated verification. Human verification of visual rendering and STL output is recommended before sign-off.
+**Bonus fixes also committed:**
+
+3. **Building base Z anchoring** (`merge.ts`) — `Math.min` over sampled terrain Z values so buildings anchor to the lowest terrain point under their footprint; uphill walls extend below terrain (hidden by occlusion), giving a flush appearance on slopes.
+
+4. **Sutherland-Hodgman export clipping** (`clipGeometry.ts` + `ExportPanel.tsx`) — roads and buildings are clipped to the terrain footprint boundary (±halfWidth, ±halfDepth) before STL merge, preventing geometry from extending past the model edges.
+
+All three requirements (ROAD-01, ROAD-02, ROAD-03) are satisfied. 162 tests pass. TypeScript compiles clean. UAT sign-off obtained.
 
 ---
 
-_Verified: 2026-02-24T22:52:00Z_
+_Verified: 2026-02-25T18:32:00Z_
 _Verifier: Claude (gsd-verifier)_
+_Re-verification: Yes — after Plan 05-03 gap closure_
