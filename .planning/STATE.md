@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-02-26T06:21:04.753Z"
+status: active
+last_updated: "2026-02-26T07:51:00.000Z"
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 20
+  completed_plans: 20
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 6 — Water Layer (complete)
+**Current focus:** Phase 7 — Vegetation / Terrain Smoothing (in progress)
 
 ## Current Position
 
-Phase: 6 — Water Layer (complete)
-Plan: 2 of 2 complete — Phase 6 Plan 02 done: Water layer UI integration (store, fetch chain, WaterMesh, WaterSection, terrain depression bake, export pipeline)
-Status: v1.0 roadmap — Phase 6 complete; WATR-01 done; all 6 planned phases complete
-Last activity: 2026-02-26 — Plan 06-02 complete: water layer fully wired end-to-end; 176 total tests passing
+Phase: 7 — Vegetation / Terrain Smoothing (in progress)
+Plan: 1 of 1 complete — Phase 7 Plan 01 done: Terrain smoothing slider (smoothElevations exported, caller-side pipeline, store field, TerrainSection UI)
+Status: Phase 7 Plan 01 complete; TERR-04 done; 176 total tests passing
+Last activity: 2026-02-26 — Plan 07-01 complete: user-controlled terrain smoothing slider (0-100%) wired end-to-end in preview and export pipeline
 
 Progress: [██████████] 100%
 
@@ -62,6 +62,7 @@ Progress: [██████████] 100%
 | Phase 05-roads-layer P02 | 4 | 2 tasks | 8 files |
 | Phase 06-water-layer P01 | 3 | 2 tasks | 6 files |
 | Phase 06-water-layer P02 | 4 | 2 tasks | 9 files |
+| Phase 07-vegetation-terrain-smoothing P01 | 2 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,8 @@ Recent decisions affecting current work:
 - [Phase 06-water-layer]: Overpass water query uses relation member recursion (>;out skel qt;) to reconstruct MultiPolygon water bodies from OSM relations
 - [Phase 06-water-layer]: WaterMesh uses earcut on main thread (not worker) — flat polygon tessellation is fast enough; worker adds complexity without benefit for non-animated geometry
 - [Phase 06-water-layer]: generateFilename hasWater param adds -water suffix — extends terrain[-buildings][-roads] pattern; no breaking change (default false)
+- [Phase 07-vegetation-terrain-smoothing 07-01]: smoothElevations moved to caller-side — buildTerrainGeometry receives pre-smoothed data; pipeline order: smoothElevations → applyWaterDepressions → buildTerrainGeometry
+- [Phase 07-vegetation-terrain-smoothing 07-01]: Radius formula Math.round((smoothingLevel/100)*8) — level=25 → radius=2 (matches old default), level=0 → no smoothing, level=100 → radius=8
 
 ### Pending Todos
 
@@ -154,5 +157,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 06-02-PLAN.md — Water layer UI integration (WaterMesh, WaterSection, store, fetch chain, terrain depression bake, export pipeline); 176 total tests passing; Phase 6 complete
+Stopped at: Completed 07-01-PLAN.md — Terrain smoothing slider (smoothElevations exported, hardcoded smoothing removed, smoothingLevel store field, TerrainSection slider UI, caller-side pipeline in TerrainMesh/ExportPanel/WaterMesh); 176 total tests passing
 Resume file: None

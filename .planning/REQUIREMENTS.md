@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **TERR-01**: User sees real terrain elevation data rendered from DEM sources within the selected bounding box
 - [x] **TERR-02**: User can control terrain elevation exaggeration with a slider (flatten to exaggerate)
 - [x] **TERR-03**: Flat terrain areas produce a printable model with minimum height floor (not zero-thickness)
-- [ ] **TERR-04**: User can control mesh smoothing with a slider to interpolate rough elevation transitions into smooth surfaces
+- [x] **TERR-04**: User can control mesh smoothing with a slider to interpolate rough elevation transitions into smooth surfaces
 
 ### Buildings
 
@@ -137,7 +137,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ROAD-03 | Phase 5 | Complete |
 | WATR-01 | Phase 6 | Complete |
 | VEGE-01 | Phase 7 | Pending |
-| TERR-04 | Phase 7 | Pending |
+| TERR-04 | Phase 7 | Complete |
 | PREV-03 | Phase 8 | Pending |
 | PREV-04 | Phase 8 | Pending |
 | EXPT-06 | Phase 8 | Pending |
