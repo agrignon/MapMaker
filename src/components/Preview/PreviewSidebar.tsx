@@ -3,6 +3,7 @@ import { ModelSizeSection } from './ModelSizeSection';
 import { TerrainSection } from './TerrainSection';
 import { BuildingsSection } from './BuildingsSection';
 import { RoadsSection } from './RoadsSection';
+import { WaterSection } from './WaterSection';
 import { LayerPlaceholderSection } from './LayerPlaceholderSection';
 import { ExportPanel } from './ExportPanel';
 
@@ -88,7 +89,7 @@ export function PreviewSidebar() {
           <TerrainSection />
           <BuildingsSection />
           <RoadsSection />
-          <LayerPlaceholderSection label="Water" />
+          <WaterSection />
           <LayerPlaceholderSection label="Vegetation" />
 
           {/* Divider before export */}
