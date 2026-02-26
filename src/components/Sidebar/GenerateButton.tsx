@@ -16,6 +16,7 @@ import { fetchAllOsmData } from '../../lib/overpass';
 import { parseBuildingFeatures } from '../../lib/buildings/parse';
 import { parseRoadFeatures } from '../../lib/roads/parse';
 import { parseWaterFeatures } from '../../lib/water/parse';
+import { parseVegetationFeatures } from '../../lib/vegetation/parse';
 
 export function GenerateButton() {
   const bbox = useMapStore((s) => s.bbox);
@@ -37,6 +38,10 @@ export function GenerateButton() {
   const waterGenerationStep = useMapStore((s) => s.waterGenerationStep);
   const setWaterFeatures = useMapStore((s) => s.setWaterFeatures);
   const setWaterGenerationStatus = useMapStore((s) => s.setWaterGenerationStatus);
+  const vegetationGenerationStatus = useMapStore((s) => s.vegetationGenerationStatus);
+  const vegetationGenerationStep = useMapStore((s) => s.vegetationGenerationStep);
+  const setVegetationFeatures = useMapStore((s) => s.setVegetationFeatures);
+  const setVegetationGenerationStatus = useMapStore((s) => s.setVegetationGenerationStatus);
 
   const isLoading = generationStatus === 'fetching' || generationStatus === 'meshing';
   const hasBbox = bbox !== null;
@@ -44,7 +49,8 @@ export function GenerateButton() {
   const isBuildingFetching = buildingGenerationStatus === 'fetching' || buildingGenerationStatus === 'building';
   const isRoadFetching = roadGenerationStatus === 'fetching' || roadGenerationStatus === 'building';
   const isWaterFetching = waterGenerationStatus === 'fetching';
-  const isOsmFetching = isBuildingFetching || isRoadFetching || isWaterFetching;
+  const isVegetationFetching = vegetationGenerationStatus === 'fetching';
+  const isOsmFetching = isBuildingFetching || isRoadFetching || isWaterFetching || isVegetationFetching;
 
   /**
    * Fetch all OSM layers (buildings, roads, water) in a single Overpass request,
@@ -57,6 +63,7 @@ export function GenerateButton() {
     setBuildingGenerationStatus('fetching', 'Fetching OSM data...');
     setRoadGenerationStatus('fetching', 'Fetching OSM data...');
     setWaterGenerationStatus('fetching', 'Fetching OSM data...');
+    setVegetationGenerationStatus('fetching', 'Fetching OSM data...');
 
     try {
       const osmData = await fetchAllOsmData(bbox);
@@ -73,11 +80,16 @@ export function GenerateButton() {
       const water = parseWaterFeatures(osmData);
       setWaterFeatures(water);
       setWaterGenerationStatus('ready', `${water.length} water bodies found`);
+
+      const vegetation = parseVegetationFeatures(osmData);
+      setVegetationFeatures(vegetation);
+      setVegetationGenerationStatus('ready', `${vegetation.length} vegetation areas found`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'OSM fetch failed';
       setBuildingGenerationStatus('error', message);
       setRoadGenerationStatus('error', message);
       setWaterGenerationStatus('error', message);
+      setVegetationGenerationStatus('error', message);
     }
   }
 
@@ -208,6 +220,12 @@ export function GenerateButton() {
         <p className="text-center text-xs mt-1"
            style={{ color: waterGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
           {waterGenerationStep}
+        </p>
+      )}
+      {showPreview && !hasError && !isOsmFetching && vegetationGenerationStep && (
+        <p className="text-center text-xs mt-1"
+           style={{ color: vegetationGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
+          {vegetationGenerationStep}
         </p>
       )}
     </div>

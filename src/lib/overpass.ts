@@ -1,14 +1,14 @@
 /**
  * Combined Overpass API fetcher.
- * Fetches buildings, roads, and water in a single request to avoid 429 rate limiting.
+ * Fetches buildings, roads, water, and vegetation in a single request to avoid 429 rate limiting.
  */
 
 import type { BoundingBox } from '../types/geo';
 
 /**
- * Fetch all OSM feature data (buildings, roads, water) in one Overpass API call.
+ * Fetch all OSM feature data (buildings, roads, water, vegetation) in one Overpass API call.
  *
- * Combines the three individual queries to avoid rate limiting (429 Too Many Requests)
+ * Combines all individual queries to avoid rate limiting (429 Too Many Requests)
  * that occurs with sequential requests. Each parser filters the combined response
  * by its own tag criteria.
  *
@@ -19,8 +19,8 @@ import type { BoundingBox } from '../types/geo';
 export async function fetchAllOsmData(bbox: BoundingBox): Promise<unknown> {
   const { sw, ne } = bbox;
 
-  // Combined Overpass QL query: buildings + roads + water in one request.
-  // >;out skel qt; recurses relation members (needed for water multipolygons,
+  // Combined Overpass QL query: buildings + roads + water + vegetation in one request.
+  // >;out skel qt; recurses relation members (needed for water/vegetation multipolygons,
   // harmless for building relations which already use out geom).
   const query = `[out:json][timeout:60][maxsize:33554432][bbox:${sw.lat},${sw.lon},${ne.lat},${ne.lon}];
 (
@@ -31,6 +31,12 @@ export async function fetchAllOsmData(bbox: BoundingBox): Promise<unknown> {
   way["natural"="water"];
   relation["natural"="water"];
   way["waterway"="riverbank"];
+  way["leisure"="park"];
+  relation["leisure"="park"]["type"="multipolygon"];
+  way["natural"="wood"];
+  relation["natural"="wood"]["type"="multipolygon"];
+  way["landuse"="forest"];
+  relation["landuse"="forest"]["type"="multipolygon"];
 );
 out geom;
 >;

@@ -4,6 +4,7 @@ import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
 import type { BuildingFeature } from '../lib/buildings/types';
 import type { RoadFeature, RoadStyle } from '../lib/roads/types';
 import type { WaterFeature } from '../lib/water/types';
+import type { VegetationFeature } from '../lib/vegetation/types';
 
 export interface LayerToggles {
   buildings: boolean;
@@ -50,6 +51,10 @@ interface MapState {
   waterGenerationStep: string;
   // Terrain smoothing level (0-100, default 25)
   smoothingLevel: number;
+  // Vegetation state
+  vegetationFeatures: VegetationFeature[] | null;
+  vegetationGenerationStatus: 'idle' | 'fetching' | 'ready' | 'error';
+  vegetationGenerationStep: string;
 }
 
 interface MapActions {
@@ -82,6 +87,9 @@ interface MapActions {
   setWaterFeatures: (features: WaterFeature[] | null) => void;
   setWaterGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
   setSmoothingLevel: (value: number) => void;
+  // Vegetation actions
+  setVegetationFeatures: (features: VegetationFeature[] | null) => void;
+  setVegetationGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -128,6 +136,10 @@ export const useMapStore = create<MapStore>((set, get) => ({
   waterGenerationStep: '',
   // Terrain smoothing defaults
   smoothingLevel: 25,
+  // Vegetation state defaults
+  vegetationFeatures: null,
+  vegetationGenerationStatus: 'idle',
+  vegetationGenerationStep: '',
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -217,4 +229,6 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setWaterFeatures: (features) => set({ waterFeatures: features }),
   setWaterGenerationStatus: (status, step = '') => set({ waterGenerationStatus: status, waterGenerationStep: step }),
   setSmoothingLevel: (value) => set({ smoothingLevel: value }),
+  setVegetationFeatures: (features) => set({ vegetationFeatures: features }),
+  setVegetationGenerationStatus: (status, step = '') => set({ vegetationGenerationStatus: status, vegetationGenerationStep: step }),
 }));
