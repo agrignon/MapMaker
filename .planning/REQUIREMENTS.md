@@ -39,7 +39,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Vegetation
 
-- [ ] **VEGE-01**: User sees parks and forested areas rendered as a toggleable vegetation layer with distinct geometry
+- [x] **VEGE-01**: User sees parks and forested areas rendered as a toggleable vegetation layer with distinct geometry
 
 ### Model Controls
 
@@ -136,7 +136,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ROAD-02 | Phase 5 | Complete |
 | ROAD-03 | Phase 5 | Complete |
 | WATR-01 | Phase 6 | Complete |
-| VEGE-01 | Phase 7 | Pending |
+| VEGE-01 | Phase 7 | Complete |
 | TERR-04 | Phase 7 | Complete |
 | PREV-03 | Phase 8 | Pending |
 | PREV-04 | Phase 8 | Pending |
