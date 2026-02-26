@@ -19,6 +19,7 @@ import { buildAllBuildings } from '../../lib/buildings/merge';
 import { buildRoadGeometry } from '../../lib/roads/roadMesh';
 import { clipGeometryToFootprint } from '../../lib/export/clipGeometry';
 import { wgs84ToUTM } from '../../lib/utm';
+import { applyWaterDepressions } from '../../lib/water/depression';
 import type { BuildingGeometryParams } from '../../lib/buildings/types';
 import type { RoadGeometryParams } from '../../lib/roads/types';
 
@@ -57,6 +58,8 @@ export function ExportPanel() {
   const roadFeatures = useMapStore((s) => s.roadFeatures);
   const roadsVisible = useMapStore((s) => s.layerToggles.roads);
   const roadStyle = useMapStore((s) => s.roadStyle);
+  const waterFeatures = useMapStore((s) => s.waterFeatures);
+  const waterVisible = useMapStore((s) => s.layerToggles.water);
 
   const setExportStatus = useMapStore((s) => s.setExportStatus);
   const setExportResult = useMapStore((s) => s.setExportResult);
@@ -98,7 +101,13 @@ export function ExportPanel() {
       setExportStatus('building', 'Building solid mesh...');
       await new Promise(resolve => setTimeout(resolve, 0)); // Yield to React render
 
-      const terrainGeom = buildTerrainGeometry(elevationData, {
+      // Apply water depression before terrain mesh generation (matches TerrainMesh.tsx flow)
+      const hasWater = Boolean(waterFeatures && waterFeatures.length > 0 && waterVisible);
+      const effectiveElevData = hasWater
+        ? applyWaterDepressions(elevationData, waterFeatures!, bbox)
+        : elevationData;
+
+      const terrainGeom = buildTerrainGeometry(effectiveElevData, {
         widthMM: targetWidthMM,
         depthMM: targetDepthMM,
         geographicWidthM: dimensions.widthM,
@@ -134,6 +143,7 @@ export function ExportPanel() {
           exaggeration,
           minElevationM: elevationData.minElevation,
           targetReliefMM,
+          terrainGeometry: terrainGeom,
         };
 
         const buildingsGeometry = buildAllBuildings(
@@ -185,6 +195,7 @@ export function ExportPanel() {
           bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
           roadStyle,
           targetReliefMM,
+          terrainGeometry: terrainGeom,
         };
 
         const roadsGeometry = buildRoadGeometry(roadFeatures, bbox, elevationData, roadParams);
@@ -249,7 +260,7 @@ export function ExportPanel() {
       const validation = await validateMesh(exportSolid);
 
       if (!validation.isManifold && !hasBuildings && !hasRoads) {
-        // Terrain-only export must be manifold — block export
+        // Terrain-only (even with water depression baked in) must be manifold — block export
         const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
         setValidationError(errMsg);
         setExportStatus('error', errMsg);
@@ -283,7 +294,7 @@ export function ExportPanel() {
       const heightMM = maxZ + basePlateThicknessMM;
 
       // Generate filename (reflects which layers are included)
-      const filename = generateFilename(bbox, locationName, hasBuildings, hasRoads);
+      const filename = generateFilename(bbox, locationName, hasBuildings, hasRoads, hasWater);
       pendingFilenameRef.current = filename;
 
       // Store buffer for download

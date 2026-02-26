@@ -16,6 +16,8 @@ import { fetchBuildingData } from '../../lib/buildings/overpass';
 import { parseBuildingFeatures } from '../../lib/buildings/parse';
 import { fetchRoadData } from '../../lib/roads/overpass';
 import { parseRoadFeatures } from '../../lib/roads/parse';
+import { fetchWaterData } from '../../lib/water/overpass';
+import { parseWaterFeatures } from '../../lib/water/parse';
 
 export function GenerateButton() {
   const bbox = useMapStore((s) => s.bbox);
@@ -33,12 +35,17 @@ export function GenerateButton() {
   const setBuildingGenerationStatus = useMapStore((s) => s.setBuildingGenerationStatus);
   const setRoadFeatures = useMapStore((s) => s.setRoadFeatures);
   const setRoadGenerationStatus = useMapStore((s) => s.setRoadGenerationStatus);
+  const waterGenerationStatus = useMapStore((s) => s.waterGenerationStatus);
+  const waterGenerationStep = useMapStore((s) => s.waterGenerationStep);
+  const setWaterFeatures = useMapStore((s) => s.setWaterFeatures);
+  const setWaterGenerationStatus = useMapStore((s) => s.setWaterGenerationStatus);
 
   const isLoading = generationStatus === 'fetching' || generationStatus === 'meshing';
   const hasBbox = bbox !== null;
   const hasError = generationStatus === 'error';
   const isBuildingFetching = buildingGenerationStatus === 'fetching' || buildingGenerationStatus === 'building';
   const isRoadFetching = roadGenerationStatus === 'fetching' || roadGenerationStatus === 'building';
+  const isWaterFetching = waterGenerationStatus === 'fetching';
 
   async function fetchBuildings() {
     if (!bbox) return;
@@ -70,6 +77,20 @@ export function GenerateButton() {
     }
   }
 
+  async function fetchWater() {
+    if (!bbox) return;
+    try {
+      setWaterGenerationStatus('fetching', 'Fetching water data...');
+      const overpassData = await fetchWaterData(bbox);
+      const features = parseWaterFeatures(overpassData);
+      setWaterFeatures(features);
+      setWaterGenerationStatus('ready', `${features.length} water bodies found`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Water fetch failed';
+      setWaterGenerationStatus('error', message);
+    }
+  }
+
   async function handleGenerate() {
     if (!bbox) return;
 
@@ -84,10 +105,9 @@ export function GenerateButton() {
       setGenerationStatus('ready', 'Terrain ready');
       setShowPreview(true);
 
-      // Fetch buildings first, then roads after buildings complete (non-blocking — terrain preview
-      // is already visible). Staggered via .finally() to avoid Overpass rate limiting when both
-      // requests fire simultaneously. .finally() ensures roads fetch even if buildings fail.
-      void fetchBuildings().finally(() => void fetchRoads());
+      // Fetch buildings first, then roads, then water — staggered via .finally() to avoid
+      // Overpass rate limiting. Each step runs even if the previous one fails (optional layers).
+      void fetchBuildings().finally(() => void fetchRoads().finally(() => void fetchWater()));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setGenerationStatus('error', message);
@@ -208,6 +228,30 @@ export function GenerateButton() {
             />
           )}
           {roadGenerationStep}
+        </p>
+      )}
+
+      {/* Water fetch status — shown after terrain is ready */}
+      {showPreview && !hasError && waterGenerationStep && (
+        <p className="text-center text-xs mt-1"
+           style={{ color: waterGenerationStatus === 'error' ? '#f87171' : '#9ca3af' }}>
+          {isWaterFetching && (
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                border: '1.5px solid rgba(156,163,175,0.3)',
+                borderTopColor: '#9ca3af',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                marginRight: '4px',
+                verticalAlign: 'middle',
+              }}
+              aria-hidden="true"
+            />
+          )}
+          {waterGenerationStep}
         </p>
       )}
     </div>

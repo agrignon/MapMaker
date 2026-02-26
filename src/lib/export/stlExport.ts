@@ -51,22 +51,24 @@ export function downloadSTL(buffer: ArrayBuffer, filename: string): void {
  * Uses locationName (from geocoding search) if available, otherwise falls back to coordinates.
  *
  * Examples:
- *   locationName="Mount Rainier", hasBuildings=false, hasRoads=false → "mount-rainier-terrain.stl"
- *   locationName="Mount Rainier", hasBuildings=true, hasRoads=false  → "mount-rainier-terrain-buildings.stl"
- *   locationName="Mount Rainier", hasBuildings=false, hasRoads=true  → "mount-rainier-terrain-roads.stl"
- *   locationName="Mount Rainier", hasBuildings=true, hasRoads=true   → "mount-rainier-terrain-buildings-roads.stl"
- *   no locationName, bbox at 46.85°N 121.73°W                       → "terrain-46.85--121.73.stl"
+ *   locationName="Mount Rainier", hasBuildings=false, hasRoads=false, hasWater=false → "mount-rainier-terrain.stl"
+ *   locationName="Mount Rainier", hasBuildings=true, hasRoads=false, hasWater=false  → "mount-rainier-terrain-buildings.stl"
+ *   locationName="Mount Rainier", hasBuildings=false, hasRoads=true, hasWater=false  → "mount-rainier-terrain-roads.stl"
+ *   locationName="Mount Rainier", hasBuildings=true, hasRoads=true, hasWater=true    → "mount-rainier-terrain-buildings-roads-water.stl"
+ *   no locationName, bbox at 46.85°N 121.73°W                                       → "terrain-46.85--121.73.stl"
  */
 export function generateFilename(
   bbox: BoundingBox,
   locationName: string | null,
   hasBuildings = false,
-  hasRoads = false
+  hasRoads = false,
+  hasWater = false
 ): string {
   // Build suffix based on which layers are included
   let suffix = 'terrain';
   if (hasBuildings) suffix += '-buildings';
   if (hasRoads) suffix += '-roads';
+  if (hasWater) suffix += '-water';
 
   if (locationName && locationName.trim().length > 0) {
     // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse multiple hyphens

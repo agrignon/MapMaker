@@ -3,6 +3,7 @@ import { BoundingBox, BboxDimensions, GenerationStatus, ElevationData, ExportRes
 import { bboxDimensionsMeters, getUTMZone } from '../lib/utm';
 import type { BuildingFeature } from '../lib/buildings/types';
 import type { RoadFeature, RoadStyle } from '../lib/roads/types';
+import type { WaterFeature } from '../lib/water/types';
 
 export interface LayerToggles {
   buildings: boolean;
@@ -41,6 +42,12 @@ interface MapState {
   roadStyle: RoadStyle;
   roadGenerationStatus: 'idle' | 'fetching' | 'building' | 'ready' | 'error';
   roadGenerationStep: string;
+  // Layer rebuild status (shown as overlay during expensive rebuilds)
+  rebuildingLayers: string | null;
+  // Water state
+  waterFeatures: WaterFeature[] | null;
+  waterGenerationStatus: 'idle' | 'fetching' | 'ready' | 'error';
+  waterGenerationStep: string;
 }
 
 interface MapActions {
@@ -68,6 +75,10 @@ interface MapActions {
   setRoadFeatures: (features: RoadFeature[] | null) => void;
   setRoadStyle: (style: RoadStyle) => void;
   setRoadGenerationStatus: (status: 'idle' | 'fetching' | 'building' | 'ready' | 'error', step?: string) => void;
+  setRebuildingLayers: (status: string | null) => void;
+  // Water actions
+  setWaterFeatures: (features: WaterFeature[] | null) => void;
+  setWaterGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -107,6 +118,11 @@ export const useMapStore = create<MapStore>((set, get) => ({
   roadStyle: 'recessed',  // locked decision: default is recessed
   roadGenerationStatus: 'idle',
   roadGenerationStep: '',
+  rebuildingLayers: null,
+  // Water state defaults
+  waterFeatures: null,
+  waterGenerationStatus: 'idle',
+  waterGenerationStep: '',
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -192,4 +208,7 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setRoadFeatures: (features) => set({ roadFeatures: features }),
   setRoadStyle: (style) => set({ roadStyle: style }),
   setRoadGenerationStatus: (status, step = '') => set({ roadGenerationStatus: status, roadGenerationStep: step }),
+  setRebuildingLayers: (status) => set({ rebuildingLayers: status }),
+  setWaterFeatures: (features) => set({ waterFeatures: features }),
+  setWaterGenerationStatus: (status, step = '') => set({ waterGenerationStatus: status, waterGenerationStep: step }),
 }));

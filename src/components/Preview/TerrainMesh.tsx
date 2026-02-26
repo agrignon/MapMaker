@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
 import { buildTerrainGeometry } from '../../lib/mesh/terrain';
 import type { TerrainMeshParams } from '../../lib/mesh/terrain';
+import { applyWaterDepressions } from '../../lib/water/depression';
 
 export function TerrainMesh() {
   const elevationData = useMapStore((s) => s.elevationData);
@@ -17,6 +18,9 @@ export function TerrainMesh() {
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const targetHeightMM = useMapStore((s) => s.targetHeightMM);
   const dimensions = useMapStore((s) => s.dimensions);
+  const waterFeatures = useMapStore((s) => s.waterFeatures);
+  const waterVisible = useMapStore((s) => s.layerToggles.water);
+  const bbox = useMapStore((s) => s.bbox);
 
   const meshRef = useRef<THREE.Mesh>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
@@ -40,10 +44,17 @@ export function TerrainMesh() {
       targetReliefMM,
     };
 
+    // Apply water depression to elevation grid before terrain mesh generation.
+    // CRITICAL: Must use a COPY — store's elevationData stays unmodified so
+    // toggling water off restores original terrain.
+    const effectiveElevData = (waterFeatures && waterFeatures.length > 0 && waterVisible && bbox)
+      ? applyWaterDepressions(elevationData, waterFeatures, bbox)
+      : elevationData;
+
     // Always do full rebuild — ensures R3F picks up geometry changes reliably.
     const oldGeometry = geometryRef.current;
 
-    const newGeometry = buildTerrainGeometry(elevationData, params);
+    const newGeometry = buildTerrainGeometry(effectiveElevData, params);
     geometryRef.current = newGeometry;
 
     if (meshRef.current) {
@@ -53,7 +64,7 @@ export function TerrainMesh() {
     if (oldGeometry) {
       oldGeometry.dispose();
     }
-  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions]);
+  }, [elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, waterFeatures, waterVisible, bbox]);
 
   // Cleanup geometry on unmount
   useEffect(() => {
