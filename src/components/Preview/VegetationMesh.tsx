@@ -16,6 +16,7 @@ import { useMapStore } from '../../store/mapStore';
 import { smoothElevations } from '../../lib/mesh/terrain';
 import { wgs84ToUTM } from '../../lib/utm';
 import { VEGE_HEIGHT_MM } from '../../lib/vegetation/elevation';
+import { applyWaterDepressions } from '../../lib/water/depression';
 
 /** Muted forest green — distinct from terrain browns and water blue */
 const VEGE_COLOR = '#4a7c59';
@@ -54,6 +55,8 @@ export function VegetationMesh() {
   const bbox = useMapStore((s) => s.bbox);
   const dimensions = useMapStore((s) => s.dimensions);
   const exaggeration = useMapStore((s) => s.exaggeration);
+  const waterFeatures = useMapStore((s) => s.waterFeatures);
+  const waterVisible = useMapStore((s) => s.layerToggles.water);
   const targetWidthMM = useMapStore((s) => s.targetWidthMM);
   const targetDepthMM = useMapStore((s) => s.targetDepthMM);
   const targetHeightMM = useMapStore((s) => s.targetHeightMM);
@@ -73,20 +76,25 @@ export function VegetationMesh() {
   useEffect(() => {
     if (!vegetationFeatures || vegetationFeatures.length === 0 || !elevationData || !bbox || !dimensions) return;
 
-    // Apply caller-side smoothing to match TerrainMesh elevation grid
-    // Ensures vegetation Z aligns with the smoothed terrain surface
+    // Match TerrainMesh pipeline order: smooth → water depression → sample
+    // CRITICAL: vegetation must use the SAME elevation data as terrain, including
+    // water depressions. Without depressions, vegetation near water floats above
+    // the depressed terrain surface.
     const radius = Math.round((smoothingLevel / 100) * 8);
-    const smoothedElevations = radius > 0
-      ? smoothElevations(elevationData.elevations, elevationData.gridSize, radius)
-      : elevationData.elevations;
+    const smoothedElevData = radius > 0
+      ? { ...elevationData, elevations: smoothElevations(elevationData.elevations, elevationData.gridSize, radius) }
+      : elevationData;
 
-    // Compute smoothed min/max to match terrain.ts (buildTerrainGeometry:149-154)
-    // CRITICAL: terrain uses smoothed min/max for elevRange and Z offset.
-    // Using raw elevationData.min/max causes Z mismatch → floating vegetation.
+    const effectiveElevData = (waterFeatures && waterFeatures.length > 0 && waterVisible && bbox)
+      ? applyWaterDepressions(smoothedElevData, waterFeatures, bbox)
+      : smoothedElevData;
+    const effectiveElevations = effectiveElevData.elevations;
+
+    // Compute min/max from the effective (smoothed + depressed) data to match terrain.ts
     let smoothedMin = Infinity, smoothedMax = -Infinity;
-    for (let i = 0; i < smoothedElevations.length; i++) {
-      if (smoothedElevations[i] < smoothedMin) smoothedMin = smoothedElevations[i];
-      if (smoothedElevations[i] > smoothedMax) smoothedMax = smoothedElevations[i];
+    for (let i = 0; i < effectiveElevations.length; i++) {
+      if (effectiveElevations[i] < smoothedMin) smoothedMin = effectiveElevations[i];
+      if (effectiveElevations[i] > smoothedMax) smoothedMax = effectiveElevations[i];
     }
 
     // Compute scaling parameters (same formula as terrain/roads/buildings/water)
@@ -116,12 +124,12 @@ export function VegetationMesh() {
     const latRange = bboxNe.lat - bboxSw.lat;
     const gridSize = elevationData.gridSize;
 
-    // Helper: sample smoothed elevation grid at a lon/lat and return Z in model space
+    // Helper: sample effective (smoothed + depressed) elevation grid at a lon/lat
     const elevMin = smoothedMin;
     const sampleZ = (lon: number, lat: number): number => {
       const gx = Math.max(0, Math.min(gridSize - 1, Math.round(((lon - bboxSw.lon) / lonRange) * (gridSize - 1))));
       const gy = Math.max(0, Math.min(gridSize - 1, Math.round((1 - (lat - bboxSw.lat) / latRange) * (gridSize - 1))));
-      const elev = smoothedElevations[gy * gridSize + gx];
+      const elev = effectiveElevations[gy * gridSize + gx];
       return (elev - elevMin) * zScale + VEGE_HEIGHT_MM;
     };
 
@@ -190,7 +198,7 @@ export function VegetationMesh() {
       meshRef.current.geometry = geo;
     }
     if (oldGeometry) oldGeometry.dispose();
-  }, [vegetationFeatures, elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, bbox, smoothingLevel]);
+  }, [vegetationFeatures, elevationData, exaggeration, targetWidthMM, targetDepthMM, targetHeightMM, dimensions, bbox, smoothingLevel, waterFeatures, waterVisible]);
 
   // Cleanup on unmount
   useEffect(() => {

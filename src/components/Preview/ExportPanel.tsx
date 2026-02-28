@@ -327,15 +327,12 @@ export function ExportPanel() {
         const centerUTM = wgs84ToUTM(centerLon, centerLat);
         const horizontalScale = targetWidthMM / dimensions.widthM;
 
-        // Use same smoothed data as terrain for Z sampling
-        const vegeRadius = Math.round((smoothingLevel / 100) * 8);
-        const vegeSmoothed = vegeRadius > 0
-          ? smoothElevations(elevationData.elevations, elevationData.gridSize, vegeRadius)
-          : elevationData.elevations;
+        // Use the SAME effective elevation data as terrain (smoothed + water-depressed).
+        // CRITICAL: effectiveElevData already has smoothing + water depressions applied.
+        // Using raw or smoothing-only data causes vegetation to float above depressed terrain.
+        const vegeSmoothed = effectiveElevData.elevations;
 
-        // Compute smoothed min/max to match terrain.ts (buildTerrainGeometry:149-154)
-        // CRITICAL: terrain uses smoothed min/max for elevRange and Z offset.
-        // Using raw elevationData.min/max causes Z mismatch → floating vegetation.
+        // Compute min/max from the effective (smoothed + depressed) elevation data
         let vegeSmoothedMin = Infinity, vegeSmoothedMax = -Infinity;
         for (let i = 0; i < vegeSmoothed.length; i++) {
           if (vegeSmoothed[i] < vegeSmoothedMin) vegeSmoothedMin = vegeSmoothed[i];
