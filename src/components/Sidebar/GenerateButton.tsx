@@ -85,10 +85,24 @@ export async function triggerRegenerate() {
   const bbox = s.bbox;
   if (!bbox) return;
 
+  // Bbox area cap — prevent OOM on very large selections
+  const dims = s.dimensions;
+  if (!dims) return;
+  const areaSqKm = (dims.widthM * dims.heightM) / 1e6;
+
+  if (areaSqKm > 25) {
+    s.setGenerationStatus('error', `Area too large (${areaSqKm.toFixed(1)} km²). Select an area smaller than 25 km².`);
+    return;
+  }
+
   const apiKey = import.meta.env.VITE_MAPTILER_KEY as string;
 
   try {
-    s.setGenerationStatus('fetching', 'Fetching elevation data...');
+    if (areaSqKm > 4) {
+      s.setGenerationStatus('fetching', `Large area (${areaSqKm.toFixed(1)} km²) — generation may be slow...`);
+    } else {
+      s.setGenerationStatus('fetching', 'Fetching elevation data...');
+    }
 
     const result = await fetchElevationForBbox(bbox.sw, bbox.ne, apiKey);
 
