@@ -55,6 +55,8 @@ interface MapState {
   vegetationFeatures: VegetationFeature[] | null;
   vegetationGenerationStatus: 'idle' | 'fetching' | 'ready' | 'error';
   vegetationGenerationStep: string;
+  // Stale bbox detection — key is set on successful generate
+  generatedBboxKey: string | null;
 }
 
 interface MapActions {
@@ -90,6 +92,7 @@ interface MapActions {
   // Vegetation actions
   setVegetationFeatures: (features: VegetationFeature[] | null) => void;
   setVegetationGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
+  setGeneratedBboxKey: (key: string | null) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -140,6 +143,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   vegetationFeatures: null,
   vegetationGenerationStatus: 'idle',
   vegetationGenerationStep: '',
+  // Stale bbox detection defaults
+  generatedBboxKey: null,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -231,4 +236,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setSmoothingLevel: (value) => set({ smoothingLevel: value }),
   setVegetationFeatures: (features) => set({ vegetationFeatures: features }),
   setVegetationGenerationStatus: (status, step = '') => set({ vegetationGenerationStatus: status, vegetationGenerationStep: step }),
+  setGeneratedBboxKey: (key) => set({ generatedBboxKey: key }),
 }));
