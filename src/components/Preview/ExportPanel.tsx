@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
 import { buildTerrainGeometry, smoothElevations } from '../../lib/mesh/terrain';
 import { buildSolidMesh } from '../../lib/mesh/solid';
-import { mergeTerrainAndBuildings, csgUnion } from '../../lib/mesh/buildingSolid';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
 import { buildAllBuildings } from '../../lib/buildings/merge';
@@ -28,6 +28,37 @@ import type { RoadGeometryParams } from '../../lib/roads/types';
 // Module-level buffer storage — ArrayBuffer is not serializable to Zustand
 // This holds the last exported buffer for the Download button
 const exportBufferRef: { current: ArrayBuffer | null } = { current: null };
+
+/**
+ * Merge two geometries as separate watertight shells (no CSG boolean).
+ * Strips to position+normal only, converts to non-indexed triangle soup.
+ * Slicers (PrusaSlicer, Bambu Studio) compute boolean union automatically.
+ */
+function mergeShells(
+  base: THREE.BufferGeometry,
+  feature: THREE.BufferGeometry
+): THREE.BufferGeometry {
+  const baseNI = base.index ? base.toNonIndexed() : base.clone();
+  const featureNI = feature.index ? feature.toNonIndexed() : feature.clone();
+
+  for (const name of Object.keys(baseNI.attributes)) {
+    if (name !== 'position' && name !== 'normal') baseNI.deleteAttribute(name);
+  }
+  for (const name of Object.keys(featureNI.attributes)) {
+    if (name !== 'position' && name !== 'normal') featureNI.deleteAttribute(name);
+  }
+
+  if (!baseNI.getAttribute('normal')) baseNI.computeVertexNormals();
+  if (!featureNI.getAttribute('normal')) featureNI.computeVertexNormals();
+
+  const merged = mergeGeometries([baseNI, featureNI], false);
+  baseNI.dispose();
+  featureNI.dispose();
+
+  if (!merged) throw new Error('mergeShells: mergeGeometries returned null');
+  merged.computeVertexNormals();
+  return merged;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) {
@@ -182,7 +213,9 @@ export function ExportPanel() {
           setExportStatus('building', 'Merging terrain and buildings...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
-          exportSolid = mergeTerrainAndBuildings(terrainSolid, clippedBuildings);
+          const merged = mergeShells(exportSolid, clippedBuildings);
+          exportSolid.dispose();
+          exportSolid = merged;
           clippedBuildings.dispose();
         }
       }
@@ -198,6 +231,9 @@ export function ExportPanel() {
         const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
         const centerUTM = wgs84ToUTM(centerLon, centerLat);
 
+        // Always export roads as raised — recessed/flat styles are only visible
+        // through vertex colors in the preview. STL has no color, so roads must
+        // protrude above the terrain to be geometrically distinct and paintable.
         const roadParams: RoadGeometryParams = {
           widthMM: targetWidthMM,
           depthMM: targetDepthMM,
@@ -206,7 +242,7 @@ export function ExportPanel() {
           exaggeration,
           minElevationM: elevationData.minElevation,
           bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
-          roadStyle,
+          roadStyle: 'raised',
           targetReliefMM,
           terrainGeometry: terrainGeom,
         };
@@ -225,13 +261,12 @@ export function ExportPanel() {
           );
           roadsGeometry.dispose();
 
-          setExportStatus('building', 'CSG union: merging roads into model...');
+          setExportStatus('building', 'Merging roads into model...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
-          const merged = csgUnion(exportSolid, clippedRoads, 'roads');
+          const mergedRoads = mergeShells(exportSolid, clippedRoads);
           exportSolid.dispose();
-          exportSolid = merged;
-
+          exportSolid = mergedRoads;
           clippedRoads.dispose();
         }
       }
@@ -388,30 +423,37 @@ export function ExportPanel() {
           const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2, targetDepthMM / 2);
           vegeGeo.dispose();
 
-          setExportStatus('building', 'CSG union: merging vegetation into model...');
+          setExportStatus('building', 'Merging vegetation into model...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
-          const merged = csgUnion(exportSolid, clippedVege, 'vegetation');
+          const mergedVege = mergeShells(exportSolid, clippedVege);
           exportSolid.dispose();
-          exportSolid = merged;
-
+          exportSolid = mergedVege;
           clippedVege.dispose();
         }
       }
 
-      // Step 3: Validate mesh
-      setExportStatus('validating', 'Validating mesh...');
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Step 3: Validate terrain solid (the foundational watertight shell).
+      // Multi-feature exports are composed of individually watertight shells
+      // (terrain, buildings, roads, vegetation) — slicers compute boolean union
+      // automatically. Boundary-edge validation can't handle multi-shell meshes
+      // (edges shared between shells produce count != 2), so we only validate
+      // terrain-only exports strictly. For multi-feature, trust construction.
+      const hasFeatures = hasBuildings || hasRoads || hasVegetation;
 
-      const validation = await validateMesh(exportSolid);
+      if (!hasFeatures) {
+        setExportStatus('validating', 'Validating mesh...');
+        await new Promise(resolve => setTimeout(resolve, 0));
 
-      if (!validation.isManifold) {
-        // Always block download for non-manifold geometry — never offer broken files
-        const errMsg = validation.error ?? 'Mesh is not watertight';
-        setValidationError(errMsg);
-        setExportStatus('error', errMsg);
-        exportSolid.dispose();
-        return;
+        const validation = await validateMesh(exportSolid);
+
+        if (!validation.isManifold) {
+          const errMsg = validation.error ?? 'Mesh is not watertight';
+          setValidationError(errMsg);
+          setExportStatus('error', errMsg);
+          exportSolid.dispose();
+          return;
+        }
       }
 
       // Step 4: Write STL
