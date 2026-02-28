@@ -1,17 +1,22 @@
 /**
  * Builds a watertight solid mesh from a terrain surface BufferGeometry.
  * Closes the terrain surface into a printable solid by adding:
- *   - Base plate: flat rectangle at z = -basePlateThicknessMM
+ *   - Base plate: polygon at z = -basePlateThicknessMM that exactly matches
+ *     the wall bottom perimeter (earcut-triangulated for zero interior edges)
  *   - Side walls: four walls connecting terrain perimeter edges down to the base
  *
  * Wall construction uses actual perimeter vertices from the terrain geometry
  * (instead of nearest-vertex sampling) to eliminate floating-point near-miss gaps.
+ *
+ * Base plate is earcut-triangulated so every wall bottom edge is shared by
+ * exactly one base plate triangle, resulting in zero boundary edges.
  *
  * All faces use counter-clockwise winding (viewed from outside) for manifold correctness.
  */
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import earcut from 'earcut';
 
 interface PerimeterVertex {
   x: number;
@@ -26,6 +31,13 @@ interface PerimeterVertex {
  *
  * Edge tolerance: vertex is on-edge if its perpendicular distance to the
  * bbox edge is < 0.01mm (covers float rounding from Martini RTIN).
+ *
+ * Winding order (CCW from outside, i.e. CCW when viewed from below -Z):
+ *   south: west→east (x ascending)
+ *   east:  south→north (y ascending)
+ *   north: east→west (x descending)
+ *   west:  north→south (y descending)
+ * Reading south→east→north→west→back to south forms a CCW loop from below.
  */
 function extractPerimeterVertices(
   positions: THREE.BufferAttribute,
@@ -52,15 +64,11 @@ function extractPerimeterVertices(
     if (Math.abs(x - min.x) < tol) edges.west.push({ x: min.x, y, z });
   }
 
-  // Sort for correct winding direction (CCW from outside):
-  // South: west → east (ascending x)
-  edges.south.sort((a, b) => a.x - b.x);
-  // North: east → west (descending x) — reversed for CCW
-  edges.north.sort((a, b) => b.x - a.x);
-  // East: south → north (ascending y)
-  edges.east.sort((a, b) => a.y - b.y);
-  // West: north → south (descending y) — reversed for CCW
-  edges.west.sort((a, b) => b.y - a.y);
+  // Sort for correct winding direction (CCW from outside / below):
+  edges.south.sort((a, b) => a.x - b.x);  // west→east
+  edges.east.sort((a, b) => a.y - b.y);   // south→north
+  edges.north.sort((a, b) => b.x - a.x);  // east→west
+  edges.west.sort((a, b) => b.y - a.y);   // north→south
 
   // Deduplicate vertices at same position (RTIN may produce duplicates)
   for (const edgeName of Object.keys(edges)) {
@@ -110,78 +118,131 @@ export function buildSolidMesh(
 
   const positions = terrainGeometry.getAttribute('position') as THREE.BufferAttribute;
 
-  // ---- 1. Base plate -------------------------------------------------------
-  // Two triangles forming a rectangle at z = baseZ
-  // The base plate normal should point DOWN (-Z), i.e. outward from the solid.
-  // CCW winding when viewed from outside (below):
-  //   T1: (minX,minY,baseZ) → (minX,maxY,baseZ) → (maxX,maxY,baseZ)
-  //   T2: (minX,minY,baseZ) → (maxX,maxY,baseZ) → (maxX,minY,baseZ)
+  // ---- 1. Extract perimeter vertices ----------------------------------------
+  const perimeterVerts = extractPerimeterVertices(positions, bbox);
 
-  const basePlatePositions = new Float32Array([
-    // T1
-    minX, minY, baseZ,
-    minX, maxY, baseZ,
-    maxX, maxY, baseZ,
-    // T2
-    minX, minY, baseZ,
-    maxX, maxY, baseZ,
-    maxX, minY, baseZ,
-  ]);
+  // ---- 2. Build perimeter loop in CCW order (for wall + base plate) ---------
+  // The loop order is: south → east → north → west → (back to south start)
+  // This is CCW when viewed from below (-Z), giving outward base plate normal.
+  const edgeOrder: Array<'south' | 'east' | 'north' | 'west'> = ['south', 'east', 'north', 'west'];
+  const perimeterLoop: PerimeterVertex[] = [];
+
+  for (const edge of edgeOrder) {
+    const verts = perimeterVerts[edge];
+    for (const v of verts) {
+      // Skip corner duplicates
+      if (
+        perimeterLoop.length > 0 &&
+        Math.abs(v.x - perimeterLoop[perimeterLoop.length - 1].x) < 0.001 &&
+        Math.abs(v.y - perimeterLoop[perimeterLoop.length - 1].y) < 0.001
+      ) {
+        continue;
+      }
+      perimeterLoop.push(v);
+    }
+  }
+  // Deduplicate loop closure (last == first)
+  if (
+    perimeterLoop.length > 1 &&
+    Math.abs(perimeterLoop[perimeterLoop.length - 1].x - perimeterLoop[0].x) < 0.001 &&
+    Math.abs(perimeterLoop[perimeterLoop.length - 1].y - perimeterLoop[0].y) < 0.001
+  ) {
+    perimeterLoop.pop();
+  }
+
+  const n = perimeterLoop.length;
+
+  // ---- 3. Base plate -------------------------------------------------------
+  // Earcut-triangulate the perimeter loop at z=baseZ.
+  // Using earcut ensures NO interior edges — all triangle edges lie on the perimeter
+  // (which are also wall bottom edges), giving zero boundary edges at the base.
+  const coords2d: number[] = [];
+  for (const v of perimeterLoop) {
+    coords2d.push(v.x, v.y);
+  }
+  const triIndices = earcut(coords2d, undefined, 2);
+
+  // Build non-indexed triangle soup for base plate
+  // Winding: earcut returns CCW in 2D (y-up), which matches CCW from below (-Z) = outward normal down
+  const basePlatePositions = new Float32Array(triIndices.length * 3);
+  for (let t = 0; t < triIndices.length; t++) {
+    const vi = triIndices[t];
+    basePlatePositions[t * 3 + 0] = perimeterLoop[vi].x;
+    basePlatePositions[t * 3 + 1] = perimeterLoop[vi].y;
+    basePlatePositions[t * 3 + 2] = baseZ;
+  }
+
   const basePlateGeom = new THREE.BufferGeometry();
   basePlateGeom.setAttribute('position', new THREE.BufferAttribute(basePlatePositions, 3));
 
-  // ---- 2. Side walls -------------------------------------------------------
-  // Extract actual perimeter vertices from terrain geometry.
-  // This eliminates the nearest-vertex sampling gap that caused non-manifold seams.
-  const perimeterVerts = extractPerimeterVertices(positions, bbox);
+  // ---- 4. Side walls -------------------------------------------------------
+  // Build quads from terrain top perimeter down to baseZ.
+  // Walls use the same sorted/deduplicated perimeter vertices as the loop above.
   const wallArrays: Float32Array[] = [];
-  const edgeNames: Array<'south' | 'north' | 'east' | 'west'> = ['south', 'north', 'east', 'west'];
 
-  for (const edge of edgeNames) {
+  for (const edge of edgeOrder) {
     const verts = perimeterVerts[edge];
     if (verts.length < 2) continue;
 
     const segCount = verts.length - 1;
-    const triCount = segCount * 2;
-    const wallPositions = new Float32Array(triCount * 3 * 3);
+    const wallPositions = new Float32Array(segCount * 2 * 3 * 3);
     let idx = 0;
 
     for (let s = 0; s < segCount; s++) {
       const p0 = verts[s];
       const p1 = verts[s + 1];
-      const b0 = { x: p0.x, y: p0.y, z: baseZ };
-      const b1 = { x: p1.x, y: p1.y, z: baseZ };
+      const b0z = baseZ;
+      const b1z = baseZ;
 
       // T1: p0 → p1 → b1 (CCW from outside)
       wallPositions[idx++] = p0.x; wallPositions[idx++] = p0.y; wallPositions[idx++] = p0.z;
       wallPositions[idx++] = p1.x; wallPositions[idx++] = p1.y; wallPositions[idx++] = p1.z;
-      wallPositions[idx++] = b1.x; wallPositions[idx++] = b1.y; wallPositions[idx++] = b1.z;
+      wallPositions[idx++] = p1.x; wallPositions[idx++] = p1.y; wallPositions[idx++] = b1z;
 
       // T2: p0 → b1 → b0 (CCW from outside)
       wallPositions[idx++] = p0.x; wallPositions[idx++] = p0.y; wallPositions[idx++] = p0.z;
-      wallPositions[idx++] = b1.x; wallPositions[idx++] = b1.y; wallPositions[idx++] = b1.z;
-      wallPositions[idx++] = b0.x; wallPositions[idx++] = b0.y; wallPositions[idx++] = b0.z;
+      wallPositions[idx++] = p1.x; wallPositions[idx++] = p1.y; wallPositions[idx++] = b1z;
+      wallPositions[idx++] = p0.x; wallPositions[idx++] = p0.y; wallPositions[idx++] = b0z;
     }
 
-    // Trim array if fewer triangles than allocated
     wallArrays.push(wallPositions.slice(0, idx));
   }
 
-  // ---- 3. Corner stitching -------------------------------------------------
-  // Connect the end of each edge to the start of the next edge at each bbox corner.
-  // At each corner (SE, NE, NW, SW), the last vertex of one wall may have a different
-  // Z than the first vertex of the next wall (RTIN triangulation artifact). Fill the gap.
+  // ---- 5. Corner stitching -------------------------------------------------
+  // Connect adjacent wall edges at each bbox corner.
+  // At each corner, the last vertex of one wall meets the first vertex of the next.
+  // If they have different Z values (RTIN artifact), add triangles to bridge the gap.
+  //
+  // Corner order follows the perimeter loop: south end → east start (SE),
+  // east end → north start (NE), north end → west start (NW), west end → south start (SW).
   const cornerPairs = [
-    { from: perimeterVerts.south[perimeterVerts.south.length - 1], to: perimeterVerts.east[0] },   // SE corner
-    { from: perimeterVerts.east[perimeterVerts.east.length - 1],   to: perimeterVerts.north[0] },  // NE corner
-    { from: perimeterVerts.north[perimeterVerts.north.length - 1], to: perimeterVerts.west[0] },   // NW corner
-    { from: perimeterVerts.west[perimeterVerts.west.length - 1],   to: perimeterVerts.south[0] },  // SW corner
+    { from: perimeterVerts.south[perimeterVerts.south.length - 1], to: perimeterVerts.east[0] },   // SE
+    { from: perimeterVerts.east[perimeterVerts.east.length - 1],   to: perimeterVerts.north[0] },  // NE
+    { from: perimeterVerts.north[perimeterVerts.north.length - 1], to: perimeterVerts.west[0] },   // NW
+    { from: perimeterVerts.west[perimeterVerts.west.length - 1],   to: perimeterVerts.south[0] },  // SW
   ];
 
   for (const { from, to } of cornerPairs) {
-    // If they share the same Z, no triangle needed (walls meet exactly)
-    if (!from || !to || Math.abs(from.z - to.z) < 0.001) continue;
-    // Otherwise, add a triangle to bridge the Z gap
+    if (!from || !to) continue;
+    // Check if corners are at the same XY (they should be)
+    const sameXY =
+      Math.abs(from.x - to.x) < 0.001 &&
+      Math.abs(from.y - to.y) < 0.001;
+    // If same XY, same Z means walls already meet exactly — no fill needed.
+    // If different Z values at the same corner, add a vertical triangle to fill.
+    if (sameXY && Math.abs(from.z - to.z) < 0.001) continue;
+    if (sameXY && Math.abs(from.z - to.z) >= 0.001) {
+      // Single triangle fills the vertical gap at this corner
+      const triPositions = new Float32Array([
+        from.x, from.y, from.z,
+        from.x, from.y, to.z,
+        from.x, from.y, baseZ,
+      ]);
+      wallArrays.push(triPositions);
+      continue;
+    }
+    // Different XY: the corners don't share the same bbox corner (shouldn't happen
+    // for a rectangular terrain, but handle gracefully with a quad)
     const cornerPositions = new Float32Array([
       from.x, from.y, from.z,
       to.x,   to.y,   to.z,
@@ -194,13 +255,13 @@ export function buildSolidMesh(
     wallArrays.push(cornerPositions);
   }
 
+  // ---- 6. Merge all parts --------------------------------------------------
   const wallGeometries = wallArrays.map((arr) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     return g;
   });
 
-  // ---- 4. Merge all parts --------------------------------------------------
   // Strip normals — recompute on merged result for consistency
   terrainNonIndexed.deleteAttribute('normal');
   basePlateGeom.deleteAttribute('normal');
@@ -215,5 +276,13 @@ export function buildSolidMesh(
 
   merged.computeVertexNormals();
 
+  // Dispose intermediate geometries
+  terrainNonIndexed.dispose();
+  basePlateGeom.dispose();
+  wallGeometries.forEach((g) => g.dispose());
+
   return merged;
 }
+
+// Export for type only — used by tests
+export type { PerimeterVertex };
