@@ -15,8 +15,8 @@ import { buildSolidMesh } from '../../lib/mesh/solid';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
-import { buildAllBuildings } from '../../lib/buildings/merge';
-import { buildRoadGeometry } from '../../lib/roads/roadMesh';
+import { buildBuildingsForExport, buildRoadsForExport } from '../../workers/meshBuilderClient';
+import type { MeshArrays } from '../../workers/meshBuilderClient';
 import { clipGeometryToFootprint } from '../../lib/export/clipGeometry';
 import { wgs84ToUTM } from '../../lib/utm';
 import { applyWaterDepressions } from '../../lib/water/depression';
@@ -58,6 +58,26 @@ function mergeShells(
   if (!merged) throw new Error('mergeShells: mergeGeometries returned null');
   merged.computeVertexNormals();
   return merged;
+}
+
+/**
+ * Reconstruct a THREE.BufferGeometry from the typed arrays returned by the worker.
+ * Needed because the export pipeline works with BufferGeometry for clipping,
+ * merging, and STL write.
+ */
+function meshArraysToGeometry(arrays: MeshArrays): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(arrays.positions, 3));
+  if (arrays.normals) {
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(arrays.normals, 3));
+  }
+  if (arrays.index) {
+    geo.setIndex(new THREE.BufferAttribute(arrays.index, 1));
+  }
+  if (!arrays.normals) {
+    geo.computeVertexNormals();
+  }
+  return geo;
 }
 
 function formatBytes(bytes: number): string {
@@ -176,7 +196,7 @@ export function ExportPanel() {
         const centerLat = (bbox.sw.lat + bbox.ne.lat) / 2;
         const centerUTM = wgs84ToUTM(centerLon, centerLat);
 
-        const buildingParams = {
+        const buildingParams: Omit<BuildingGeometryParams, 'terrainGeometry'> = {
           widthMM: targetWidthMM,
           depthMM: targetDepthMM,
           geographicWidthM: dimensions.widthM,
@@ -188,24 +208,29 @@ export function ExportPanel() {
           targetReliefMM,
         };
 
-        const buildingParamsFull: BuildingGeometryParams = {
-          ...buildingParams,
-          terrainGeometry: terrainGeom,
+        const terrainParamsForBuildings = {
+          widthMM: targetWidthMM,
+          depthMM: targetDepthMM,
+          geographicWidthM: dimensions.widthM,
+          geographicDepthM: dimensions.heightM,
+          exaggeration,
+          minHeightMM: 5,
+          maxError: 5,
+          targetReliefMM,
         };
 
-        const buildingsGeometry = buildAllBuildings(
-          buildingFeatures,
-          bbox,
-          elevationData,
-          buildingParamsFull
+        // Building geometry runs off-thread so the UI stays responsive during export
+        const buildingArrays = await buildBuildingsForExport(
+          buildingFeatures, bbox, elevationData, terrainParamsForBuildings, buildingParams, smoothingLevel
         );
 
-        if (buildingsGeometry) {
+        if (buildingArrays) {
           setExportStatus('building', 'Clipping buildings to footprint...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
           // Clip buildings to terrain footprint — buildings that extend past the
           // model boundary are sliced cleanly at the edge instead of floating.
+          const buildingsGeometry = meshArraysToGeometry(buildingArrays);
           const clippedBuildings = clipGeometryToFootprint(
             buildingsGeometry,
             targetWidthMM / 2,
@@ -237,7 +262,7 @@ export function ExportPanel() {
         // Always export roads as raised — recessed/flat styles are only visible
         // through vertex colors in the preview. STL has no color, so roads must
         // protrude above the terrain to be geometrically distinct and paintable.
-        const roadParams: RoadGeometryParams = {
+        const roadParams: Omit<RoadGeometryParams, 'terrainGeometry'> = {
           widthMM: targetWidthMM,
           depthMM: targetDepthMM,
           geographicWidthM: dimensions.widthM,
@@ -247,16 +272,30 @@ export function ExportPanel() {
           bboxCenterUTM: { x: centerUTM.x, y: centerUTM.y },
           roadStyle: 'raised',
           targetReliefMM,
-          terrainGeometry: terrainGeom,
         };
 
-        const roadsGeometry = buildRoadGeometry(roadFeatures, bbox, elevationData, roadParams);
+        const terrainParamsForRoads = {
+          widthMM: targetWidthMM,
+          depthMM: targetDepthMM,
+          geographicWidthM: dimensions.widthM,
+          geographicDepthM: dimensions.heightM,
+          exaggeration,
+          minHeightMM: 5,
+          maxError: 5,
+          targetReliefMM,
+        };
 
-        if (roadsGeometry) {
+        // Road geometry runs off-thread so the UI stays responsive during export
+        const roadArrays = await buildRoadsForExport(
+          roadFeatures, bbox, elevationData, terrainParamsForRoads, roadParams, smoothingLevel
+        );
+
+        if (roadArrays) {
           setExportStatus('building', 'Clipping roads to footprint...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
           // Clip roads to terrain footprint (same as buildings)
+          const roadsGeometry = meshArraysToGeometry(roadArrays);
           const clippedRoads = clipGeometryToFootprint(
             roadsGeometry,
             targetWidthMM / 2,

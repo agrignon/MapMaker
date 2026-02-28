@@ -156,3 +156,64 @@ export function buildBuildingsInWorker(
 export function getBuildingSeqId(): number {
   return buildingSeqId;
 }
+
+/**
+ * Build road geometry in the worker for export. Unlike buildRoadsInWorker,
+ * this does not use stale-result rejection (export has no concurrent calls).
+ */
+export function buildRoadsForExport(
+  features: RoadFeature[],
+  bbox: BoundingBox,
+  elevData: ElevationData,
+  terrainParams: TerrainMeshParams,
+  roadParams: Omit<RoadGeometryParams, 'terrainGeometry'>,
+  smoothingLevel = 25
+): Promise<MeshArrays | null> {
+  const id = nextRequestId++;
+  const w = getWorker();
+
+  return new Promise<MeshArrays | null>((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    w.postMessage({
+      id,
+      type: 'buildRoads',
+      features,
+      bbox,
+      elevData: serializeElevData(elevData),
+      terrainParams,
+      roadParams,
+      smoothingLevel,
+    });
+  });
+}
+
+/**
+ * Build building geometry in the worker for export.
+ * Unlike buildBuildingsInWorker, this does not use stale-result rejection
+ * (export has no concurrent calls).
+ */
+export function buildBuildingsForExport(
+  features: BuildingFeature[],
+  bbox: BoundingBox,
+  elevData: ElevationData,
+  terrainParams: TerrainMeshParams,
+  buildingParams: Omit<BuildingGeometryParams, 'terrainGeometry'>,
+  smoothingLevel = 25
+): Promise<MeshArrays | null> {
+  const id = nextRequestId++;
+  const w = getWorker();
+
+  return new Promise<MeshArrays | null>((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    w.postMessage({
+      id,
+      type: 'buildBuildings',
+      features,
+      bbox,
+      elevData: serializeElevData(elevData),
+      terrainParams,
+      buildingParams,
+      smoothingLevel,
+    });
+  });
+}
