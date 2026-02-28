@@ -5,6 +5,7 @@ import { createMapLibreGlMapController } from '@maptiler/geocoding-control/mapli
 import maplibregl from 'maplibre-gl';
 import type { MapController } from '@maptiler/geocoding-control/types';
 import '@maptiler/geocoding-control/style.css';
+import { useMapStore } from '../../store/mapStore';
 
 const API_KEY = (import.meta.env.VITE_MAPTILER_KEY as string | undefined) ?? '';
 
@@ -24,6 +25,7 @@ const LAT_LON_RE = /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/;
 export function SearchOverlay() {
   const maps = useMap();
   const mapRef = maps['main-map'] ?? maps.current;
+  const setLocationName = useMapStore((s) => s.setLocationName);
 
   const mapController = useMemo<MapController | undefined>(() => {
     const map = mapRef?.getMap();
@@ -35,9 +37,17 @@ export function SearchOverlay() {
   const inputValueRef = useRef('');
 
   const handlePick = useCallback(
-    (result: unknown) => {
-      // If result is null the user typed raw coordinates — handled separately
-      if (result !== null) return;
+    (event: { feature?: { text?: string; place_name?: string; center?: [number, number] } }) => {
+      if (event?.feature) {
+        // Use text (short name like "London") for clean filenames.
+        // Prefer text over place_name ("London, Greater London, England, United Kingdom").
+        const name = event.feature.text ?? event.feature.place_name;
+        if (name) {
+          setLocationName(name);
+        }
+      }
+
+      // Preserve existing lat/lon coordinate interception
       const value = inputValueRef.current.trim();
       const match = value.match(LAT_LON_RE);
       if (match) {
@@ -49,7 +59,7 @@ export function SearchOverlay() {
         }
       }
     },
-    [mapRef]
+    [mapRef, setLocationName]
   );
 
   // Listen to the search input element for lat/lon pattern detection
