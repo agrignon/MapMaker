@@ -128,7 +128,7 @@ describe('buildWalls', () => {
     // = (0, -300, 0) → normalized: (0, -1, 0) ✓
 
     // The normal should point in the direction away from the ring centroid
-    const centroidX = 5, centroidY = 5;
+    const _centroidX = 5, _centroidY = 5; void _centroidX; void _centroidY;
     // Midpoint of bottom edge: (5, 0)
     // Vector from centroid to edge midpoint: (5-5=0, 0-5=-5) → Y negative
     // Normal Y should also be negative (same direction as outward)

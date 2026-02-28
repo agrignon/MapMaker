@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Feature, FeatureCollection } from 'geojson';
 import { parseWaterFeatures } from '../parse';
 
 // Mock osmtogeojson to return pre-formatted GeoJSON FeatureCollections directly.
@@ -17,7 +18,7 @@ import osmtogeojson from 'osmtogeojson';
 const mockOsmtogeojson = vi.mocked(osmtogeojson);
 
 // Helper to build a mock GeoJSON FeatureCollection
-function makeFeatureCollection(features: object[]) {
+function makeFeatureCollection(features: Feature[]): FeatureCollection {
   return {
     type: 'FeatureCollection' as const,
     features,
@@ -28,7 +29,7 @@ function makeFeatureCollection(features: object[]) {
 function makePolygonFeature(
   coordinates: number[][][],
   properties: Record<string, unknown> = { natural: 'water' }
-) {
+): Feature {
   return {
     type: 'Feature' as const,
     geometry: {
@@ -43,7 +44,7 @@ function makePolygonFeature(
 function makeMultiPolygonFeature(
   coordinates: number[][][][],
   properties: Record<string, unknown> = { natural: 'water' }
-) {
+): Feature {
   return {
     type: 'Feature' as const,
     geometry: {
@@ -58,7 +59,7 @@ function makeMultiPolygonFeature(
 function makeLineStringFeature(
   coordinates: number[][],
   properties: Record<string, unknown> = { waterway: 'river' }
-) {
+): Feature {
   return {
     type: 'Feature' as const,
     geometry: {

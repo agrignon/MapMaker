@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Feature, FeatureCollection } from 'geojson';
 import { classifyTier, parseRoadFeatures } from '../parse';
 
 // Mock osmtogeojson to return pre-formatted GeoJSON FeatureCollections directly.
@@ -21,7 +22,7 @@ function makeLineStringFeature(
   highway: string,
   coordinates: number[][],
   extra: Record<string, string> = {}
-) {
+): Feature {
   return {
     type: 'Feature' as const,
     geometry: {
@@ -36,7 +37,7 @@ function makeLineStringFeature(
 }
 
 // Helper to build a mock GeoJSON FeatureCollection
-function makeFeatureCollection(features: object[]) {
+function makeFeatureCollection(features: Feature[]): FeatureCollection {
   return {
     type: 'FeatureCollection' as const,
     features,
@@ -224,9 +225,9 @@ describe('parseRoadFeatures — OSM JSON conversion', () => {
     mockOsmtogeojson.mockReturnValue(
       makeFeatureCollection([
         {
-          type: 'Feature',
+          type: 'Feature' as const,
           geometry: {
-            type: 'Polygon',
+            type: 'Polygon' as const,
             coordinates: [sampleCoords],
           },
           properties: { highway: 'primary' },
@@ -244,9 +245,9 @@ describe('parseRoadFeatures — OSM JSON conversion', () => {
     mockOsmtogeojson.mockReturnValue(
       makeFeatureCollection([
         {
-          type: 'Feature',
+          type: 'Feature' as const,
           geometry: {
-            type: 'LineString',
+            type: 'LineString' as const,
             coordinates: sampleCoords,
           },
           properties: { name: 'Some path' }, // no highway tag
