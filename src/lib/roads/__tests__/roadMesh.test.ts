@@ -253,6 +253,54 @@ describe('buildRoadGeometry — road style offsets', () => {
   });
 });
 
+describe('buildRoadGeometry — topFaceOnly mode', () => {
+  it('produces fewer vertices and triangles than full solid mode', () => {
+    const features = [makeStraightRoad('residential')];
+    mockSampleElevation.mockReturnValue(100);
+
+    const solidGeo = buildRoadGeometry(features, SAMPLE_BBOX, FLAT_ELEV_DATA, {
+      ...BASE_PARAMS,
+      topFaceOnly: false,
+    });
+    const topOnlyGeo = buildRoadGeometry(features, SAMPLE_BBOX, FLAT_ELEV_DATA, {
+      ...BASE_PARAMS,
+      topFaceOnly: true,
+    });
+
+    expect(solidGeo).not.toBeNull();
+    expect(topOnlyGeo).not.toBeNull();
+
+    // topFaceOnly should have exactly half the vertices (2 vs 4 per point)
+    const solidVerts = solidGeo!.getAttribute('position').count;
+    const topOnlyVerts = topOnlyGeo!.getAttribute('position').count;
+    expect(topOnlyVerts).toBeLessThan(solidVerts);
+    expect(topOnlyVerts).toBe(solidVerts / 2);
+
+    // topFaceOnly should have far fewer index entries (2 tris/seg vs 8 + caps)
+    const solidIdx = solidGeo!.index!.count;
+    const topOnlyIdx = topOnlyGeo!.index!.count;
+    expect(topOnlyIdx).toBeLessThan(solidIdx);
+  });
+
+  it('topFaceOnly geometry still has correct Z values', () => {
+    const features = [makeStraightRoad('main')];
+    mockSampleElevation.mockReturnValue(100);
+
+    const geo = buildRoadGeometry(features, SAMPLE_BBOX, VARIED_ELEV_DATA, {
+      ...BASE_PARAMS,
+      roadStyle: 'flat',
+      topFaceOnly: true,
+    });
+
+    expect(geo).not.toBeNull();
+    const pos = geo!.getAttribute('position') as THREE.BufferAttribute;
+    // All Z values should be positive (terrain Z + ribbon depth)
+    for (let i = 0; i < pos.count; i++) {
+      expect(pos.getZ(i)).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('buildRoadGeometry — bridge Z interpolation', () => {
   /**
    * Test bridge linear interpolation.
@@ -356,7 +404,8 @@ describe('buildRoadGeometry — bridge Z interpolation', () => {
     const endTerrainZ = 200 * zScale;
     const bridgeLift = ROAD_DEPTH_MM.main * 2;
 
-    // All vertices should be between startTerrainZ + lift and endTerrainZ + lift + ribbonDepth
+    // All vertices should be between startTerrainZ + lift (bottom face)
+    // and endTerrainZ + lift + ribbonDepth (top face)
     const minExpected = startTerrainZ + bridgeLift - 0.01;
     const maxExpected = endTerrainZ + bridgeLift + ROAD_DEPTH_MM.main + 0.01;
 

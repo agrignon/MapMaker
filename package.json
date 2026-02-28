@@ -19,7 +19,7 @@
     "@types/three": "^0.183.1",
     "@vis.gl/react-maplibre": "^8.1.0",
     "earcut": "^3.0.2",
-    "geometry-extrude": "^0.2.1",
+
     "manifold-3d": "^3.3.2",
     "maplibre-gl": "^5.19.0",
     "osmtogeojson": "^3.0.0-beta.5",

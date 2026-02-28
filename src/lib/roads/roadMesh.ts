@@ -2,19 +2,21 @@
  * Road ribbon mesh generator.
  *
  * Converts road features (centerline coordinates + tier + bridge flag) into
- * Three.js BufferGeometry using geometry-extrude for ribbon mesh generation
+ * Three.js BufferGeometry using a solid ribbon generator (closed box mesh)
  * with terrain-following Z, style offsets, and type-based widths.
  *
- * CRITICAL: zScale MUST match terrain.ts and buildings/merge.ts exactly.
- * Road terrain Z = (sampledElevationM - minElevationM) * zScale
+ * When terrainGeometry is provided in params, road vertices are snapped to
+ * the actual terrain mesh surface via BVH-accelerated raycasting. This
+ * eliminates Z mismatch between roads and the Martini RTIN terrain mesh.
+ * Without terrainGeometry (tests, fallback), elevation grid sampling is used.
  */
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import geometryExtrude from 'geometry-extrude';
 import type { BoundingBox, ElevationData } from '../../types/geo';
 import { wgs84ToUTM } from '../utm';
 import { sampleElevationAtLonLat } from '../buildings/elevationSampler';
+import { buildTerrainRaycaster } from '../mesh/terrainRaycaster';
 import type { RoadFeature, RoadTier, RoadGeometryParams } from './types';
 
 // ─── Road visual constants ─────────────────────────────────────────────────
@@ -78,173 +80,246 @@ function projectCenterlineToMM(
   });
 }
 
+/** Maximum road segment length in meters before subdivision. */
+const MAX_SEGMENT_M = 10;
+
 /**
- * Find the closest parameter t [0,1] on a line segment (p0 → p1) for point p.
- * Returns the clamped projection parameter.
+ * Subdivide a WGS84 centerline so no segment exceeds MAX_SEGMENT_M meters.
+ * Inserts linearly interpolated intermediate points along long segments so
+ * the road ribbon samples terrain elevation at high enough resolution to
+ * closely follow the terrain mesh surface.
  */
-function projectPointOntoSegment(
-  px: number,
-  py: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number
-): number {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return 0;
-  const t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
-  return Math.max(0, Math.min(1, t));
+function subdivideCenterline(
+  coords: [number, number][],
+  maxSegmentM: number
+): [number, number][] {
+  if (coords.length < 2) return coords;
+
+  const result: [number, number][] = [coords[0]];
+
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [lon1, lat1] = coords[i];
+    const [lon2, lat2] = coords[i + 1];
+
+    // Approximate segment length in meters
+    const latAvg = (lat1 + lat2) / 2;
+    const dxM = (lon2 - lon1) * 111320 * Math.cos(latAvg * Math.PI / 180);
+    const dyM = (lat2 - lat1) * 110574;
+    const distM = Math.sqrt(dxM * dxM + dyM * dyM);
+
+    const numSeg = Math.max(1, Math.ceil(distM / maxSegmentM));
+
+    for (let s = 1; s <= numSeg; s++) {
+      const t = s / numSeg;
+      result.push([
+        lon1 + t * (lon2 - lon1),
+        lat1 + t * (lat2 - lat1),
+      ]);
+    }
+  }
+
+  return result;
 }
 
 /**
- * Assign terrain-following Z values to extruded ribbon vertices.
+ * Build a solid extruded ribbon (closed box) along a 2D centerline.
  *
- * For each vertex in the position Float32Array:
- * 1. Find the nearest segment in the centerline2D by projecting the vertex XY
- * 2. Interpolate terrain Z at that position
- * 3. Add style offset (positive=raised, negative=recessed, 0=flat)
- * 4. Add the vertex's local ribbon Z (0 = bottom face, ribbonDepth = top face)
+ * For each centerline point, computes the averaged tangent from adjacent
+ * segments and offsets left/right perpendicular to it by halfWidth. At
+ * corners the offset is scaled by 1/cos(halfAngle), capped at 2x to
+ * prevent miter spikes.
  *
- * @param position - Flat Float32Array of [x, y, z, x, y, z, ...] vertices (mutated in place)
- * @param centerline2D - Projected centerline in local mm space
- * @param terrainZs - Per-vertex terrain Z values in mm (aligned with centerline2D)
- * @param styleOffset - Z offset in mm from road style (+ raised, - recessed, 0 flat)
- * @param ribbonDepth - Extrusion depth in mm (thickness of the ribbon)
+ * When topFaceOnly=false (default): Generates a closed solid with 4 vertices
+ * per centerline point (TL, TR, BL, BR) and faces for: top, bottom, left wall,
+ * right wall, start cap, end cap. Used for STL export (slicers handle overlaps).
+ *
+ * When topFaceOnly=true: Generates only the top face with 2 vertices per
+ * centerline point (L, R). Eliminates side wall / bottom face terrain
+ * intersection artifacts (striations) in the 3D preview.
+ *
+ * All Z values are 0 — caller assigns top/bottom Z after construction.
+ *
+ * @returns positions + indices, or null if centerline has < 2 points
  */
-function assignTerrainZ(
-  position: Float32Array,
-  centerline2D: [number, number][],
-  terrainZs: number[],
-  styleOffset: number,
-  ribbonDepth: number
-): void {
-  const vertexCount = position.length / 3;
-  const segCount = centerline2D.length - 1;
+function buildSolidRibbon(
+  centerline: [number, number][],
+  halfWidth: number,
+  topFaceOnly = false
+): { positions: Float32Array; indices: Uint32Array } | null {
+  const n = centerline.length;
+  if (n < 2) return null;
 
-  for (let vi = 0; vi < vertexCount; vi++) {
-    const px = position[vi * 3];
-    const py = position[vi * 3 + 1];
-    // Local z from extrusion: 0 = bottom of ribbon, ribbonDepth = top
-    const localZ = position[vi * 3 + 2];
+  const vertsPerPoint = topFaceOnly ? 2 : 4;
+  const positions = new Float32Array(n * vertsPerPoint * 3);
 
-    // Find the nearest segment and interpolated terrain Z
-    let bestDist = Infinity;
-    let bestTerrainZ = terrainZs[0];
+  let triCount: number;
+  if (topFaceOnly) {
+    // Top face only: 2 triangles per segment
+    triCount = (n - 1) * 2;
+  } else {
+    // Full solid: top(2) + bottom(2) + left wall(2) + right wall(2) = 8 per segment + 4 caps
+    triCount = (n - 1) * 8 + 4;
+  }
+  const indices = new Uint32Array(triCount * 3);
 
-    for (let si = 0; si < segCount; si++) {
-      const ax = centerline2D[si][0];
-      const ay = centerline2D[si][1];
-      const bx = centerline2D[si + 1][0];
-      const by = centerline2D[si + 1][1];
+  for (let i = 0; i < n; i++) {
+    // Compute tangent direction at point i
+    let tx: number, ty: number;
 
-      const t = projectPointOntoSegment(px, py, ax, ay, bx, by);
+    if (i === 0) {
+      tx = centerline[1][0] - centerline[0][0];
+      ty = centerline[1][1] - centerline[0][1];
+    } else if (i === n - 1) {
+      tx = centerline[n - 1][0] - centerline[n - 2][0];
+      ty = centerline[n - 1][1] - centerline[n - 2][1];
+    } else {
+      // Average of normalized adjacent segment directions
+      const d0x = centerline[i][0] - centerline[i - 1][0];
+      const d0y = centerline[i][1] - centerline[i - 1][1];
+      const d1x = centerline[i + 1][0] - centerline[i][0];
+      const d1y = centerline[i + 1][1] - centerline[i][1];
 
-      // Projected point on segment
-      const projX = ax + t * (bx - ax);
-      const projY = ay + t * (by - ay);
+      const len0 = Math.sqrt(d0x * d0x + d0y * d0y);
+      const len1 = Math.sqrt(d1x * d1x + d1y * d1y);
 
-      // Distance from vertex to projected point
-      const ddx = px - projX;
-      const ddy = py - projY;
-      const dist = ddx * ddx + ddy * ddy;
-
-      if (dist < bestDist) {
-        bestDist = dist;
-        // Interpolate terrain Z along segment
-        bestTerrainZ = terrainZs[si] + t * (terrainZs[si + 1] - terrainZs[si]);
+      if (len0 < 1e-12 && len1 < 1e-12) {
+        tx = 1;
+        ty = 0;
+      } else if (len0 < 1e-12) {
+        tx = d1x;
+        ty = d1y;
+      } else if (len1 < 1e-12) {
+        tx = d0x;
+        ty = d0y;
+      } else {
+        tx = d0x / len0 + d1x / len1;
+        ty = d0y / len0 + d1y / len1;
       }
     }
 
-    // Final Z = terrain Z + style offset + local ribbon thickness
-    position[vi * 3 + 2] = bestTerrainZ + styleOffset + localZ;
-  }
-}
+    // Normalize tangent
+    const tLen = Math.sqrt(tx * tx + ty * ty);
+    if (tLen < 1e-12) {
+      tx = 1;
+      ty = 0;
+    } else {
+      tx /= tLen;
+      ty /= tLen;
+    }
 
-// ─── Bridge Z interpolation helper ────────────────────────────────────────
+    // Miter normal: perpendicular to tangent (left-hand side)
+    const nx = -ty;
+    const ny = tx;
 
-/**
- * Assign bridge Z values — linearly interpolated between endpoint terrain Z values,
- * plus a bridge lift to visually float above terrain.
- *
- * For bridges: no style offset; instead use lifted linear interpolation.
- * Bridge lift = ROAD_DEPTH_MM[tier] * 2 (double depth to float above terrain).
- *
- * @param position - Flat Float32Array of vertices (mutated in place)
- * @param centerline2D - Projected centerline in local mm space
- * @param startTerrainZ - Terrain Z at first centerline point (mm)
- * @param endTerrainZ - Terrain Z at last centerline point (mm)
- * @param bridgeLift - Additional Z lift for bridge (mm)
- * @param ribbonDepth - Extrusion depth in mm (ribbon thickness)
- */
-function assignBridgeZ(
-  position: Float32Array,
-  centerline2D: [number, number][],
-  startTerrainZ: number,
-  endTerrainZ: number,
-  bridgeLift: number,
-  ribbonDepth: number
-): void {
-  // Compute total centerline length for parameterization
-  let totalLength = 0;
-  const segLengths: number[] = [];
-
-  for (let si = 0; si < centerline2D.length - 1; si++) {
-    const dx = centerline2D[si + 1][0] - centerline2D[si][0];
-    const dy = centerline2D[si + 1][1] - centerline2D[si][1];
-    const len = Math.sqrt(dx * dx + dy * dy);
-    segLengths.push(len);
-    totalLength += len;
-  }
-
-  // Precompute cumulative distances
-  const cumDist: number[] = [0];
-  for (const len of segLengths) {
-    cumDist.push(cumDist[cumDist.length - 1] + len);
-  }
-
-  const vertexCount = position.length / 3;
-  const segCount = centerline2D.length - 1;
-
-  for (let vi = 0; vi < vertexCount; vi++) {
-    const px = position[vi * 3];
-    const py = position[vi * 3 + 1];
-    const localZ = position[vi * 3 + 2];
-
-    // Find nearest point on centerline and its arc-length parameter
-    let bestDist = Infinity;
-    let bestArcParam = 0;
-
-    for (let si = 0; si < segCount; si++) {
-      const ax = centerline2D[si][0];
-      const ay = centerline2D[si][1];
-      const bx = centerline2D[si + 1][0];
-      const by = centerline2D[si + 1][1];
-
-      const t = projectPointOntoSegment(px, py, ax, ay, bx, by);
-      const projX = ax + t * (bx - ax);
-      const projY = ay + t * (by - ay);
-
-      const ddx = px - projX;
-      const ddy = py - projY;
-      const dist = ddx * ddx + ddy * ddy;
-
-      if (dist < bestDist) {
-        bestDist = dist;
-        // Arc-length parameter [0, 1] along the full centerline
-        if (totalLength > 0) {
-          bestArcParam = (cumDist[si] + t * segLengths[si]) / totalLength;
+    // Compute miter scale for interior points: 1/cos(halfAngle), capped at 2
+    let miterScale = 1.0;
+    if (i > 0 && i < n - 1) {
+      const d0x = centerline[i][0] - centerline[i - 1][0];
+      const d0y = centerline[i][1] - centerline[i - 1][1];
+      const len0 = Math.sqrt(d0x * d0x + d0y * d0y);
+      if (len0 > 1e-12) {
+        const n0x = -d0y / len0;
+        const n0y = d0x / len0;
+        const dot = nx * n0x + ny * n0y;
+        if (Math.abs(dot) > 1e-6) {
+          miterScale = Math.min(Math.abs(1.0 / dot), 2.0);
         } else {
-          bestArcParam = 0;
+          miterScale = 2.0;
         }
       }
     }
 
-    // Linearly interpolate terrain Z along bridge + lift
-    const bridgeTerrainZ = startTerrainZ + bestArcParam * (endTerrainZ - startTerrainZ);
-    position[vi * 3 + 2] = bridgeTerrainZ + bridgeLift + localZ;
+    const offsetX = nx * halfWidth * miterScale;
+    const offsetY = ny * halfWidth * miterScale;
+
+    const lx = centerline[i][0] + offsetX;
+    const ly = centerline[i][1] + offsetY;
+    const rx = centerline[i][0] - offsetX;
+    const ry = centerline[i][1] - offsetY;
+
+    if (topFaceOnly) {
+      const base = i * 2;
+      // L (left):  index base+0
+      positions[(base + 0) * 3] = lx;
+      positions[(base + 0) * 3 + 1] = ly;
+      positions[(base + 0) * 3 + 2] = 0; // topZ assigned later
+      // R (right): index base+1
+      positions[(base + 1) * 3] = rx;
+      positions[(base + 1) * 3 + 1] = ry;
+      positions[(base + 1) * 3 + 2] = 0;
+    } else {
+      const base = i * 4;
+      // TL (top-left):  index base+0
+      positions[(base + 0) * 3] = lx;
+      positions[(base + 0) * 3 + 1] = ly;
+      positions[(base + 0) * 3 + 2] = 0; // topZ assigned later
+      // TR (top-right): index base+1
+      positions[(base + 1) * 3] = rx;
+      positions[(base + 1) * 3 + 1] = ry;
+      positions[(base + 1) * 3 + 2] = 0;
+      // BL (bot-left):  index base+2
+      positions[(base + 2) * 3] = lx;
+      positions[(base + 2) * 3 + 1] = ly;
+      positions[(base + 2) * 3 + 2] = 0; // botZ assigned later
+      // BR (bot-right): index base+3
+      positions[(base + 3) * 3] = rx;
+      positions[(base + 3) * 3 + 1] = ry;
+      positions[(base + 3) * 3 + 2] = 0;
+    }
   }
+
+  // Build triangle indices
+  let idx = 0;
+
+  if (topFaceOnly) {
+    // Top face only: 2 triangles per segment
+    for (let i = 0; i < n - 1; i++) {
+      const l0 = i * 2, r0 = i * 2 + 1;
+      const l1 = (i + 1) * 2, r1 = (i + 1) * 2 + 1;
+
+      indices[idx++] = l0; indices[idx++] = r0; indices[idx++] = l1;
+      indices[idx++] = r0; indices[idx++] = r1; indices[idx++] = l1;
+    }
+  } else {
+    // Segment faces (top, bottom, left wall, right wall)
+    for (let i = 0; i < n - 1; i++) {
+      const tl0 = i * 4, tr0 = i * 4 + 1, bl0 = i * 4 + 2, br0 = i * 4 + 3;
+      const tl1 = (i + 1) * 4, tr1 = (i + 1) * 4 + 1, bl1 = (i + 1) * 4 + 2, br1 = (i + 1) * 4 + 3;
+
+      // Top face (+Z normal)
+      indices[idx++] = tl0; indices[idx++] = tr0; indices[idx++] = tl1;
+      indices[idx++] = tr0; indices[idx++] = tr1; indices[idx++] = tl1;
+
+      // Bottom face (-Z normal, reversed winding)
+      indices[idx++] = bl0; indices[idx++] = bl1; indices[idx++] = br0;
+      indices[idx++] = br0; indices[idx++] = bl1; indices[idx++] = br1;
+
+      // Left wall (TL-BL edge)
+      indices[idx++] = tl0; indices[idx++] = tl1; indices[idx++] = bl0;
+      indices[idx++] = bl0; indices[idx++] = tl1; indices[idx++] = bl1;
+
+      // Right wall (TR-BR edge)
+      indices[idx++] = tr0; indices[idx++] = br0; indices[idx++] = tr1;
+      indices[idx++] = tr1; indices[idx++] = br0; indices[idx++] = br1;
+    }
+
+    // Start cap (i=0)
+    {
+      const tl = 0, tr = 1, bl = 2, br = 3;
+      indices[idx++] = tl; indices[idx++] = bl; indices[idx++] = tr;
+      indices[idx++] = tr; indices[idx++] = bl; indices[idx++] = br;
+    }
+
+    // End cap (i=n-1)
+    {
+      const base = (n - 1) * 4;
+      const tl = base, tr = base + 1, bl = base + 2, br = base + 3;
+      indices[idx++] = tl; indices[idx++] = tr; indices[idx++] = bl;
+      indices[idx++] = tr; indices[idx++] = br; indices[idx++] = bl;
+    }
+  }
+
+  return { positions, indices };
 }
 
 // ─── Main export ───────────────────────────────────────────────────────────
@@ -254,12 +329,13 @@ function assignBridgeZ(
  *
  * Processing pipeline per feature:
  * 1. Skip features with < 2 coordinates
- * 2. Project centerline coordinates to local mm space
- * 3. Sample per-vertex terrain Z via bilinear interpolation
- * 4. Compute style offset (recessed/raised/flat) or bridge lift
- * 5. Call geometry-extrude extrudePolyline to produce ribbon geometry
- * 6. Post-process position array to assign terrain-following Z
- * 7. Build Three.js BufferGeometry (strip UV to avoid merge mismatch)
+ * 2. Subdivide centerline (max 10m segments) for dense terrain sampling
+ * 3. Project centerline coordinates to local mm space
+ * 4. Sample per-vertex terrain Z (raycasting terrain mesh if available,
+ *    otherwise bilinear interpolation from elevation grid as fallback)
+ * 5. Build solid ribbon geometry (top + bottom + side walls + end caps)
+ * 6. Assign top/bottom Z with style offset or bridge lift
+ * 7. Build Three.js BufferGeometry with computed vertex normals
  *
  * @param features - Parsed road features from parseRoadFeatures()
  * @param bbox - Bounding box for the area (WGS84)
@@ -283,6 +359,8 @@ export function buildRoadGeometry(
     bboxCenterUTM,
     roadStyle,
     targetReliefMM,
+    terrainGeometry,
+    topFaceOnly,
   } = params;
 
   // Compute horizontal scale: mm per meter of real-world distance
@@ -302,54 +380,85 @@ export function buildRoadGeometry(
     zScale = naturalHeightMM < MIN_HEIGHT_MM ? MIN_HEIGHT_MM / elevRange : horizontalScale * exaggeration;
   }
 
+  // Build BVH-accelerated raycaster if terrain geometry is available.
+  // When provided, road vertices are snapped to the actual terrain mesh
+  // surface, eliminating the Z mismatch from Martini RTIN simplification.
+  const raycastTerrainZ = terrainGeometry
+    ? buildTerrainRaycaster(terrainGeometry)
+    : null;
+
   const roadGeometries: THREE.BufferGeometry[] = [];
 
   for (const feature of features) {
-    const { coordinates, tier, isBridge } = feature;
+    const { tier, isBridge } = feature;
 
     // Skip degenerate centerlines
-    if (coordinates.length < 2) continue;
+    if (feature.coordinates.length < 2) continue;
 
-    // Step 1: Project centerline to local mm space
+    // Step 1: Subdivide centerline for dense terrain sampling
+    const coordinates = subdivideCenterline(feature.coordinates, MAX_SEGMENT_M);
+
+    // Step 2: Project centerline to local mm space
     const projected2D = projectCenterlineToMM(coordinates, bboxCenterUTM, horizontalScale);
 
-    // Step 2: Sample per-vertex terrain Z values
-    const terrainZs = coordinates.map(([lon, lat]) => {
+    // Step 3: Sample per-vertex terrain Z values
+    // When terrain geometry is available, raycast from each centerline point
+    // onto the terrain mesh for exact Z. Fall back to elevation grid sampling.
+    const terrainZs = projected2D.map(([x, y], idx) => {
+      if (raycastTerrainZ) {
+        const hitZ = raycastTerrainZ(x, y);
+        if (hitZ !== null) return hitZ;
+      }
+      // Fallback: sample from elevation grid (used in tests/export without terrain mesh)
+      const [lon, lat] = coordinates[idx];
       const elevM = sampleElevationAtLonLat(lon, lat, bbox, elevData);
       return (elevM - minElevationM) * zScale;
     });
 
-    // Step 3: Call extrudePolyline to produce ribbon geometry
+    // Step 4: Build ribbon geometry
     const ribbonWidth = ROAD_WIDTH_MM[tier];
     const ribbonDepth = ROAD_DEPTH_MM[tier];
+    const ribbon = buildSolidRibbon(projected2D, ribbonWidth / 2, topFaceOnly);
+    if (!ribbon) continue;
 
-    let extrudeResult: ReturnType<typeof geometryExtrude.extrudePolyline>;
-    try {
-      extrudeResult = geometryExtrude.extrudePolyline(
-        [projected2D],  // MUST wrap in array — MultiLineString format (Pitfall 2)
-        { lineWidth: ribbonWidth, depth: ribbonDepth, miterLimit: 2 }
-      );
-    } catch {
-      // Skip roads that fail extrusion (degenerate geometry)
-      continue;
-    }
+    const { positions, indices } = ribbon;
+    const vertsPerPoint = topFaceOnly ? 2 : 4;
 
-    const { position, indices, normal } = extrudeResult;
-
-    // Step 4: Post-process position array — assign terrain-following Z
-    const positionCopy = new Float32Array(position);
-
+    // Step 5: Assign terrain-following Z values
+    // topFaceOnly: only top Z (2 verts per point: L, R)
+    // full solid: top + bottom Z (4 verts per point: TL, TR, BL, BR)
     if (isBridge) {
-      // Bridge: linearly interpolate Z between endpoint terrain Z values + lift
+      // Bridge: linearly interpolate between endpoint terrain Z + lift
       const bridgeLift = ROAD_DEPTH_MM[tier] * 2;
-      assignBridgeZ(
-        positionCopy,
-        projected2D,
-        terrainZs[0],
-        terrainZs[terrainZs.length - 1],
-        bridgeLift,
-        ribbonDepth
-      );
+      const startZ = terrainZs[0];
+      const endZ = terrainZs[terrainZs.length - 1];
+
+      // Compute cumulative arc-length for parameterization
+      let totalLength = 0;
+      const cumDist = [0];
+      for (let i = 0; i < projected2D.length - 1; i++) {
+        const dx = projected2D[i + 1][0] - projected2D[i][0];
+        const dy = projected2D[i + 1][1] - projected2D[i][1];
+        totalLength += Math.sqrt(dx * dx + dy * dy);
+        cumDist.push(totalLength);
+      }
+
+      for (let i = 0; i < projected2D.length; i++) {
+        const arcParam = totalLength > 0 ? cumDist[i] / totalLength : 0;
+        const baseZ = startZ + arcParam * (endZ - startZ) + bridgeLift;
+        const topZ = baseZ + ribbonDepth;
+        const base = i * vertsPerPoint;
+        if (topFaceOnly) {
+          positions[(base + 0) * 3 + 2] = topZ;  // L
+          positions[(base + 1) * 3 + 2] = topZ;  // R
+        } else {
+          const botZ = baseZ;
+          positions[(base + 0) * 3 + 2] = topZ;  // TL
+          positions[(base + 1) * 3 + 2] = topZ;  // TR
+          positions[(base + 2) * 3 + 2] = botZ;  // BL
+          positions[(base + 3) * 3 + 2] = botZ;  // BR
+        }
+      }
     } else {
       // Non-bridge: terrain-following with style offset
       let styleOffset: number;
@@ -361,26 +470,26 @@ export function buildRoadGeometry(
         styleOffset = 0;
       }
 
-      assignTerrainZ(
-        positionCopy,
-        projected2D,
-        terrainZs,
-        styleOffset,
-        ribbonDepth
-      );
+      for (let i = 0; i < projected2D.length; i++) {
+        const topZ = terrainZs[i] + styleOffset + ribbonDepth;
+        const base = i * vertsPerPoint;
+        if (topFaceOnly) {
+          positions[(base + 0) * 3 + 2] = topZ;  // L
+          positions[(base + 1) * 3 + 2] = topZ;  // R
+        } else {
+          const botZ = terrainZs[i] + styleOffset;
+          positions[(base + 0) * 3 + 2] = topZ;  // TL
+          positions[(base + 1) * 3 + 2] = topZ;  // TR
+          positions[(base + 2) * 3 + 2] = botZ;  // BL
+          positions[(base + 3) * 3 + 2] = botZ;  // BR
+        }
+      }
     }
 
-    // Step 5: Build Three.js BufferGeometry
-    // Note: Use new Float32Array(position) copy (geometry-extrude may reuse internal buffers)
-    // Use Uint32Array for indices (road meshes can exceed 65535 vertices)
+    // Step 6: Build Three.js BufferGeometry
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positionCopy, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normal), 3));
-    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
-
-    // Strip UV attribute before merge (Pitfall 7 — geometry-extrude returns UV
-    // but terrain/buildings lack it; mismatched attributes cause merge errors)
-    // UV is not in the attribute set we set above, so no deletion needed.
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
 
     roadGeometries.push(geo);
   }
@@ -388,7 +497,6 @@ export function buildRoadGeometry(
   if (roadGeometries.length === 0) return null;
 
   // Merge all road geometries into one
-  // UV attribute was never added, so no stripping needed before merge
   const merged = mergeGeometries(roadGeometries, false);
   merged.computeVertexNormals();
 

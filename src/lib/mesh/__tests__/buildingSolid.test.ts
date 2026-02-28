@@ -2,13 +2,13 @@
  * Tests for building-terrain CSG union module.
  *
  * Validates:
- * 1. unionBuildingsWithTerrain produces a geometry for a simple box-on-box scenario
+ * 1. csgUnion produces a geometry for a simple box-on-box scenario
  * 2. mergeTerrainAndBuildings returns geometry even when CSG fails (fallback path)
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
-import { unionBuildingsWithTerrain, mergeTerrainAndBuildings } from '../buildingSolid';
+import { csgUnion, mergeTerrainAndBuildings } from '../buildingSolid';
 import { validateMesh } from '../../export/validate';
 
 /**
@@ -47,7 +47,7 @@ function makeBoxGeometry(
   return nonIndexed;
 }
 
-describe('unionBuildingsWithTerrain', () => {
+describe('csgUnion', () => {
   it('returns a BufferGeometry with position attribute for flat terrain + box building', () => {
     // Minimal terrain solid: flat 10x10x2 box (base at Z=-1 to Z=1)
     const terrainGeo = makeBoxGeometry(10, 2, 10);
@@ -56,7 +56,7 @@ describe('unionBuildingsWithTerrain', () => {
     // Building base at Z=1 (top of terrain), top at Z=6
     const buildingGeo = makeBoxGeometry(2, 5, 2, 0, 3.5, 0);
 
-    const result = unionBuildingsWithTerrain(terrainGeo, buildingGeo);
+    const result = csgUnion(terrainGeo, buildingGeo);
 
     expect(result).toBeDefined();
     expect(result.getAttribute('position')).toBeDefined();
@@ -75,7 +75,7 @@ describe('unionBuildingsWithTerrain', () => {
     const buildingGeo = makeBoxGeometry(2, 5, 2, 0, 3.5, 0);
 
     const terrainTriCount = terrainGeo.getAttribute('position').count / 3;
-    const result = unionBuildingsWithTerrain(terrainGeo, buildingGeo);
+    const result = csgUnion(terrainGeo, buildingGeo);
     const resultTriCount = result.getAttribute('position').count / 3;
 
     // CSG union should produce more geometry than terrain alone
@@ -92,7 +92,7 @@ describe('unionBuildingsWithTerrain', () => {
     const buildingIndexed = new THREE.BoxGeometry(2, 5, 2);
 
     expect(() => {
-      const result = unionBuildingsWithTerrain(terrainIndexed, buildingIndexed);
+      const result = csgUnion(terrainIndexed, buildingIndexed);
       result.dispose();
     }).not.toThrow();
 
@@ -117,14 +117,14 @@ describe('mergeTerrainAndBuildings', () => {
   });
 
   it('returns a BufferGeometry on the merge fallback path when CSG fails', () => {
-    // Mock unionBuildingsWithTerrain to throw an error (simulating CSG failure)
+    // Mock csgUnion to throw an error (simulating CSG failure)
     const terrainGeo = makeBoxGeometry(10, 2, 10);
     const buildingGeo = makeBoxGeometry(2, 5, 2, 0, 3.5, 0);
 
     // Spy on console.warn to verify fallback warning is emitted
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    // Import the module again to spy on unionBuildingsWithTerrain
+    // Import the module again to spy on csgUnion
     // We test fallback by providing geometry that triggers the internal fallback
     // Use a geometry with NaN positions to force CSG failure
     const badGeo = new THREE.BufferGeometry();

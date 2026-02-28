@@ -17,67 +17,64 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const CSG_TIMEOUT_MS = 10_000; // 10 seconds maximum for CSG operation
 
 /**
- * Perform a CSG union (ADDITION) of terrain and buildings geometry.
+ * Generic CSG union (ADDITION) of two geometries into a single manifold solid.
  *
- * Both geometries must be non-indexed (triangle soup) for three-bvh-csg to work correctly.
- * The terrain solid from buildSolidMesh is already non-indexed.
- * The buildings geometry from buildAllBuildings is also non-indexed.
+ * Handles: toNonIndexed conversion, attribute stripping to position+normal,
+ * computeVertexNormals if missing, Brush creation, Evaluator ADDITION.
  *
- * @param terrainGeometry - Terrain solid BufferGeometry (non-indexed, from buildSolidMesh)
- * @param buildingsGeometry - Buildings merged BufferGeometry (non-indexed, from buildAllBuildings)
+ * @param baseGeometry - Base solid BufferGeometry (e.g. terrain or terrain+buildings)
+ * @param featureGeometry - Feature BufferGeometry to union into the base
+ * @param label - Optional label for logging (e.g. 'buildings', 'roads', 'vegetation')
  * @returns Combined manifold BufferGeometry (CSG union result)
  */
-export function unionBuildingsWithTerrain(
-  terrainGeometry: THREE.BufferGeometry,
-  buildingsGeometry: THREE.BufferGeometry
+export function csgUnion(
+  baseGeometry: THREE.BufferGeometry,
+  featureGeometry: THREE.BufferGeometry,
+  label?: string
 ): THREE.BufferGeometry {
   // Ensure both geometries are non-indexed for CSG
-  const terrainNonIndexed = terrainGeometry.index
-    ? terrainGeometry.toNonIndexed()
-    : terrainGeometry;
+  const baseNonIndexed = baseGeometry.index
+    ? baseGeometry.toNonIndexed()
+    : baseGeometry;
 
-  const buildingsNonIndexed = buildingsGeometry.index
-    ? buildingsGeometry.toNonIndexed()
-    : buildingsGeometry;
+  const featureNonIndexed = featureGeometry.index
+    ? featureGeometry.toNonIndexed()
+    : featureGeometry;
 
-  // Ensure both geometries have vertex normals computed (required by three-bvh-csg Evaluator)
-  // The Evaluator's default attribute list is ['position', 'uv', 'normal'] — normal must exist.
-  const preparedTerrain = terrainNonIndexed.clone();
-  const preparedBuildings = buildingsNonIndexed.clone();
+  // Clone and strip to position + normal only (required by three-bvh-csg)
+  const preparedBase = baseNonIndexed.clone();
+  const preparedFeature = featureNonIndexed.clone();
 
-  // Remove UV (optional) and color (not needed for CSG); keep position + normal
-  for (const name of Object.keys(preparedTerrain.attributes)) {
-    if (name !== 'position' && name !== 'normal') preparedTerrain.deleteAttribute(name);
+  for (const name of Object.keys(preparedBase.attributes)) {
+    if (name !== 'position' && name !== 'normal') preparedBase.deleteAttribute(name);
   }
-  for (const name of Object.keys(preparedBuildings.attributes)) {
-    if (name !== 'position' && name !== 'normal') preparedBuildings.deleteAttribute(name);
+  for (const name of Object.keys(preparedFeature.attributes)) {
+    if (name !== 'position' && name !== 'normal') preparedFeature.deleteAttribute(name);
   }
 
   // Compute vertex normals if missing (required by three-bvh-csg)
-  if (!preparedTerrain.getAttribute('normal')) {
-    preparedTerrain.computeVertexNormals();
+  if (!preparedBase.getAttribute('normal')) {
+    preparedBase.computeVertexNormals();
   }
-  if (!preparedBuildings.getAttribute('normal')) {
-    preparedBuildings.computeVertexNormals();
+  if (!preparedFeature.getAttribute('normal')) {
+    preparedFeature.computeVertexNormals();
   }
 
   // Create Brush objects (three-bvh-csg uses Brush as input mesh type)
-  const terrainBrush = new Brush(preparedTerrain);
-  const buildingsBrush = new Brush(preparedBuildings);
+  const baseBrush = new Brush(preparedBase);
+  const featureBrush = new Brush(preparedFeature);
 
   // Update world matrices (required by three-bvh-csg before evaluation)
-  terrainBrush.updateMatrixWorld(true);
-  buildingsBrush.updateMatrixWorld(true);
+  baseBrush.updateMatrixWorld(true);
+  featureBrush.updateMatrixWorld(true);
 
-  // Perform CSG union
-  // Use only position + normal attributes (UV is not needed for STL export)
-  // This avoids errors when geometries lack UV attributes
+  // Perform CSG union (position + normal only — UV not needed for STL)
   const evaluator = new Evaluator();
   evaluator.attributes = ['position', 'normal'];
-  const result = evaluator.evaluate(terrainBrush, buildingsBrush, ADDITION);
+  const result = evaluator.evaluate(baseBrush, featureBrush, ADDITION);
 
   if (!result || !result.geometry) {
-    throw new Error('CSG evaluation returned null result');
+    throw new Error(`CSG union${label ? ` (${label})` : ''} returned null result`);
   }
 
   return result.geometry;
@@ -106,7 +103,7 @@ export function mergeTerrainAndBuildings(
   const startMs = Date.now();
 
   try {
-    csgResult = unionBuildingsWithTerrain(terrainSolid, buildingsGeo);
+    csgResult = csgUnion(terrainSolid, buildingsGeo, 'buildings');
 
     const elapsed = Date.now() - startMs;
     if (elapsed > CSG_TIMEOUT_MS) {

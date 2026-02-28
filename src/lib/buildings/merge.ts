@@ -23,6 +23,7 @@ import { resolveHeight, resolveRoofHeight } from './height';
 import { sampleElevationAtLonLat } from './elevationSampler';
 import { computeSignedArea } from './walls';
 import { buildSingleBuilding } from './buildingMesh';
+import { buildTerrainRaycaster } from '../mesh/terrainRaycaster';
 
 /**
  * Strip the closing duplicate vertex from an OSM polygon ring.
@@ -113,7 +114,7 @@ export function buildAllBuildings(
 ): THREE.BufferGeometry | null {
   if (features.length === 0) return null;
 
-  const { widthMM, geographicWidthM, exaggeration, minElevationM, bboxCenterUTM } = params;
+  const { widthMM, geographicWidthM, exaggeration, minElevationM, bboxCenterUTM, terrainGeometry } = params;
 
   // Compute horizontal scale: mm per meter of real-world distance
   // CRITICAL: Must match terrain.ts line 84: horizontalScale = widthMM / geographicWidthM
@@ -144,6 +145,13 @@ export function buildAllBuildings(
     }
   }
 
+  // Build BVH-accelerated raycaster if terrain geometry is available.
+  // When provided, building base Z is snapped to the actual terrain mesh
+  // surface, eliminating the floating-buildings Z mismatch.
+  const raycastTerrainZ = terrainGeometry
+    ? buildTerrainRaycaster(terrainGeometry)
+    : null;
+
   const buildingGeometries: THREE.BufferGeometry[] = [];
 
   for (const feature of features) {
@@ -173,12 +181,25 @@ export function buildAllBuildings(
       projectRingToMM(hole, bboxCenterUTM, horizontalScale)
     );
 
-    // Step c: Sample terrain elevation and use the MIN as a flat base for the building.
-    // Using per-vertex base Z causes buildings to distort when terrain exaggeration
-    // changes (base vertices spread vertically on slopes). A flat base at the lowest
-    // sampled point anchors the building to the terrain — uphill walls extend below
-    // the terrain surface (hidden by occlusion), and the building never floats.
-    const sampledBaseZ = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
+    // Step c: Sample terrain Z and use the MIN as a flat base for the building.
+    // When terrain geometry is available, raycast footprint vertices onto the
+    // terrain mesh for exact Z (eliminates floating buildings from Martini mismatch).
+    // Falls back to elevation grid sampling when no terrain geometry (tests/export).
+    // A flat base at the lowest point anchors the building — uphill walls extend
+    // below terrain (hidden by occlusion), preventing distortion on slopes.
+    let sampledBaseZ: number[];
+    if (raycastTerrainZ) {
+      sampledBaseZ = outerRingMM.map(([x, y], idx) => {
+        const hitZ = raycastTerrainZ(x, y);
+        if (hitZ !== null) return hitZ;
+        // Fallback for vertices outside terrain bounds
+        const [lon, lat] = openOuter[idx];
+        const elevM = sampleElevationAtLonLat(lon, lat, bbox, elevData);
+        return (elevM - minElevationM) * zScale;
+      });
+    } else {
+      sampledBaseZ = sampleBaseZmm(openOuter, bbox, elevData, minElevationM, zScale);
+    }
     const flatBaseZ = Math.min(...sampledBaseZ);
     const baseZmm = sampledBaseZ.map(() => flatBaseZ);
 

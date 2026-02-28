@@ -4,6 +4,8 @@
  * to Three.js BufferGeometry output.
  */
 
+import type * as THREE from 'three';
+
 /** Width tier classification for roads. */
 export type RoadTier = 'highway' | 'main' | 'residential';
 
@@ -53,4 +55,18 @@ export interface RoadGeometryParams {
   roadStyle: RoadStyle;
   /** Optional Z height override in mm (must match terrain/building params) */
   targetReliefMM?: number;
+  /**
+   * Optional terrain mesh geometry for raycasting road Z onto the actual
+   * terrain surface. When provided, road vertices are snapped to the terrain
+   * mesh via BVH-accelerated raycasting instead of sampling the elevation grid.
+   * This eliminates Z mismatch between roads and the Martini RTIN terrain.
+   */
+  terrainGeometry?: THREE.BufferGeometry;
+  /**
+   * When true, generate only the top face of the road ribbon (no bottom,
+   * side walls, or end caps). Eliminates visual striations in the preview
+   * where solid ribbon walls poke through the terrain on slopes.
+   * Export should use false (default) for full solid geometry.
+   */
+  topFaceOnly?: boolean;
 }

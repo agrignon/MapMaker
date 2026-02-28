@@ -4,6 +4,8 @@
  * to Three.js BufferGeometry output.
  */
 
+import type * as THREE from 'three';
+
 /**
  * A parsed building from OSM data with raw properties and geometry.
  * Coordinates are in [lon, lat] order (WGS84).
@@ -64,4 +66,11 @@ export interface BuildingGeometryParams {
    * When 0 or undefined, natural zScale is used.
    */
   targetReliefMM?: number;
+  /**
+   * Optional terrain mesh geometry for raycasting building base Z onto the
+   * actual terrain surface. When provided, building footprint vertices are
+   * snapped to the terrain mesh via BVH-accelerated raycasting instead of
+   * sampling the elevation grid. This eliminates Z mismatch (floating buildings).
+   */
+  terrainGeometry?: THREE.BufferGeometry;
 }
