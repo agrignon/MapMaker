@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Roads Layer** - OSM roads as 3D geometry with configurable style (raised/recessed/flat) and type-based widths (UAT gap closure in progress) (completed 2026-02-26)
 - [x] **Phase 6: Water Layer** - Rivers, lakes, and water bodies baked as flat depressions into the terrain elevation grid (completed 2026-02-26)
 - [x] **Phase 7: Vegetation + Terrain Smoothing** - Parks and forests as toggleable geometry; mesh smoothing slider for smoother STL output (completed 2026-02-26)
-- [ ] **Phase 8: Edit-Iterate + Export Polish** - State-preserving back-to-edit navigation, live preview updates, and location-name STL filenames
+- [x] **Phase 8: Edit-Iterate + Export Polish** - State-preserving back-to-edit navigation, live preview updates, and location-name STL filenames (completed 2026-02-28)
 - [ ] **Phase 9: Performance Hardening** - Web Worker mesh generation and clean production build
 
 ## Phase Details
@@ -167,5 +167,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Roads Layer | 3/3 | Complete   | 2026-02-26 |
 | 6. Water Layer | 2/2 | Complete   | 2026-02-26 |
 | 7. Vegetation + Terrain Smoothing | 2/2 | Complete   | 2026-02-26 |
-| 8. Edit-Iterate + Export Polish | 1/2 | In Progress|  |
+| 8. Edit-Iterate + Export Polish | 2/2 | Complete   | 2026-02-28 |
 | 9. Performance Hardening | 0/TBD | Not started | - |

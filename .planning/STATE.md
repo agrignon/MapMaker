@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-last_updated: "2026-02-28T06:32:29Z"
+status: unknown
+last_updated: "2026-02-28T06:37:02.207Z"
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 23
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-24)
 ## Current Position
 
 Phase: 8 — Edit, Iterate, Export Polish (in progress)
-Plan: 1 of 2 complete — Phase 8 Plan 01 done: Back-to-Edit navigation, stale bbox indicator, location-based STL filenames (PREV-03, PREV-04, EXPT-06)
-Status: Phase 8 Plan 01 complete; 178/179 tests passing (1 pre-existing failure in solid.test.ts)
-Last activity: 2026-02-28 — Plan 08-01 complete: edit-iterate UX loop (Back-to-Edit button, CSS canvas preservation, stale indicator with Regenerate, geocoding location name + reverse geocode fallback)
+Plan: 2 of 2 complete — Phase 8 Plan 02 done: Watertight STL export (earcut base plate, perimeter-vertex walls, strict manifold validation gating) (EXPT-03)
+Status: Phase 8 complete; PREV-03 + PREV-04 + EXPT-06 + EXPT-03 done; 179 tests passing
+Last activity: 2026-02-28 — Plan 08-02 complete: watertight solid mesh construction + strict validation blocking all non-manifold STL downloads
 
 Progress: [█████████░] 96%
 
@@ -65,6 +65,7 @@ Progress: [█████████░] 96%
 | Phase 06-water-layer P02 | 4 | 2 tasks | 9 files |
 | Phase 07-vegetation-terrain-smoothing P01 | 2 | 2 tasks | 6 files |
 | Phase 07-vegetation-terrain-smoothing P02 | 4 | 2 tasks | 11 files |
+| Phase 08-edit-iterate-export-polish P02 | 7 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,8 @@ Recent decisions affecting current work:
 - [Phase 08-edit-iterate-export-polish 08-01]: generatedBboxKey is 5-decimal coordinate string; only bbox changes trigger stale indicator, not settings changes
 - [Phase 08-edit-iterate-export-polish 08-01]: Reverse geocode only fires when locationName is null — search result is never overwritten on regenerate
 - [Phase 08-edit-iterate-export-polish 08-01]: feature.text preferred over place_name for clean STL filenames (short name vs qualified address)
+- [Phase 08-edit-iterate-export-polish]: Earcut base plate replaces 2-triangle rectangle in solid.ts: base plate must use exact same perimeter XY as wall bottom edges or boundary edges remain (21% → 0%)
+- [Phase 08-edit-iterate-export-polish]: ExportPanel always blocks non-manifold download: removed warn-and-allow path for feature+terrain exports
 
 ### Pending Todos
 
@@ -167,5 +170,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 08-01-PLAN.md — Back-to-Edit navigation, stale bbox indicator with Regenerate action, geocoding location name extraction, reverse geocode fallback for STL filenames; PREV-03 + PREV-04 + EXPT-06 done; 178/179 tests passing
+Stopped at: Completed 08-02-PLAN.md — Watertight STL export: earcut-triangulated base plate, perimeter-vertex walls, corner Z-gap stitching, strict manifold validation gating (blocks all non-manifold downloads); EXPT-03 done; 179 tests passing
 Resume file: None
