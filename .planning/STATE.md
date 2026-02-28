@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T06:41:04.070Z"
+last_updated: "2026-02-28T08:12:27.248Z"
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 23
-  completed_plans: 23
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 25
+  completed_plans: 25
 ---
 
 # Project State
@@ -66,6 +66,8 @@ Progress: [█████████░] 96%
 | Phase 07-vegetation-terrain-smoothing P01 | 2 | 2 tasks | 6 files |
 | Phase 07-vegetation-terrain-smoothing P02 | 4 | 2 tasks | 11 files |
 | Phase 08-edit-iterate-export-polish P02 | 7 | 2 tasks | 3 files |
+| Phase 09-performance-hardening P02 | 4 | 2 tasks | 3 files |
+| Phase 09-performance-hardening P01 | 4 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -148,6 +150,10 @@ Recent decisions affecting current work:
 - [Phase 08-edit-iterate-export-polish 08-01]: feature.text preferred over place_name for clean STL filenames (short name vs qualified address)
 - [Phase 08-edit-iterate-export-polish]: Earcut base plate replaces 2-triangle rectangle in solid.ts: base plate must use exact same perimeter XY as wall bottom edges or boundary edges remain (21% → 0%)
 - [Phase 08-edit-iterate-export-polish]: ExportPanel always blocks non-manifold download: removed warn-and-allow path for feature+terrain exports
+- [Phase 09-performance-hardening]: Export pipeline reuses existing buildRoads/buildBuildings worker message types for off-thread geometry; buildRoadsForExport/buildBuildingsForExport added without stale-result rejection
+- [Phase 09-performance-hardening]: Bbox hard cap at 25 km2 blocks generation; soft warning at 4 km2 allows generation with warning — check runs before any network requests
+- [Phase 09-performance-hardening]: three-mesh-bvh version mismatch (0.9.8 vs drei's nested 0.8.3) resolved with 'as any' type assertion — runtime uses only 0.9.8, conflict is type-only
+- [Phase 09-performance-hardening]: BuildingGenerationStatus 'loading' -> 'fetching': enum correctness fix — 'loading' is not in the BuildingGenerationStatus union
 
 ### Pending Todos
 
@@ -170,5 +176,5 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 08-02-PLAN.md — Watertight STL export: earcut-triangulated base plate, perimeter-vertex walls, corner Z-gap stitching, strict manifold validation gating (blocks all non-manifold downloads); EXPT-03 done; 179 tests passing
+Stopped at: Completed 09-02-PLAN.md — Non-blocking export pipeline (worker offload for buildings/roads geometry), bbox area cap (25km2 hard, 4km2 soft); FNDN-03 done; 179 tests passing
 Resume file: None

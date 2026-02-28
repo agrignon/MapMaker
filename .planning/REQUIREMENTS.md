@@ -68,8 +68,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **FNDN-01**: All geometry uses local meter-space coordinates (UTM projection), not Web Mercator
 - [x] **FNDN-02**: STL export writes coordinates in millimeters (canonical unit for 3D printing)
-- [ ] **FNDN-03**: Mesh generation runs in a Web Worker to prevent UI freezing
-- [ ] **FNDN-04**: Production build (`npm run build`) compiles without TypeScript errors
+- [x] **FNDN-03**: Mesh generation runs in a Web Worker to prevent UI freezing
+- [x] **FNDN-04**: Production build (`npm run build`) compiles without TypeScript errors
 
 ## v2 Requirements
 
@@ -141,8 +141,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PREV-03 | Phase 8 | Complete |
 | PREV-04 | Phase 8 | Complete |
 | EXPT-06 | Phase 8 | Complete |
-| FNDN-03 | Phase 9 | Pending |
-| FNDN-04 | Phase 9 | Pending |
+| FNDN-03 | Phase 9 | Complete |
+| FNDN-04 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 34 total

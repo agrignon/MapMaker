@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Water Layer** - Rivers, lakes, and water bodies baked as flat depressions into the terrain elevation grid (completed 2026-02-26)
 - [x] **Phase 7: Vegetation + Terrain Smoothing** - Parks and forests as toggleable geometry; mesh smoothing slider for smoother STL output (completed 2026-02-26)
 - [x] **Phase 8: Edit-Iterate + Export Polish** - State-preserving back-to-edit navigation, live preview updates, and location-name STL filenames (completed 2026-02-28)
-- [ ] **Phase 9: Performance Hardening** - Web Worker mesh generation and clean production build
+- [x] **Phase 9: Performance Hardening** - Web Worker mesh generation and clean production build (completed 2026-02-28)
 
 ## Phase Details
 
@@ -151,7 +151,7 @@ Plans:
   1. Mesh generation for any valid bounding box runs in a Web Worker — the 2D map and UI controls remain fully interactive during generation with no visible freeze or jank
   2. Running `npm run build` completes without TypeScript errors — the production artifact is deployable and the Worker bundle loads correctly at runtime
   3. A dense urban area (e.g., a 1km x 1km block of a major city) generates a preview mesh without crashing the browser tab or producing an out-of-memory error
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 09-01-PLAN.md — Fix all 33 TypeScript build errors (unused vars, missing declarations, type conflicts, test typing) so `tsc -b` passes clean (FNDN-04)
@@ -172,4 +172,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Water Layer | 2/2 | Complete   | 2026-02-26 |
 | 7. Vegetation + Terrain Smoothing | 2/2 | Complete   | 2026-02-26 |
 | 8. Edit-Iterate + Export Polish | 2/2 | Complete   | 2026-02-28 |
-| 9. Performance Hardening | 0/2 | In progress | - |
+| 9. Performance Hardening | 2/2 | Complete   | 2026-02-28 |
