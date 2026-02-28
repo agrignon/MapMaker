@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { useMapStore } from '../../store/mapStore';
 import { buildTerrainGeometry, smoothElevations } from '../../lib/mesh/terrain';
 import { buildSolidMesh } from '../../lib/mesh/solid';
-import { mergeTerrainAndBuildings } from '../../lib/mesh/buildingSolid';
+import { mergeTerrainAndBuildings, csgUnion } from '../../lib/mesh/buildingSolid';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
 import { buildAllBuildings } from '../../lib/buildings/merge';
@@ -85,8 +85,9 @@ export function ExportPanel() {
   const progressPercent =
     exportStep.includes('Writing') ? 90 :
     exportStep.includes('Validating') ? 70 :
-    exportStep.includes('Merging roads') ? 50 :
-    exportStep.includes('roads') ? 45 :
+    exportStep.includes('vegetation into') ? 60 :
+    exportStep.includes('roads into') ? 50 :
+    exportStep.includes('roads mesh') ? 45 :
     exportStep.includes('Merging') ? 50 :
     exportStep.includes('buildings mesh') ? 30 :
     exportStep.includes('Building') ? 10 : 10;
@@ -224,44 +225,14 @@ export function ExportPanel() {
           );
           roadsGeometry.dispose();
 
-          setExportStatus('building', 'Merging roads into model...');
+          setExportStatus('building', 'CSG union: merging roads into model...');
           await new Promise(resolve => setTimeout(resolve, 0));
 
-          // Merge roads using mergeGeometries (NOT CSG — per STATE.md decision)
-          // Roads are additive geometry, not boolean
-          const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
-
-          // Ensure both geometries are non-indexed for consistent merge
-          const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
-          // clippedRoads is already non-indexed from clipGeometryToFootprint
-          const roadsNonIndexed = clippedRoads;
-
-          // Strip any attributes from roads that don't exist on terrain+buildings (uv, etc.)
-          // Only keep position and normal for STL compatibility
-          const roadAttrs = Object.keys(roadsNonIndexed.attributes);
-          for (const attr of roadAttrs) {
-            if (attr !== 'position' && attr !== 'normal') {
-              roadsNonIndexed.deleteAttribute(attr);
-            }
-          }
-
-          // Ensure terrain+buildings also only has position and normal
-          const exportAttrs = Object.keys(exportNonIndexed.attributes);
-          for (const attr of exportAttrs) {
-            if (attr !== 'position' && attr !== 'normal') {
-              exportNonIndexed.deleteAttribute(attr);
-            }
-          }
-
-          const merged = mergeGeometries([exportNonIndexed, roadsNonIndexed], false);
-          if (merged) {
-            merged.computeVertexNormals();
-            exportSolid.dispose();
-            exportSolid = merged;
-          }
+          const merged = csgUnion(exportSolid, clippedRoads, 'roads');
+          exportSolid.dispose();
+          exportSolid = merged;
 
           clippedRoads.dispose();
-          if (exportNonIndexed !== exportSolid) exportNonIndexed.dispose();
         }
       }
 
@@ -417,27 +388,14 @@ export function ExportPanel() {
           const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2, targetDepthMM / 2);
           vegeGeo.dispose();
 
-          // Merge vegetation into export (each patch is an enclosed solid shell)
-          const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
-          const exportNonIndexed = exportSolid.index ? exportSolid.toNonIndexed() : exportSolid;
-          const vegeNonIndexed = clippedVege.index ? clippedVege.toNonIndexed() : clippedVege;
+          setExportStatus('building', 'CSG union: merging vegetation into model...');
+          await new Promise(resolve => setTimeout(resolve, 0));
 
-          // Strip extra attributes (keep only position + normal for STL)
-          for (const attr of Object.keys(vegeNonIndexed.attributes)) {
-            if (attr !== 'position' && attr !== 'normal') vegeNonIndexed.deleteAttribute(attr);
-          }
-          for (const attr of Object.keys(exportNonIndexed.attributes)) {
-            if (attr !== 'position' && attr !== 'normal') exportNonIndexed.deleteAttribute(attr);
-          }
+          const merged = csgUnion(exportSolid, clippedVege, 'vegetation');
+          exportSolid.dispose();
+          exportSolid = merged;
 
-          const merged = mergeGeometries([exportNonIndexed, vegeNonIndexed], false);
-          if (merged) {
-            merged.computeVertexNormals();
-            exportSolid.dispose();
-            exportSolid = merged;
-          }
           clippedVege.dispose();
-          if (exportNonIndexed !== exportSolid) exportNonIndexed.dispose();
         }
       }
 
@@ -447,20 +405,13 @@ export function ExportPanel() {
 
       const validation = await validateMesh(exportSolid);
 
-      if (!validation.isManifold && !hasBuildings && !hasRoads && !hasVegetation) {
-        // Terrain-only (even with water depression baked in) must be manifold — block export
-        const errMsg = validation.error ?? 'Mesh is not watertight — please try again';
+      if (!validation.isManifold) {
+        // Always block download for non-manifold geometry — never offer broken files
+        const errMsg = validation.error ?? 'Mesh is not watertight';
         setValidationError(errMsg);
         setExportStatus('error', errMsg);
+        exportSolid.dispose();
         return;
-      }
-
-      if (!validation.isManifold && (hasBuildings || hasRoads || hasVegetation)) {
-        // Features + terrain may have non-manifold seams — warn but allow export
-        // Slicers (PrusaSlicer, Bambu Studio) auto-repair these meshes
-        setValidationError(
-          'Mesh has non-manifold edges at feature seams — your slicer will auto-repair this.'
-        );
       }
 
       // Step 4: Write STL
