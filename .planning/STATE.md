@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 8 — Edit, Iterate, Export Polish (in progress)
+**Current focus:** Phase 9 — Performance Hardening
 
 ## Current Position
 
-Phase: 8 — Edit, Iterate, Export Polish (in progress)
-Plan: 2 of 2 complete — Phase 8 Plan 02 done: Watertight STL export (earcut base plate, perimeter-vertex walls, strict manifold validation gating) (EXPT-03)
-Status: Phase 8 complete; PREV-03 + PREV-04 + EXPT-06 + EXPT-03 done; 179 tests passing
-Last activity: 2026-02-28 — Plan 08-02 complete: watertight solid mesh construction + strict validation blocking all non-manifold STL downloads
+Phase: 9 — Performance Hardening
+Plan: 1 of 3 complete — Phase 9 Plan 01 done: TypeScript build cleanup — 33 errors eliminated, tsc -b passes clean, vite build succeeds (FNDN-04)
+Status: Phase 9 in progress; 179 tests passing; clean tsc -b baseline established
+Last activity: 2026-02-28 — Plan 09-01 complete: 33 TypeScript errors fixed across 9 files (martini.d.ts, unused vars, wrong enum, BVH type assertion, test helper types)
 
-Progress: [█████████░] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
