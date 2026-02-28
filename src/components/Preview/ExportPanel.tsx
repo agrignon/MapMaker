@@ -25,6 +25,17 @@ import earcut from 'earcut';
 import type { BuildingGeometryParams } from '../../lib/buildings/types';
 import type { RoadGeometryParams } from '../../lib/roads/types';
 
+/**
+ * Inset (mm) applied when clipping features to the terrain footprint.
+ * Features are clipped slightly inside the terrain edge so that raised roads,
+ * buildings, and vegetation at the boundary are fully supported by the terrain
+ * surface underneath. Without this inset, a raised road clipped at the exact
+ * terrain edge produces a tiny free-standing cap face above the terrain wall
+ * that slicers flag as an unsupported overhang.
+ * 0.1mm is sub-nozzle-width and invisible in the final print.
+ */
+const FEATURE_CLIP_INSET_MM = 0.1;
+
 // Module-level buffer storage — ArrayBuffer is not serializable to Zustand
 // This holds the last exported buffer for the Download button
 const exportBufferRef: { current: ArrayBuffer | null } = { current: null };
@@ -233,8 +244,8 @@ export function ExportPanel() {
           const buildingsGeometry = meshArraysToGeometry(buildingArrays);
           const clippedBuildings = clipGeometryToFootprint(
             buildingsGeometry,
-            targetWidthMM / 2,
-            targetDepthMM / 2
+            targetWidthMM / 2 - FEATURE_CLIP_INSET_MM,
+            targetDepthMM / 2 - FEATURE_CLIP_INSET_MM
           );
           buildingsGeometry.dispose();
 
@@ -298,8 +309,8 @@ export function ExportPanel() {
           const roadsGeometry = meshArraysToGeometry(roadArrays);
           const clippedRoads = clipGeometryToFootprint(
             roadsGeometry,
-            targetWidthMM / 2,
-            targetDepthMM / 2
+            targetWidthMM / 2 - FEATURE_CLIP_INSET_MM,
+            targetDepthMM / 2 - FEATURE_CLIP_INSET_MM
           );
           roadsGeometry.dispose();
 
@@ -459,7 +470,7 @@ export function ExportPanel() {
           vegeGeo.computeVertexNormals();
 
           // Clip to footprint
-          const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2, targetDepthMM / 2);
+          const clippedVege = clipGeometryToFootprint(vegeGeo, targetWidthMM / 2 - FEATURE_CLIP_INSET_MM, targetDepthMM / 2 - FEATURE_CLIP_INSET_MM);
           vegeGeo.dispose();
 
           setExportStatus('building', 'Merging vegetation into model...');
