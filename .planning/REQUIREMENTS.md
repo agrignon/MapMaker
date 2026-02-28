@@ -52,8 +52,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **PREV-01**: User sees a live 3D preview of the model with orbit, zoom, and pan controls
 - [x] **PREV-02**: 2D map editor and 3D preview are displayed side-by-side in a hybrid layout
-- [ ] **PREV-03**: User can go back from 3D preview to editing without losing selections or settings
-- [ ] **PREV-04**: 3D preview updates when user toggles features or changes settings
+- [x] **PREV-03**: User can go back from 3D preview to editing without losing selections or settings
+- [x] **PREV-04**: 3D preview updates when user toggles features or changes settings
 
 ### Export
 
@@ -62,7 +62,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **EXPT-03**: Generated STL is watertight (manifold) and printable without repair in standard slicers
 - [x] **EXPT-04**: User can download the STL file directly to their local machine
 - [x] **EXPT-05**: STL dimensions match the user's specified physical dimensions in the correct unit (mm)
-- [ ] **EXPT-06**: Exported STL filename includes the searched location name when available (not just coordinates)
+- [x] **EXPT-06**: Exported STL filename includes the searched location name when available (not just coordinates)
 
 ### Foundation (Technical)
 
@@ -138,9 +138,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WATR-01 | Phase 6 | Complete |
 | VEGE-01 | Phase 7 | Complete |
 | TERR-04 | Phase 7 | Complete |
-| PREV-03 | Phase 8 | Pending |
-| PREV-04 | Phase 8 | Pending |
-| EXPT-06 | Phase 8 | Pending |
+| PREV-03 | Phase 8 | Complete |
+| PREV-04 | Phase 8 | Complete |
+| EXPT-06 | Phase 8 | Complete |
 | FNDN-03 | Phase 9 | Pending |
 | FNDN-04 | Phase 9 | Pending |
 

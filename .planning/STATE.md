@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-02-26T08:03:59.344Z"
+status: in-progress
+last_updated: "2026-02-28T06:32:29Z"
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 23
+  completed_plans: 22
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-24)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 7 — Vegetation / Terrain Smoothing (complete)
+**Current focus:** Phase 8 — Edit, Iterate, Export Polish (in progress)
 
 ## Current Position
 
-Phase: 7 — Vegetation / Terrain Smoothing (complete)
-Plan: 2 of 2 complete — Phase 7 Plan 02 done: Vegetation layer (VegetationMesh, VegetationSection, export integration, VEGE-01)
-Status: Phase 7 complete; TERR-04 + VEGE-01 done; 176 total tests passing
-Last activity: 2026-02-26 — Plan 07-02 complete: vegetation layer end-to-end (parks/forests as green raised patches in preview and STL export)
+Phase: 8 — Edit, Iterate, Export Polish (in progress)
+Plan: 1 of 2 complete — Phase 8 Plan 01 done: Back-to-Edit navigation, stale bbox indicator, location-based STL filenames (PREV-03, PREV-04, EXPT-06)
+Status: Phase 8 Plan 01 complete; 178/179 tests passing (1 pre-existing failure in solid.test.ts)
+Last activity: 2026-02-28 — Plan 08-01 complete: edit-iterate UX loop (Back-to-Edit button, CSS canvas preservation, stale indicator with Regenerate, geocoding location name + reverse geocode fallback)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 96%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [██████████] 100%
 - Trend: Normal
 
 *Updated after each plan completion*
+| Phase 08-edit-iterate-export-polish P01 | 3 | 2 tasks | 5 files |
 | Phase 02-terrain-preview-export P05 | 1 | 2 tasks | 2 files |
 | Phase 03-buildings P01 | 3 | 3 tasks | 15 files |
 | Phase 03-buildings P02 | 2 | 2 tasks | 9 files |
@@ -139,6 +140,11 @@ Recent decisions affecting current work:
 - [Phase 07-vegetation-terrain-smoothing]: VegetationMesh Z uses polygon centroid sampled from smoothed elevation grid — flat plateau per feature, tracks smoothing slider
 - [Phase 07-vegetation-terrain-smoothing]: polygonOffsetFactor=-4 for vegetation (less than water's -6) ensures vegetation renders below water at overlaps without exclusion logic
 - [Phase 07-vegetation-terrain-smoothing]: MIN_VEGE_AREA_M2=2500 (50m x 50m) filters pocket parks too small to print at typical 150mm model scale
+- [Phase 08-edit-iterate-export-polish 08-01]: CSS visibility:hidden (not unmount) preserves R3F WebGL context when user goes Back to Edit — re-entry is instant
+- [Phase 08-edit-iterate-export-polish 08-01]: triggerRegenerate() uses useMapStore.getState() outside React — works from StaleIndicator onClick handler
+- [Phase 08-edit-iterate-export-polish 08-01]: generatedBboxKey is 5-decimal coordinate string; only bbox changes trigger stale indicator, not settings changes
+- [Phase 08-edit-iterate-export-polish 08-01]: Reverse geocode only fires when locationName is null — search result is never overwritten on regenerate
+- [Phase 08-edit-iterate-export-polish 08-01]: feature.text preferred over place_name for clean STL filenames (short name vs qualified address)
 
 ### Pending Todos
 
@@ -160,6 +166,6 @@ Pre-existing `npm run build` failures (NOT caused by Phase 3 changes — exist i
 
 ## Session Continuity
 
-Last session: 2026-02-26
-Stopped at: Completed 07-02-PLAN.md — Vegetation layer end-to-end (VegetationFeature type, parseVegetationFeatures parser, Overpass extension, store fields, GenerateButton wiring, VegetationMesh, VegetationSection, PreviewCanvas/Sidebar wiring, ExportPanel export, generateFilename -vegetation suffix); VEGE-01 done; 176 total tests passing
+Last session: 2026-02-28
+Stopped at: Completed 08-01-PLAN.md — Back-to-Edit navigation, stale bbox indicator with Regenerate action, geocoding location name extraction, reverse geocode fallback for STL filenames; PREV-03 + PREV-04 + EXPT-06 done; 178/179 tests passing
 Resume file: None
