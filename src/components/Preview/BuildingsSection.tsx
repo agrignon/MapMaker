@@ -8,7 +8,7 @@ export function BuildingsSection() {
   const setLayerToggle = useMapStore((s) => s.setLayerToggle);
 
   let summary: string;
-  if (buildingGenerationStatus === 'loading') {
+  if (buildingGenerationStatus === 'fetching') {
     summary = 'Loading...';
   } else if (buildingFeatures && buildingFeatures.length > 0) {
     summary = `${buildingFeatures.length} buildings`;

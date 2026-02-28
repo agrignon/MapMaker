@@ -15,8 +15,8 @@ import { buildSolidMesh } from '../../lib/mesh/solid';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { validateMesh } from '../../lib/export/validate';
 import { exportToSTL, downloadSTL, generateFilename } from '../../lib/export/stlExport';
-import { buildAllBuildings } from '../../lib/buildings/merge';
-import { buildRoadGeometry } from '../../lib/roads/roadMesh';
+import { buildBuildingsForExport, buildRoadsForExport } from '../../workers/meshBuilderClient';
+import type { MeshArrays } from '../../workers/meshBuilderClient';
 import { clipGeometryToFootprint } from '../../lib/export/clipGeometry';
 import { wgs84ToUTM } from '../../lib/utm';
 import { applyWaterDepressions } from '../../lib/water/depression';
@@ -60,6 +60,26 @@ function mergeShells(
   return merged;
 }
 
+/**
+ * Reconstruct a THREE.BufferGeometry from the typed arrays returned by the worker.
+ * Needed because the export pipeline works with BufferGeometry for clipping,
+ * merging, and STL write.
+ */
+function meshArraysToGeometry(arrays: MeshArrays): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(arrays.positions, 3));
+  if (arrays.normals) {
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(arrays.normals, 3));
+  }
+  if (arrays.index) {
+    geo.setIndex(new THREE.BufferAttribute(arrays.index, 1));
+  }
+  if (!arrays.normals) {
+    geo.computeVertexNormals();
+  }
+  return geo;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`;
@@ -90,7 +110,6 @@ export function ExportPanel() {
   const buildingsVisible = useMapStore((s) => s.layerToggles.buildings);
   const roadFeatures = useMapStore((s) => s.roadFeatures);
   const roadsVisible = useMapStore((s) => s.layerToggles.roads);
-  const roadStyle = useMapStore((s) => s.roadStyle);
   const waterFeatures = useMapStore((s) => s.waterFeatures);
   const waterVisible = useMapStore((s) => s.layerToggles.water);
   const vegetationFeatures = useMapStore((s) => s.vegetationFeatures);

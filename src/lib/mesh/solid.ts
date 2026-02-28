@@ -105,10 +105,6 @@ export function buildSolidMesh(
   terrainGeometry.computeBoundingBox();
   const bbox = terrainGeometry.boundingBox!;
 
-  const minX = bbox.min.x;
-  const maxX = bbox.max.x;
-  const minY = bbox.min.y;
-  const maxY = bbox.max.y;
   const baseZ = -basePlateThicknessMM;
 
   // We need a non-indexed copy of the terrain surface for manifold-safe merging
@@ -149,8 +145,6 @@ export function buildSolidMesh(
   ) {
     perimeterLoop.pop();
   }
-
-  const n = perimeterLoop.length;
 
   // ---- 3. Base plate -------------------------------------------------------
   // Earcut-triangulate the perimeter loop at z=baseZ.

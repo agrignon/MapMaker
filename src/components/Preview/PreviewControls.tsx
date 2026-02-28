@@ -1,5 +1,4 @@
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
-import * as THREE from 'three';
 
 export function PreviewControls() {
   return (

@@ -138,8 +138,8 @@ export function buildTerrainGeometry(
   elevationData: ElevationData,
   params: TerrainMeshParams
 ): THREE.BufferGeometry {
-  const { gridSize, elevations, minElevation, maxElevation } = elevationData;
-  const { widthMM, depthMM, geographicWidthM, geographicDepthM, exaggeration, minHeightMM, maxError, targetReliefMM } = params;
+  const { gridSize, elevations } = elevationData;
+  const { widthMM, depthMM, geographicWidthM, exaggeration, minHeightMM, maxError, targetReliefMM } = params;
 
   // 0. Callers are responsible for smoothing before calling buildTerrainGeometry.
   //    smoothElevations is exported for caller-side use.
