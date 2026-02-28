@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Users can navigate between editing and preview without losing state, the preview reflects setting changes live (already working), bbox changes show a stale indicator with manual regenerate, and exported STL filenames include the searched (or reverse-geocoded) location name.
+Users can navigate between editing and preview without losing state, the preview reflects setting changes live (already working), bbox changes show a stale indicator with manual regenerate, exported STL filenames include the searched (or reverse-geocoded) location name, and the exported STL is guaranteed watertight (fix construction issues + validation gate).
 
 </domain>
 
@@ -30,10 +30,17 @@ Users can navigate between editing and preview without losing state, the preview
 - Filename format: location + layer suffixes (no physical dimensions in filename). Existing `generateFilename()` function handles this
 - Coordinate-based fallback only if reverse geocode fails
 
+### Watertight STL export
+- **Fix geometry construction** — audit and fix mesh construction (terrain solid, buildings, roads, vegetation) so they produce watertight geometry by construction
+- **Post-export validation** — add a validation pass after STL generation that detects non-manifold edges, open boundaries, and holes
+- **Block download on failure** — if validation detects non-manifold geometry, do NOT offer the download. Show error details. Only allow download of clean, watertight geometry
+- Both approaches (fix construction + validate) — belt and suspenders
+
 ### Claude's Discretion
 - Preview teardown vs hide-in-memory on "Back to Edit" — choose based on performance/complexity
 - Stale indicator visual treatment — banner vs overlay, whatever fits existing UI style
 - Which part of geocoding result to use for filename (place name, place+country, full text) — pick best balance of specificity and filename length
+- Watertight validation algorithm and repair strategy — choose based on what's practical in-browser
 
 </decisions>
 
@@ -66,6 +73,8 @@ Users can navigate between editing and preview without losing state, the preview
 - `PreviewSidebar.tsx` header area — add "Back to Edit" button
 - `PreviewCanvas.tsx` or `SplitLayout.tsx` — add stale indicator when bbox changes after generation
 - MapTiler reverse geocoding API — `https://api.maptiler.com/geocoding/{lon},{lat}.json?key={key}`
+- `ExportPanel.tsx` — add validation gate between STL generation and download offer
+- Mesh construction files: `terrain.ts`, `buildingSolid.ts`, `roadMesh.ts`, vegetation export section in `ExportPanel.tsx` — audit for watertight construction
 
 </code_context>
 
