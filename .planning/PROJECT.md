@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A web application that converts any real-world location into a 3D-printable STL model. Users specify a location (city name, street address, or lat/lon), define a bounding box on an interactive map, toggle geographic features (terrain, buildings, roads), adjust physical dimensions, and export a print-ready STL file with a solid base plate. The app pairs a 2D map editor with a live 3D preview for real-time feedback.
+A web application that converts any real-world location into a 3D-printable STL model. Users specify a location (city name, street address, or lat/lon), define a bounding box on an interactive map, toggle geographic features (terrain, buildings, roads, water, vegetation), adjust physical dimensions and smoothing, and export a print-ready STL file. The app pairs a 2D map editor with a live 3D preview for real-time feedback, with all processing running client-side.
 
 ## Core Value
 
@@ -12,85 +12,75 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 
 ### Validated
 
-<!-- Shipped and confirmed working (Phases 1-3). -->
-
-- [x] Location search (city name, address, lat/lon) with map fly-to
-- [x] Bounding box drawing, resize, and repositioning on interactive satellite map
-- [x] UTM coordinate projection pipeline (not Web Mercator)
-- [x] Real terrain elevation from DEM tiles with 3D preview
-- [x] Terrain exaggeration slider + minimum height floor for flat areas
-- [x] Side-by-side 2D map + 3D preview layout with orbit/zoom/pan
-- [x] OSM buildings with real heights, detailed roof geometry, height fallback cascade
-- [x] Buildings correctly placed on terrain surface
-- [x] Watertight STL export with solid base plate + browser download
-- [x] STL dimensions match specified mm measurements
+- ✓ Location search (city name, address, lat/lon) with map fly-to — v1.0
+- ✓ Bounding box drawing, resize, and repositioning on interactive satellite map — v1.0
+- ✓ UTM coordinate projection pipeline (not Web Mercator) — v1.0
+- ✓ Real terrain elevation from DEM tiles with 3D preview — v1.0
+- ✓ Terrain exaggeration slider + minimum height floor for flat areas — v1.0
+- ✓ Terrain mesh smoothing slider for smoother STL output — v1.0
+- ✓ Side-by-side 2D map + 3D preview layout with orbit/zoom/pan — v1.0
+- ✓ OSM buildings with real heights, detailed roof geometry, height fallback cascade — v1.0
+- ✓ Buildings correctly placed on terrain surface — v1.0
+- ✓ OSM road network as 3D geometry with configurable style (recessed/raised/flat) and type-based widths — v1.0
+- ✓ Water bodies (rivers, lakes) as flat depressions baked into terrain — v1.0
+- ✓ Parks and forests as toggleable vegetation geometry layer — v1.0
+- ✓ Layer toggles for terrain, buildings, roads, water, vegetation — v1.0
+- ✓ Physical dimensions (X/Y/Z) with mm/inches unit switching — v1.0
+- ✓ Contextual control visibility (hidden when layer toggled off) — v1.0
+- ✓ Back to edit without losing state + live preview updates — v1.0
+- ✓ Location name in STL filenames when available — v1.0
+- ✓ Watertight STL export with solid base plate + browser download — v1.0
+- ✓ STL dimensions match specified mm measurements — v1.0
+- ✓ Web Worker mesh generation for non-blocking UI — v1.0
+- ✓ Production build compiles without TypeScript errors — v1.0
 
 ### Active
 
-<!-- Current scope. Building toward these (Phases 4+). -->
-
-- [ ] Roads: OSM road network as 3D geometry with configurable style and type-based width
-- [ ] Water: Rivers, lakes, ocean as flat depressions at water level
-- [ ] Vegetation: Parks and forests as toggleable geometry layer
-- [ ] Controls: Layer toggles, physical dimensions (X/Y/Z), mm/inches, contextual visibility
-- [ ] Terrain smoothing: User-controlled mesh interpolation slider for smoother STL output
-- [ ] Edit-iterate: Back to edit without losing state + live preview updates
-- [ ] Export: Location name in filenames when available
-- [ ] Performance: Web Worker mesh generation
-- [ ] Build: Production build compiles without errors
+(None — planning next milestone)
 
 ### Out of Scope
 
 - Multi-color/multi-material STL export — user paints in their slicer (Bambu Studio, etc.)
-- Mobile-native app — web-first, responsive later
-- User accounts or saved projects — local workflow, no auth needed initially
+- Mobile-native app — web-first, desktop print workflow
+- User accounts or saved projects — local workflow, no auth needed
 - Real-time collaboration — single-user tool
-
-## Current Milestone: v1.0 (Re-scoped)
-
-**Goal:** Complete the full location-to-print pipeline with terrain, buildings, roads, water, vegetation, controls, and polished UX
-
-**Target features (remaining):**
-- Roads layer with style selection and type-based widths
-- Water bodies as flat depressions
-- Vegetation/parks as toggleable layer
-- Terrain mesh smoothing slider
-- Full model controls (layer toggles, dimensions, units)
-- Edit-iterate loop with state preservation
-- Location-name filenames, production build fix, Web Worker offload
+- Custom polygon / freehand selection — rectangle covers 90%+ of use cases
+- Texture/satellite imagery overlay — FDM printers can't reproduce texture
 
 ## Context
 
-- Target audience: 3D printing enthusiasts who want to create terrain/city models
-- The "painting" workflow happens outside this app — in Bambu Studio or similar slicers
-- Geographic data sources: MapTiler (elevation DEM tiles), Overpass/OSM (buildings, roads, water, vegetation)
-- All processing is client-side: coordinate projection, elevation decode, mesh generation, STL serialization
-- Phases 1-3 shipped: foundation, terrain+preview+export, buildings — all verified with 115 passing tests
-- User reported mesh quality concern: raw DEM produces rough/abrupt elevation changes needing smoothing
+Shipped v1.0 with 12,191 lines of TypeScript across 9 phases.
+Tech stack: React 19, Three.js (R3F), Zustand, Vite, Vitest, MapLibre GL JS.
+Data sources: MapTiler (elevation DEM tiles), Overpass/OSM (buildings, roads, water, vegetation).
+All processing is client-side: coordinate projection, elevation decode, mesh generation, STL serialization.
+176 tests passing across 15 test files. Production build compiles clean.
 
 ## Constraints
 
 - **Data availability**: Building detail depends on OSM coverage — some areas have rich 3D building data, others only footprints
-- **Browser performance**: 3D preview and potential client-side STL generation must perform well in-browser
-- **STL file size**: Dense areas with many buildings could produce large files — may need LOD or simplification options
-- **Elevation data resolution**: Free DEM sources vary in resolution (~30m SRTM vs higher-res local sources)
+- **Browser performance**: Bbox area capped at 25 km² (hard) / 4 km² (soft warning) to prevent OOM on dense areas
+- **STL file size**: Dense areas with many buildings produce large files — mesh generation runs in Web Worker to keep UI responsive
+- **Elevation data resolution**: Free DEM sources at ~30m SRTM resolution; smoothing slider helps interpolate rough transitions
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Hybrid 2D+3D editing view | User wants real-time feedback while toggling features; side-by-side layout gives map context + 3D preview | — Pending |
-| Detailed building geometry where available | Differentiates from simple extruded-footprint tools; makes prints more realistic | — Pending |
-| User-controlled terrain exaggeration | Small prints need exaggerated terrain to be visible; flat areas need it too | — Pending |
-| Configurable road style (recessed/raised/flat) | Different styles suit different painting and printing workflows | — Pending |
-| Always include base plate | Stability on print bed; cleaner look; user doesn't have to add one manually | ✓ Good |
-| mm default, switchable to inches | Most 3D printing is metric; US users may prefer inches | — Pending |
+| Hybrid 2D+3D editing view | User wants real-time feedback; side-by-side layout gives map context + 3D preview | ✓ Good |
+| Detailed building geometry (gabled/hipped roofs) | Differentiates from simple extruded-footprint tools; makes prints more realistic | ✓ Good |
+| User-controlled terrain exaggeration | Small prints need exaggerated terrain to be visible; flat areas need it too | ✓ Good |
+| Configurable road style (recessed/raised/flat) | Different styles suit different painting and printing workflows | ✓ Good |
+| Always include base plate | Stability on print bed; cleaner look; no manual addition needed | ✓ Good |
+| mm default, switchable to inches | Most 3D printing is metric; US users may prefer inches | ✓ Good |
 | Client-side architecture | All mesh gen, projection, elevation decode, STL serialization in browser | ✓ Good |
 | MapTiler terrain-rgb + Overpass OSM | Free/open data sources for elevation and features | ✓ Good |
-| three-bvh-csg for CSG boolean | Prevents non-manifold geometry in building+terrain union | ✓ Good |
-| Water as flat depressions | Visible in print, paintable, matches DEM water level | — Pending |
-| Vegetation as toggleable layer | Like buildings — separate geometry that can be on/off | — Pending |
-| Mesh smoothing slider | User controls interpolation level; raw DEM too rough for quality prints | — Pending |
+| Water as baked depressions | Visible in print, paintable, matches DEM water level | ✓ Good |
+| Vegetation as toggleable layer | Separate geometry that can be on/off, like buildings | ✓ Good |
+| Mesh smoothing slider | User controls interpolation; raw 30m DEM too rough for quality prints | ✓ Good |
+| Web Worker + Transferable ArrayBuffers | Non-blocking UI during mesh generation; merged typed arrays prevent Chrome regression | ✓ Good |
+| Earcut base plate | Exact perimeter match with wall edges eliminates boundary edge gaps | ✓ Good |
+| CSS visibility:hidden for preview preservation | Instant re-entry when going Back to Edit; WebGL context not destroyed | ✓ Good |
+| Caller-side smoothing pipeline | smooth → water depression → build terrain; all callers follow same order | ✓ Good |
 
 ---
-*Last updated: 2026-02-24 after v1.0 re-scope — validated phases 1-3, added water/vegetation/smoothing/build fix*
+*Last updated: 2026-02-28 after v1.0 milestone completion*
