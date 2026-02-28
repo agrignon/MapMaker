@@ -34,9 +34,22 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 - ✓ Web Worker mesh generation for non-blocking UI — v1.0
 - ✓ Production build compiles without TypeScript errors — v1.0
 
+## Current Milestone: v1.1 Building Coverage
+
+**Goal:** Fill building data gaps by merging Overture Maps footprints with existing OSM data so buildings appear everywhere, not just where OSM has coverage.
+
+**Target features:**
+- Fetch Overture Maps building footprints alongside existing OSM query
+- Deduplicate by spatial overlap (OSM preferred, Overture fills gaps)
+- Gap-fill buildings rendered as simple extruded boxes (default height, flat roof)
+- Automatic — no UI changes, seamless merge
+
 ### Active
 
-(None — planning next milestone)
+- [ ] Overture Maps building footprint fetching for selected bounding box
+- [ ] Spatial deduplication of Overture footprints against OSM buildings
+- [ ] Gap-fill building geometry (extruded boxes with default height)
+- [ ] Merged building pipeline integrated into existing preview and export
 
 ### Out of Scope
 
@@ -83,4 +96,4 @@ All processing is client-side: coordinate projection, elevation decode, mesh gen
 | Caller-side smoothing pipeline | smooth → water depression → build terrain; all callers follow same order | ✓ Good |
 
 ---
-*Last updated: 2026-02-28 after v1.0 milestone completion*
+*Last updated: 2026-02-28 after v1.1 milestone start*
