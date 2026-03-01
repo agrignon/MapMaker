@@ -57,6 +57,8 @@ interface MapState {
   vegetationGenerationStep: string;
   // Stale bbox detection — key is set on successful generate
   generatedBboxKey: string | null;
+  // Overture availability flag — true when Overture fetch succeeded (even if empty tiles)
+  overtureAvailable: boolean;
 }
 
 interface MapActions {
@@ -93,6 +95,7 @@ interface MapActions {
   setVegetationFeatures: (features: VegetationFeature[] | null) => void;
   setVegetationGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
   setGeneratedBboxKey: (key: string | null) => void;
+  setOvertureAvailable: (available: boolean) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -145,6 +148,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   vegetationGenerationStep: '',
   // Stale bbox detection defaults
   generatedBboxKey: null,
+  // Overture availability defaults
+  overtureAvailable: false,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -154,11 +159,11 @@ export const useMapStore = create<MapStore>((set, get) => ({
       [sw.lon, sw.lat],
       [ne.lon, ne.lat]
     );
-    set({ bbox, utmZone, dimensions });
+    set({ bbox, utmZone, dimensions, overtureAvailable: false });
   },
 
   clearBbox: () => {
-    set({ bbox: null, utmZone: null, dimensions: null });
+    set({ bbox: null, utmZone: null, dimensions: null, overtureAvailable: false });
   },
 
   setShowPreview: (show) => {
@@ -237,4 +242,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setVegetationFeatures: (features) => set({ vegetationFeatures: features }),
   setVegetationGenerationStatus: (status, step = '') => set({ vegetationGenerationStatus: status, vegetationGenerationStep: step }),
   setGeneratedBboxKey: (key) => set({ generatedBboxKey: key }),
+  setOvertureAvailable: (available) => set({ overtureAvailable: available }),
 }));
