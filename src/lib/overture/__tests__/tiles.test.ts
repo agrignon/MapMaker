@@ -291,10 +291,11 @@ describe('fetchOvertureTiles', () => {
 
     await fetchOvertureTiles(NYC_BBOX);
 
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('[Overture]'),
-      expect.any(Error)
-    );
+    // DOMException is not a subclass of Error in some environments — use toBeTruthy() check
+    const calls = vi.mocked(console.warn).mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[0][0]).toContain('[Overture]');
+    expect(calls[0][1]).toBe(abortError);
   });
 
   it('returns { tiles: empty Map, available: false } when caller abort signal fires (does NOT throw)', async () => {
