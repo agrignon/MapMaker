@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
@@ -8,10 +8,18 @@ interface SplitLayoutProps {
   children: React.ReactNode;
 }
 
-/**
- * Amber banner shown in the preview panel when the user has moved/resized the
- * bbox after the last successful generate. Prompts them to regenerate.
- */
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    setIsMobile(mq.matches);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 function StaleIndicator() {
   const generatedBboxKey = useMapStore((s) => s.generatedBboxKey);
   const bbox = useMapStore((s) => s.bbox);
@@ -69,9 +77,63 @@ function StaleIndicator() {
   );
 }
 
+function MobileTabBar({ activeTab, onTabChange }: { activeTab: 'map' | 'preview'; onTabChange: (tab: 'map' | 'preview') => void }) {
+  const showPreview = useMapStore((s) => s.showPreview);
+
+  if (!showPreview) return null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        borderBottom: '1px solid #374151',
+        backgroundColor: '#111827',
+        flexShrink: 0,
+      }}
+    >
+      <button
+        onClick={() => onTabChange('map')}
+        style={{
+          flex: 1,
+          padding: '10px 0',
+          fontSize: '13px',
+          fontWeight: 600,
+          border: 'none',
+          cursor: 'pointer',
+          backgroundColor: activeTab === 'map' ? '#1f2937' : 'transparent',
+          color: activeTab === 'map' ? '#fff' : '#6b7280',
+          borderBottom: activeTab === 'map' ? '2px solid #3b82f6' : '2px solid transparent',
+          transition: 'all 0.15s',
+        }}
+      >
+        Map
+      </button>
+      <button
+        onClick={() => onTabChange('preview')}
+        style={{
+          flex: 1,
+          padding: '10px 0',
+          fontSize: '13px',
+          fontWeight: 600,
+          border: 'none',
+          cursor: 'pointer',
+          backgroundColor: activeTab === 'preview' ? '#1f2937' : 'transparent',
+          color: activeTab === 'preview' ? '#fff' : '#6b7280',
+          borderBottom: activeTab === 'preview' ? '2px solid #3b82f6' : '2px solid transparent',
+          transition: 'all 0.15s',
+        }}
+      >
+        3D Preview
+      </button>
+    </div>
+  );
+}
+
 export function SplitLayout({ children }: SplitLayoutProps) {
   const showPreview = useMapStore((state) => state.showPreview);
+  const isMobile = useIsMobile();
   const [splitPercent, setSplitPercent] = useState(50);
+  const [activeTab, setActiveTab] = useState<'map' | 'preview'>('map');
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -92,14 +154,43 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     dragging.current = false;
   }, []);
 
+  useEffect(() => {
+    if (showPreview && isMobile) {
+      setActiveTab('preview');
+    }
+  }, [showPreview, isMobile]);
+
+  if (isMobile) {
+    return (
+      <div ref={containerRef} className="flex-1 h-full flex flex-col">
+        <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+        <div style={{ flex: 1, position: 'relative', display: (!showPreview || activeTab === 'map') ? 'block' : 'none' }}>
+          {children}
+        </div>
+        {showPreview && (
+          <div
+            style={{
+              flex: 1,
+              position: 'relative',
+              display: activeTab === 'preview' ? 'block' : 'none',
+              overflow: 'hidden',
+            }}
+          >
+            <StaleIndicator />
+            <PreviewCanvas />
+            <PreviewSidebar />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} className="flex-1 h-full flex">
-      {/* Left panel: map — always rendered */}
       <div style={{ width: showPreview ? `${splitPercent}%` : '100%', minWidth: 0, height: '100%', position: 'relative' }}>
         {children}
       </div>
 
-      {/* Draggable divider */}
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -114,7 +205,6 @@ export function SplitLayout({ children }: SplitLayoutProps) {
         }}
       />
 
-      {/* Right panel: 3D preview — always mounted to preserve R3F Canvas (avoid WebGL teardown) */}
       <div
         style={{
           width: showPreview ? `${100 - splitPercent}%` : '0%',
