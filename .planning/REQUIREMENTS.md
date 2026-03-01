@@ -58,22 +58,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| PARSE-01 | — | Pending |
-| PARSE-02 | — | Pending |
-| PARSE-03 | — | Pending |
-| PARSE-04 | — | Pending |
-| DEDUP-01 | — | Pending |
-| INTEG-01 | — | Pending |
-| INTEG-02 | — | Pending |
-| INTEG-03 | — | Pending |
+| DATA-01 | Phase 10 | Pending |
+| DATA-02 | Phase 10 | Pending |
+| PARSE-01 | Phase 11 | Pending |
+| PARSE-02 | Phase 11 | Pending |
+| PARSE-03 | Phase 11 | Pending |
+| PARSE-04 | Phase 11 | Pending |
+| DEDUP-01 | Phase 12 | Pending |
+| INTEG-01 | Phase 13 | Pending |
+| INTEG-02 | Phase 13 | Pending |
+| INTEG-03 | Phase 13 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 — traceability filled during roadmap creation*
