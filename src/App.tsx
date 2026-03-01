@@ -4,7 +4,7 @@ import { SplitLayout } from './components/Layout/SplitLayout';
 
 function App() {
   return (
-    <div className="h-screen flex">
+    <div style={{ height: '100dvh', display: 'flex' }}>
       <SplitLayout>
         <div className="relative w-full h-full">
           <MapView />
