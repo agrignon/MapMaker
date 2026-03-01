@@ -73,10 +73,10 @@ Plans:
   2. In an OSM-sparse area (rural India, Sub-Saharan Africa), Overture gap-fill buildings appear where OSM has none
   3. L-shaped and courtyard buildings with OSM coverage are not double-rendered (bounding-box IoU handles complex shapes)
   4. The deduplication function is covered by unit tests with synthetic cases proving OSM-wins-on-overlap and gap-fill-passes-through behavior
-**Plans**: TBD
+**Plans**: 1
 
 Plans:
-- [ ] 12-01: TBD
+- [ ] 12-01: AABB IoU deduplication with TDD (deduplicateOverture function + unit tests) — Wave 1
 
 ### Phase 13: Pipeline Integration
 **Goal**: OSM and Overture fetches run in parallel and their merged building list flows seamlessly into the existing 3D preview and STL export with no new UI surface
@@ -107,5 +107,5 @@ Plans:
 | 9. Performance Hardening | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
 | 11. MVT Parser | v1.1 | Complete    | 2026-03-01 | 2026-03-01 |
-| 12. Deduplication | v1.1 | 0/? | Not started | - |
+| 12. Deduplication | v1.1 | 0/1 | Not started | - |
 | 13. Pipeline Integration | v1.1 | 0/? | Not started | - |
