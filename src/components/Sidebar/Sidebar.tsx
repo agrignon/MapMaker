@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { SelectionInfo } from './SelectionInfo';
 import { GenerateButton } from './GenerateButton';
@@ -16,8 +16,6 @@ function useIsMobile(breakpoint = 768) {
 }
 
 function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
     <div
       style={{
@@ -35,45 +33,28 @@ function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
           backgroundColor: 'rgba(17, 24, 39, 0.85)',
           backdropFilter: 'blur(12px)',
           borderTop: '1px solid rgba(255,255,255,0.1)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingBottom: 'max(10px, env(safe-area-inset-bottom, 10px))',
         }}
       >
         <div
-          onClick={() => setCollapsed(!collapsed)}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '10px 14px',
-            cursor: 'pointer',
-            userSelect: 'none',
+            padding: '10px 14px 4px',
           }}
         >
           <span style={{ fontSize: '15px', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
             MapMaker
           </span>
-          <span style={{ color: '#9ca3af', fontSize: '12px' }}>
-            {collapsed ? '▲' : '▼'}
-          </span>
         </div>
 
-        {!collapsed && (
-          <>
-            <div style={{ padding: '0 14px 8px', maxHeight: '30vh', overflowY: 'auto' }}>
-              {hasBbox ? (
-                <SelectionInfo />
-              ) : (
-                <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-                  Tap <strong>Draw Area</strong> and drag on the map to select a region.
-                </p>
-              )}
-            </div>
-
-            <div style={{ padding: '8px 14px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-              <GenerateButton />
-            </div>
-          </>
+        {hasBbox && (
+          <div style={{ padding: '4px 14px 8px', maxHeight: '20vh', overflowY: 'auto' }}>
+            <SelectionInfo />
+          </div>
         )}
+
+        <div style={{ padding: '4px 14px 6px' }}>
+          <GenerateButton />
+        </div>
       </div>
     </div>
   );
