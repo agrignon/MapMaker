@@ -1,18 +1,93 @@
+import { useState, useEffect } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { SelectionInfo } from './SelectionInfo';
 import { GenerateButton } from './GenerateButton';
 
-export function Sidebar() {
-  const hasBbox = useMapStore((s) => s.bbox !== null);
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    setIsMobile(mq.matches);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div
       style={{
         position: 'absolute',
-        bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          pointerEvents: 'auto',
+          backgroundColor: 'rgba(17, 24, 39, 0.85)',
+          backdropFilter: 'blur(12px)',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <div
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '10px 14px',
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          <span style={{ fontSize: '15px', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+            MapMaker
+          </span>
+          <span style={{ color: '#9ca3af', fontSize: '12px' }}>
+            {collapsed ? '▲' : '▼'}
+          </span>
+        </div>
+
+        {!collapsed && (
+          <>
+            <div style={{ padding: '0 14px 8px', maxHeight: '30vh', overflowY: 'auto' }}>
+              {hasBbox ? (
+                <SelectionInfo />
+              ) : (
+                <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                  Tap <strong>Draw Area</strong> and drag on the map to select a region.
+                </p>
+              )}
+            </div>
+
+            <div style={{ padding: '8px 14px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <GenerateButton />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DesktopSidebar({ hasBbox }: { hasBbox: boolean }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 12,
         left: 12,
         zIndex: 10,
-        width: 'min(260px, calc(100vw - 24px))',
+        width: 260,
         backgroundColor: 'rgba(17, 24, 39, 0.65)',
         backdropFilter: 'blur(12px)',
         borderRadius: '10px',
@@ -45,4 +120,15 @@ export function Sidebar() {
       </div>
     </div>
   );
+}
+
+export function Sidebar() {
+  const hasBbox = useMapStore((s) => s.bbox !== null);
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return <MobileSidebar hasBbox={hasBbox} />;
+  }
+
+  return <DesktopSidebar hasBbox={hasBbox} />;
 }
