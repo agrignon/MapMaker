@@ -14,10 +14,10 @@ Requirements for Overture Maps building coverage gap-fill. Each maps to roadmap 
 
 ### Parsing
 
-- [ ] **PARSE-01**: Overture building footprints are decoded from MVT and converted to the existing BuildingFeature format
-- [ ] **PARSE-02**: Complex multi-part Overture buildings (MultiPolygon) render correctly as individual buildings
-- [ ] **PARSE-03**: Overture building geometry has correct face normals (ring winding order normalized to match OSM pipeline)
-- [ ] **PARSE-04**: Small ML artifacts (< 15m²) are filtered out from Overture results
+- [x] **PARSE-01**: Overture building footprints are decoded from MVT and converted to the existing BuildingFeature format
+- [x] **PARSE-02**: Complex multi-part Overture buildings (MultiPolygon) render correctly as individual buildings
+- [x] **PARSE-03**: Overture building geometry has correct face normals (ring winding order normalized to match OSM pipeline)
+- [x] **PARSE-04**: Small ML artifacts (< 15m²) are filtered out from Overture results
 
 ### Deduplication
 
@@ -60,10 +60,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DATA-01 | Phase 10 | Complete |
 | DATA-02 | Phase 10 | Complete |
-| PARSE-01 | Phase 11 | Pending |
-| PARSE-02 | Phase 11 | Pending |
-| PARSE-03 | Phase 11 | Pending |
-| PARSE-04 | Phase 11 | Pending |
+| PARSE-01 | Phase 11 | Complete |
+| PARSE-02 | Phase 11 | Complete |
+| PARSE-03 | Phase 11 | Complete |
+| PARSE-04 | Phase 11 | Complete |
 | DEDUP-01 | Phase 12 | Pending |
 | INTEG-01 | Phase 13 | Pending |
 | INTEG-02 | Phase 13 | Pending |
