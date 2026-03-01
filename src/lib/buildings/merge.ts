@@ -89,7 +89,7 @@ function sampleBaseZmm(
  * Compute footprint area in square meters using the shoelace formula on UTM-projected coordinates.
  * Returns the absolute value (always positive area).
  */
-function computeFootprintAreaM2(outerRing: [number, number][]): number {
+export function computeFootprintAreaM2(outerRing: [number, number][]): number {
   const utmRing: [number, number][] = outerRing.map(([lon, lat]) => {
     const utm = wgs84ToUTM(lon, lat);
     return [utm.x, utm.y];
