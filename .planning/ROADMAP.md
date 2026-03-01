@@ -59,10 +59,10 @@ Plans:
   2. Buildings defined as MultiPolygon in Overture (campus clusters, multi-part footprints) each render as an individual building, none silently missing
   3. Tiny ML artifacts (sheds, kiosks, solar panels under 15 m²) do not appear in the preview or export
   4. Gap-fill buildings with no height data use the area-heuristic height fallback, producing visible 3D geometry rather than flat planes
-**Plans**: TBD
+**Plans**: 1
 
 Plans:
-- [ ] 11-01: TBD
+- [ ] 11-01: Overture MVT parser with winding normalization, MultiPolygon flattening, and area filtering (TDD) — Wave 1
 
 ### Phase 12: Deduplication
 **Goal**: Overture footprints that spatially overlap existing OSM buildings are removed so no building is double-rendered, and Overture buildings with no OSM counterpart pass through unchanged
@@ -106,6 +106,6 @@ Plans:
 | 8. Edit-Iterate + Export Polish | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 9. Performance Hardening | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
-| 11. MVT Parser | v1.1 | 0/? | Not started | - |
+| 11. MVT Parser | v1.1 | 0/1 | Not started | - |
 | 12. Deduplication | v1.1 | 0/? | Not started | - |
 | 13. Pipeline Integration | v1.1 | 0/? | Not started | - |
