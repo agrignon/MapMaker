@@ -37,7 +37,7 @@ export function Sidebar() {
           <SelectionInfo />
         ) : (
           <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-            Search for a location, then <strong>Shift+drag</strong> on the map to draw a bounding box.
+            Search for a location, then tap <strong>Draw Area</strong> and drag on the map to select a region. On desktop you can also <strong>Shift+drag</strong>.
           </p>
         )}
       </div>

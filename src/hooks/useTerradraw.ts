@@ -131,6 +131,16 @@ export function useTerradraw(map: MapLibreMap | null): void {
 
     map.on('move', onMapRender);
 
+    let prevDrawMode = useMapStore.getState().drawMode;
+    const unsubDrawMode = useMapStore.subscribe((state) => {
+      if (state.drawMode !== prevDrawMode) {
+        prevDrawMode = state.drawMode;
+        if (!drawing && !resizing && !moving) {
+          canvas.style.cursor = state.drawMode ? 'crosshair' : '';
+        }
+      }
+    });
+
     /** Update the store with current rect geo-coords. */
     const updateStore = () => {
       if (rectSW && rectNE) {
@@ -156,8 +166,10 @@ export function useTerradraw(map: MapLibreMap | null): void {
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
 
-      // Shift+drag = draw new rectangle
-      if (e.shiftKey) {
+      const storeDrawMode = useMapStore.getState().drawMode;
+
+      // Shift+drag or draw-mode tap = draw new rectangle
+      if (e.shiftKey || storeDrawMode) {
         drawing = true;
         startX = px;
         startY = py;
@@ -244,8 +256,10 @@ export function useTerradraw(map: MapLibreMap | null): void {
         return;
       }
 
-      // Idle: update cursor based on hit test
-      if (rectSW && rectNE && !e.shiftKey) {
+      // Idle: update cursor based on hit test (but draw mode takes precedence)
+      if (useMapStore.getState().drawMode) {
+        canvas.style.cursor = 'crosshair';
+      } else if (rectSW && rectNE && !e.shiftKey) {
         const zone = hitTest(map, px, py, rectSW, rectNE);
         canvas.style.cursor = zoneToCursor(zone);
       }
@@ -291,14 +305,16 @@ export function useTerradraw(map: MapLibreMap | null): void {
       if (drawOverlay) { drawOverlay.remove(); drawOverlay = null; }
 
       map.dragPan.enable();
-      canvas.style.cursor = '';
 
       const rect = canvas.getBoundingClientRect();
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
 
-      // Ignore tiny drags (< 5px)
-      if (Math.abs(endX - startX) < 5 && Math.abs(endY - startY) < 5) return;
+      // Ignore tiny drags (< 5px) — keep draw mode active so user can retry
+      if (Math.abs(endX - startX) < 5 && Math.abs(endY - startY) < 5) {
+        canvas.style.cursor = useMapStore.getState().drawMode ? 'crosshair' : '';
+        return;
+      }
 
       const p1 = map.unproject([startX, startY]);
       const p2 = map.unproject([endX, endY]);
@@ -316,6 +332,10 @@ export function useTerradraw(map: MapLibreMap | null): void {
 
       // Update store
       updateStore();
+
+      // Exit draw mode after successful draw
+      canvas.style.cursor = '';
+      useMapStore.getState().setDrawMode(false);
     };
 
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -331,6 +351,7 @@ export function useTerradraw(map: MapLibreMap | null): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       map.off('move', onMapRender);
+      unsubDrawMode();
       if (rectOverlay) rectOverlay.remove();
       if (drawOverlay) drawOverlay.remove();
       map.boxZoom.enable();

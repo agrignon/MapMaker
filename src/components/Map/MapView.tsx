@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Map, useMap } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { SearchOverlay } from './SearchOverlay';
+import { DrawButton } from './DrawButton';
 import { useTerradraw } from '../../hooks/useTerradraw';
 import type { MapEvent } from '@vis.gl/react-maplibre';
 
@@ -20,7 +21,12 @@ function MapInteractions() {
 
   useTerradraw(mapInstance);
 
-  return <SearchOverlay />;
+  return (
+    <>
+      <SearchOverlay />
+      <DrawButton />
+    </>
+  );
 }
 
 /** Renders the full-viewport MapLibre satellite map with geocoding search overlay. */

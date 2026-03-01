@@ -59,6 +59,8 @@ interface MapState {
   generatedBboxKey: string | null;
   // Overture availability flag — true when Overture fetch succeeded (even if empty tiles)
   overtureAvailable: boolean;
+  // Draw mode for mobile support
+  drawMode: boolean;
 }
 
 interface MapActions {
@@ -96,6 +98,7 @@ interface MapActions {
   setVegetationGenerationStatus: (status: 'idle' | 'fetching' | 'ready' | 'error', step?: string) => void;
   setGeneratedBboxKey: (key: string | null) => void;
   setOvertureAvailable: (available: boolean) => void;
+  setDrawMode: (enabled: boolean) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -150,6 +153,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   generatedBboxKey: null,
   // Overture availability defaults
   overtureAvailable: false,
+  // Draw mode defaults
+  drawMode: false,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -243,4 +248,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setVegetationGenerationStatus: (status, step = '') => set({ vegetationGenerationStatus: status, vegetationGenerationStep: step }),
   setGeneratedBboxKey: (key) => set({ generatedBboxKey: key }),
   setOvertureAvailable: (available) => set({ overtureAvailable: available }),
+  setDrawMode: (enabled) => set({ drawMode: enabled }),
 }));
