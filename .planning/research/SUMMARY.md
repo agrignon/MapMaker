@@ -1,209 +1,195 @@
 # Project Research Summary
 
-**Project:** MapMaker — Map-to-3D-printable-STL web application
-**Domain:** Browser-based terrain and OSM feature 3D model generator — milestone additions (roads, water, vegetation, mesh smoothing, Web Worker offload)
-**Researched:** 2026-02-24
-**Confidence:** HIGH (stack: direct npm verification + codebase inspection; architecture: existing code confirmed; pitfalls: cross-verified across OSM wiki, slicer community, Three.js discourse)
+**Project:** MapMaker v1.1 — Overture Maps Building Gap-Fill Integration
+**Domain:** Browser-native geospatial data integration for 3D-printable terrain models
+**Researched:** 2026-02-28
+**Confidence:** HIGH (stack and architecture have HIGH confidence from direct codebase inspection and official documentation; one LOW-confidence gap remains on the MVT layer name inside the Overture PMTiles archive)
 
 ## Executive Summary
 
-MapMaker is a client-side SPA that converts a user-selected map bounding box into a printable STL file by combining DEM elevation data (terrain) with OSM vector features (buildings, roads, water, vegetation). Phases 1-3 are shipped and verified — location search, bbox selection, terrain generation, buildings, STL export, and orbit preview are all working. The current milestone adds roads, water bodies, vegetation, terrain smoothing, layer controls, and a Web Worker offload to complete the v1 pipeline. The research-recommended approach is to extend the proven pipeline architecture incrementally: add parallel Overpass fetches for each new feature type, apply each as a lib module following the established `overpass.ts / parse.ts / geometry.ts / types.ts` pattern, and wire them into the existing store-first data flow and merge export chain. No redesign is required; all new features slot cleanly into established grooves.
+MapMaker v1.1 adds a single high-value capability: gap-fill buildings from Overture Maps in areas where OpenStreetMap coverage is sparse. The integration is purely additive — the entire downstream pipeline (mesh worker, geometry builder, STL export) is unchanged. The seam is in `fetchOsmLayersStandalone()` in `GenerateButton.tsx`, where Overture buildings are fetched in parallel with the existing Overpass request, deduplicated against OSM (OSM always wins on overlap), and merged into the same `BuildingFeature[]` array that already flows through the rest of the system.
 
-The two new stack additions are minimal and justified: `geometry-extrude` for road polyline-to-ribbon mesh generation (earcut-based, TypedArray output, zero conflict with existing stack), and `comlink` + `vite-plugin-comlink` for ergonomic Web Worker communication (replaces raw postMessage boilerplate, provides TypeScript types). Everything else — water bodies, vegetation geometry, and terrain smoothing — reuses existing dependencies (earcut, three-bvh-csg, @mapbox/martini, osmtogeojson) through the existing pipeline patterns. No new frameworks, no dependency sprawl.
+The recommended browser-access approach for Overture data is PMTiles via HTTP range requests using the `pmtiles` npm package (v4.4.0). This is the only viable option that preserves MapMaker's fully client-side architecture — DuckDB WASM cannot query S3 GeoParquet from the browser due to missing HTTPFS support, and a thin server proxy would require deploying backend infrastructure. PMTiles tiles covering the user's bounding box are fetched at zoom 14, decoded from MVT format using `@mapbox/vector-tile` + `pbf`, and then filtered and adapted to the existing `BuildingFeature` interface. Three new libraries totaling under 100KB are required.
 
-The critical risk pattern for this milestone is geometry correctness under multi-layer composition. Roads at intersections produce overlapping triangle geometry unless junction handling is explicit. Water bodies encoded as OSM multipolygon relations require proper ring assembly via `osmtogeojson` (already in the project). Applying terrain smoothing after feature placement erodes building bases and road edges — avoided entirely by smoothing the DEM elevation grid before any feature geometry is generated. The secondary risk is Web Worker transfer overhead — solved by merging all geometry into three large typed arrays before postMessage rather than one ArrayBuffer per feature.
+The primary risks are: (1) the PMTiles URL is release-date-specific and will 404 after Overture's next monthly rotation — the fix is graceful degradation to OSM-only plus a STAC-catalog URL discovery strategy; (2) spatial deduplication must be IoU-based at the polygon level, not centroid-distance, because complex building footprints defeat naive heuristics and produce double-rendered buildings in the STL; and (3) one operational fact requires empirical verification before code is written — the MVT source-layer name inside the Overture buildings PMTiles archive (expected `"building"`, confirmed via Azure Maps sample code, but must be validated by fetching a tile at pmtiles.io before shipping).
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing stack (Vite 6, React 19, TypeScript, Tailwind v4, MapLibre GL JS, Three.js 0.183, Zustand, @mapbox/martini, earcut 3, proj4, osmtogeojson, three-bvh-csg, manifold-3d) is not changed. Two additions are needed for this milestone:
+The v1.0 validated stack (React 19, Three.js R3F, Zustand, Vite 6, Vitest, MapLibre GL JS 5, @mapbox/martini, earcut, osmtogeojson, geometry-extrude, comlink, three-bvh-csg, manifold-3d) is unchanged. Three new packages are added:
 
-**Core technologies (new additions only):**
-- `geometry-extrude@0.2.1`: Road centerline-to-ribbon mesh — returns TypedArrays that wire directly into `THREE.BufferGeometry`; handles miter joints at bends; earcut is its only dependency (already in project, installs its own 2.x copy automatically); only new runtime dependency
-- `comlink@4.4.2` + `vite-plugin-comlink@5.3.0`: Web Worker ergonomics — turns worker functions into async-callable main-thread methods with proper TypeScript types; eliminates postMessage/onmessage boilerplate
-- Custom separable box/Gaussian filter (no library): Terrain DEM smoothing — ~30 lines of TypeScript operating on the existing `Float32Array` elevation grid; no maintained TypeScript-native height-field smoothing library exists; `three-subdivide` is unsuitable (designed for organic mesh smoothing, causes tearing on flat grid geometries)
+**Core new technologies:**
+- `pmtiles@^4.4.0` — fetches individual vector tiles from the Overture buildings PMTiles archive via HTTP range requests; the only browser-viable approach for querying Overture's S3-hosted dataset without a backend
+- `@mapbox/vector-tile@^2.0.4` + `pbf@^4.0.1` — decodes MVT (Mapbox Vector Tile) binary format from PMTiles tiles into GeoJSON-like feature objects; `pbf` is a required peer dependency; MapLibre GL JS 5 bundles its own `pbf` internally so install `pbf` explicitly for independent resolution
+- `@turf/boolean-intersects@^7.3.1` — 13.4KB tree-shaken package for polygon intersection testing during spatial deduplication; use this sub-package rather than the full 68KB `turf` monolith
 
-Water bodies, vegetation, and terrain smoothing require zero new libraries. They reuse earcut (triangulation), osmtogeojson (multipolygon assembly), three-bvh-csg (CSG merge), and @mapbox/martini already in the project.
+**Recommended deduplication approach:** Bounding-box IoU (zero dependencies, ~10 lines of arithmetic) handles 99% of cases correctly and avoids Turf.js bundle weight. Escalate to `@turf/boolean-intersects` for exact polygon testing only if bounding-box IoU produces visible false negatives in testing.
 
-**Version compatibility confirmed:** `geometry-extrude` ships its own earcut 2.x separate from the project's earcut 3.x — npm handles the two copies automatically, no conflict. `vite-plugin-comlink@5.3.0` requires `comlink@^4.3.1` (satisfied by 4.4.2) and `vite>=2.9.6` (project uses Vite 6.0.5).
+**Version compatibility:** `pmtiles@4.4.0` ships as an ES module with no WASM and no native addons — works directly with Vite 6. `@turf/boolean-intersects@7.3.1` is ES module with `sideEffects: false` — Vite tree-shakes correctly.
 
-See `.planning/research/STACK.md` for full rationale and alternatives considered.
+See `.planning/research/STACK.md` for full alternatives analysis, rejected approaches (DuckDB WASM, GeoParquet, third-party API), and npm installation commands.
 
 ### Expected Features
 
-**Must have (table stakes — all required for v1 milestone):**
-- Roads as 3D geometry with type-based widths — every competitor (TerraPrinter, Map2Model, TerrainForge3D) shows roads; absence makes models hard to orient
-- Road style selection (raised / recessed / flat) — unique differentiator; no competitor offers this; recessed channels support the painting workflow
-- Water bodies as flat depressions below terrain — users expect water visually distinct and lower than land
-- Vegetation as toggleable raised patches — parks and forests as OSM polygon extrusions; OSM coverage varies by region
-- Layer toggles for all feature types — terrain, buildings, roads, water, vegetation each independently on/off
-- Terrain smoothing slider (0-10 Laplacian iterations) — raw 30m SRTM produces sharp elevation steps; smoothing is now competitive table stakes; TerraPrinter added it as a headline feature
-- Full model controls — X/Y/Z dimensions in mm; unit toggle mm/inches; contextual control visibility
-- Edit-iterate loop — adjust bbox or parameters without losing cached OSM data or layer state
-- Web Worker mesh generation — complex scenes lock the main thread 2-5 seconds without offloading
-- Production build compiles — Vite/TypeScript static build must succeed for deployment
+This milestone has one goal: more buildings everywhere, seamlessly, with no UI changes visible to users.
 
-**Should have (differentiators):**
-- Terrain smoothing slider with live preview (not just one-click like TerraPrinter) — visible UX advantage
-- Edit → iterate without re-fetching OSM — no competitor caches OSM data between edits
-- Location-name STL filenames (`london-uk-150mm.stl`) — minor UX win, `locationName` already in store
-- Unit toggle mm/inches — no competitor offers this
+**Must have (P1 — v1.1 launch):**
+- Overture building footprint fetch for selected bbox — retrieves Overture buildings via PMTiles browser access using the user's existing `mapBounds` store state
+- Spatial deduplication (OSM preferred) — filters Overture footprints that overlap OSM buildings; OSM wins on any overlap; 30% bounding-box IoU threshold handles GPS/projection alignment differences
+- Overture-to-BuildingFeature adapter — maps Overture GeoJSON Feature fields (`height`, `num_floors`, `subtype`, `class`) to the existing `BuildingFeature.properties` format understood by the height cascade in `height.ts`
+- Gap-fill geometry (extruded flat box) — Overture-sourced buildings render using existing `buildSingleBuilding()` pipeline with no new geometry code
+- Merged pipeline end-to-end — OSM + gap-fill buildings both appear in preview and STL export
 
-**Defer to v1.x / v2+:**
-- River/canal as linear depression channels — high geometry complexity; validate water layer first
-- GPX track overlay — request-driven, after core is proven
-- Shareable URL encoding settings — low-cost v1.x add once core works
-- Elevation contour lines — TerrainForge3D has it; low urgency for v1
-- KML import, tiling export, AR preview, 3MF multi-material — v2+
+**Should have (P2 — after core works):**
+- Minimum area filter (>= 15 m²) — removes ML-detected sheds, kiosks, and solar panels that slip through Overture's internal noise filter
+- PMTiles release URL maintenance — update the hardcoded PMTiles URL constant when Overture publishes a new monthly release (~60-day window before URLs expire)
+- Source attribution logging — `console.log` counts of OSM vs. Overture buildings in dev mode for debugging coverage gaps
 
-See `.planning/research/FEATURES.md` for full competitor matrix and implementation notes per feature.
+**Defer (v2+):**
+- Overture building parts (`building_part` theme) — adds roof geometry for some buildings but low global coverage and high parsing complexity
+- LiDAR-derived height preference from Overture `sources[]` — useful in the US where Esri contributes LiDAR heights, but globally sparse
+- Alternative gap-fill sources — Microsoft Global ML Building Footprints as a regional supplement
+
+**Anti-features (confirmed problematic, do not implement):**
+- Confidence-score filtering: Overture buildings theme has no confidence score field; `sources[]` lists provenance but not a numeric confidence value
+- Real-time Overture data freshness (live STAC polling on every request): adds fragility; pin to a known release and update per MapMaker release cycle
+- Overture building category styling in 3D preview: conflicts with the single-geometry STL merge; ML footprint category coverage is too sparse to be useful
+
+See `.planning/research/FEATURES.md` for the full feature dependency diagram, competitor analysis table, and implementation notes per feature.
 
 ### Architecture Approach
 
-This milestone extends the proven architecture without redesigning it. The existing four patterns are preserved: store-first data flow (Zustand as single source of truth), pipeline lib functions (`lib/<feature>/` directories with pure TypeScript), mesh component pattern (`XxxMesh.tsx` subscribes to store, builds geometry in `useEffect`), and `zScale` contract (all layers share the same scale formula).
+The integration seam is narrow and well-defined. The only file requiring meaningful modification is `GenerateButton.tsx` — specifically its `fetchOsmLayersStandalone()` function, which gains a parallel Overture fetch and a merge call before `setBuildingFeatures()`. Two new files are created. All other files — the store, `BuildingMesh.tsx`, the mesh worker, `buildAllBuildings()`, and the STL export pipeline — are unchanged.
 
-**Major components and new responsibilities:**
-1. `mapStore.ts` — extend with `roadFeatures`, `waterFeatures`, `vegetationFeatures`, `roadStyle`, `layerToggles`, `smoothingLevel`, `units`, and per-feature status fields; raw `ElevationData` stays immutable in store (smoothing is a mesh-gen parameter, not stored state)
-2. `GenerateButton.tsx` — add parallel `fetchRoadData()`, `fetchWaterData()`, `fetchVegetationData()` calls alongside existing buildings fetch; all start simultaneously; each updates store independently on completion
-3. `TerrainMesh.tsx` — apply `applyWaterToElevationGrid()` on the elevation Float32Array BEFORE calling `buildTerrainGeometry()`; accept `smoothingLevel` param and apply box blur before martini mesh generation
-4. `RoadMesh.tsx` / `WaterMesh.tsx` / `VegetationMesh.tsx` (new) — follow `BuildingMesh.tsx` pattern exactly
-5. `ExportPanel.tsx` — extend merge chain to include roads and vegetation; water depression is baked into the terrain mesh (no separate water geometry in export)
-6. `lib/worker/meshWorker.worker.ts` (new, Phase 8) — receives plain Float32Array buffers via Transferable; returns three merged typed arrays; main thread reconstructs `BufferGeometry`
+**New components:**
+1. `src/lib/buildings/overture.ts` — PMTiles fetch + MVT decode + tile-to-WGS84 coordinate transform + property mapping; exports `fetchOvertureBuildings(bbox): Promise<BuildingFeature[]>`
+2. `src/lib/buildings/deduplicate.ts` — `mergeAndDeduplicateBuildings(osm, overture)` using bounding-box IoU at 0.3 threshold; OSM always wins on overlap; returns a single `BuildingFeature[]` for the store
 
-**Key architectural constraint (water):** Water must be applied to the elevation grid before `buildTerrainGeometry()` is called. The depression must be baked into the terrain mesh for STL correctness. `WaterMesh.tsx` renders a visual overlay (blue polygon at water level) for preview only; the physical STL depression comes from the modified terrain.
+**Modified file:**
+- `src/components/Sidebar/GenerateButton.tsx` — `fetchOsmLayersStandalone()` runs OSM and Overture fetches in parallel via `Promise.allSettled()`; degrades silently to OSM-only if Overture fails
 
-**Build order enforced by dependencies:** Model controls + store (Phase 4) → Roads (Phase 5) → Water (Phase 6) → Vegetation + Smoothing (Phase 7) → Web Worker (Phase 8). Water modifies the elevation pipeline upstream of terrain generation; smoothing must precede all feature placement; Worker refactoring requires the full feature set to be stable.
+**Critical design decisions enforced by research:**
+- Merge at the data ingestion point, not in the store or the mesh layer. One source of truth: `buildingFeatures: BuildingFeature[]` holds the final merged result. Adding a separate `overtureFeatures` store field spreads merge logic across three files.
+- Use `Promise.allSettled()` (not `Promise.all()`) so Overture fetch failures degrade silently to OSM-only without surfacing an error to the user. Overture is an enhancement, not a requirement.
+- Deduplication must run before geometry generation — comparing polygon arrays is orders of magnitude cheaper than disposing merged `BufferGeometry` objects.
+- Always fetch at zoom level 14. Overture buildings appear with full properties at z13+, and the existing 25 km² area cap means a z14 query covers at most ~30 tiles.
 
-See `.planning/research/ARCHITECTURE.md` for the full data flow diagram, store extension plan, and anti-pattern list.
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, implementation code samples, build order, and anti-pattern analysis.
 
 ### Critical Pitfalls
 
-1. **Road intersection overlap (Pitfall 7)** — Independent segment extrusion creates overlapping triangles at every junction. Prevent with: use `geometry-extrude.extrudePolyline()` which handles miter joints on single polylines, and choose vertex displacement on the terrain mesh over CSG ribbon geometry for export.
+1. **No browser REST API for Overture — wrong access pattern:** Assuming Overture has an Overpass-like endpoint produces CORS errors and full-file downloads of hundreds of MB. Use PMTiles via the `pmtiles` npm package with HTTP range requests only. This is the first thing to validate — it determines the entire integration architecture.
 
-2. **Smoothing applied after feature placement destroys features (Pitfall 13)** — Uniform Laplacian smoothing moves building-base and road-edge vertices, creating skirts and surface blending. Prevent with: smooth the raw DEM elevation `Float32Array` BEFORE generating any feature geometry. Never apply smoothing to the final merged mesh.
+2. **Spatial deduplication false negatives (double-rendered buildings):** Centroid-distance deduplication fails for L-shaped and courtyard buildings. Bounding-box IoU at 0.3 threshold is required. Double-renders produce doubled wall thickness and non-manifold STL errors that slicers report at building positions. This is the highest-complexity component and requires unit tests before pipeline integration.
 
-3. **Water multipolygon relations break simple polygon parsing (Pitfall 10)** — Lakes with islands and river systems are OSM multipolygon relations with outer + inner rings. Prevent with: use `osmtogeojson` (already in project) to assemble relations before triangulation; test against a lake-with-islands before declaring water complete.
+3. **PMTiles CORS misconfiguration:** HTTP range requests require `range` in `AllowedHeaders` and `etag` in `ExposeHeaders` on the S3 bucket. Failure is non-obvious — OPTIONS preflight may succeed while actual range requests fail. Test from the production deployment domain, not just localhost.
 
-4. **Web Worker postMessage overhead with many small buffers (Pitfall 14)** — Passing one ArrayBuffer per feature causes 44x performance degradation in Chrome vs. three merged arrays. Prevent with: merge all geometry types into single position/normal/index arrays in the Worker before postMessage; never transfer per-feature buffers.
+4. **Height null for ML-derived buildings:** Overture `height` is null for the vast majority of Microsoft and Google ML footprints — these are 2D footprints only. The existing height cascade's area-heuristic fallback (`resolveHeight()` tier 3) is the correct behavior. Do not attempt complex height inference; document explicitly in code that ML sources lack height data and the area-based default is intentional.
 
-5. **CSG cost grows quadratically with each new layer (Pitfall 17)** — Per-feature CSG against terrain produces O(n × m) triangle intersection tests that blow up for dense city areas. Prevent with: use vertex displacement for roads and water (lower terrain vertex Z within polygon bounds); reserve CSG for building-terrain only where it is already working.
+5. **Overture release URL drift:** PMTiles URLs embed the release date and 404 after approximately 60 days when Overture rotates old releases. Implement graceful OSM-only fallback and document the URL constant as requiring periodic update. The Overture STAC catalog (`https://labs.overturemaps.org/stac/catalog.json`) provides dynamic URL discovery as the long-term solution.
 
-6. **Vite Worker production build breaks on shared chunk imports (Pitfall 15)** — Worker works in `vite dev` but fails in `vite build` when it shares chunks with the main thread. Prevent with: keep worker entry self-contained, set `worker: { format: 'es' }` in vite config, run `vite build` and verify Worker completion as an explicit acceptance test.
+6. **Ring winding order inconsistency (inverted normals):** The OSM parser handles rings with potential closing-vertex duplicates (stripped via `stripClosingVertex`). Overture GeoJSON follows RFC 7946 — exterior CCW, holes CW, no closing duplicate. Passing Overture rings to OSM-coded geometry functions without normalization produces inverted normals and failed earcut triangulation. Normalize winding in the Overture parser before any shared geometry code is called.
 
-7. **Z-fighting between roads, water, and terrain (Pitfall 16)** — Near-coplanar geometry causes GPU flickering in preview and non-manifold edges in STL. Prevent with: unconditional Z-offset rules (water: terrain − 0.5mm minimum; roads raised: terrain + 0.8mm; roads recessed: terrain − 0.3mm) enforced in geometry generation code, not just Three.js material offsets.
+7. **MultiPolygon buildings silently skipped:** Overture geometry is declared as `Polygon | MultiPolygon`. Handling only `Polygon` causes complex buildings (campus clusters, multi-part footprints) to disappear silently. For `MultiPolygon`, emit one `BuildingFeature` per polygon entry in `coordinates[]`.
+
+8. **Data volume blowup in dense cities:** A 4 km² bbox over central Tokyo or Manhattan can return 5,000–15,000 Overture buildings from ML sources. Apply a 15 m² minimum area filter before deduplication to eliminate shed/kiosk/solar-panel noise. Cap total combined feature count before geometry generation if browser memory exceeds limits.
+
+See `.planning/research/PITFALLS.md` for the full pitfall-to-phase mapping, recovery strategies (all rated LOW-MEDIUM cost), and the "Looks Done But Isn't" verification checklist.
 
 ## Implications for Roadmap
 
-The phase structure is dictated by the pipeline dependency graph. Water modifies the elevation grid upstream of terrain generation. Smoothing must precede feature placement. Roads are geometrically independent. Worker offload requires all feature geometry to be stable before typed-array interfaces are refactored.
+The milestone maps cleanly to four implementation phases ordered by the dependency chain and risk. Each phase is independently testable before the next begins.
 
-### Phase 4: Model Controls + Store Foundation
+### Phase 1: Overture Fetch Strategy and Access Validation
 
-**Rationale:** Every subsequent feature consumes store state (layer toggles, road style, units, smoothing level). Building store extensions and control UI first means each new feature can be immediately tested against toggle behavior. No geometry risk, no architectural risk.
-**Delivers:** `mapStore.ts` extended with all new state fields; layer toggle UI wired to existing terrain/building meshes; contextual control visibility (road style hidden when roads off; smoothing slider hidden when terrain off); unit conversion (mm/inches display-only).
-**Addresses:** Layer toggles for all feature types, model controls (X/Y/Z), unit toggle, edit-iterate loop state foundation.
-**Avoids:** Toggle-state confusion — establishes correct behavior before any new layer geometry exists.
-**Research flag:** Standard patterns — Zustand state extension is well-documented; skip research-phase.
+**Rationale:** All other phases depend on getting Overture data into the browser. The access method (PMTiles) must be validated empirically before writing any parsing or deduplication code. This phase surfaces the MVT layer name gap and CORS behavior early — both are unknowns that could force architectural rework if discovered later.
+**Delivers:** A working `fetchOvertureBuildings(bbox)` stub that returns raw building feature data from the Overture PMTiles archive — tested in isolation with a known bbox, logged to console to verify count and structure. Graceful 404/CORS fallback established and tested by intentionally breaking the URL.
+**Addresses:** P1 feature — Overture building footprint fetch
+**Avoids:** Pitfall 1 (wrong access pattern), Pitfall 2 (CORS misconfiguration), Pitfall 10 (release URL drift)
+**Verify:** Fetch for a known OSM-sparse area (rural India or Sub-Saharan Africa) and confirm buildings are returned. Test CORS from the production deployment domain. Verify the MVT layer name empirically at pmtiles.io by loading the Overture buildings URL and inspecting layer names.
+**Research flag:** This phase requires empirical validation — the MVT layer name is LOW confidence in existing research. Resolve before writing the parser.
 
-### Phase 5: Roads Layer
+### Phase 2: Overture Parser and Feature Adapter
 
-**Rationale:** Roads are geometrically independent from water and vegetation — the Overpass query, parse, geometry pipeline, and mesh component can be built and tested in isolation. Most impactful visual addition. Road intersection geometry strategy (displacement vs. ribbon) must be established here before it propagates.
-**Delivers:** `lib/roads/` module; `RoadMesh.tsx` following `BuildingMesh.tsx` pattern; roads fetched in parallel in `GenerateButton`; roads in STL export merge chain; road style (raised/recessed/flat) UI wired to store.
-**Uses:** `geometry-extrude.extrudePolyline()` for ribbon geometry; existing elevation sampler for terrain-draping; existing Overpass/osmtogeojson infrastructure.
-**Addresses:** Roads as 3D geometry, type-based widths, road style selection (key differentiator).
-**Avoids:** Pitfall 7 (intersection overlap) — establish junction strategy and minimum-width floor (0.8mm) before type-specific road work. Pitfall 8 (bridges/tunnels) — filter tunnels from Overpass; raise bridge ways by layer tag. Pitfall 9 (sub-mm widths) — enforce `Math.max(0.8, realWidth * scale)` floor. Pitfall 16 (Z-fighting) — establish road Z-offset convention unconditionally.
-**Research flag:** Needs research-phase for road intersection polygon merging — the gnarliest geometry problem in the milestone; community solutions vary and the right approach for this codebase needs a spike.
+**Rationale:** Once raw data is fetchable, the adapter translates it to the format the existing pipeline expects. Parser correctness — especially ring winding order and MultiPolygon handling — is a prerequisite for meaningful deduplication testing. Bugs here produce inverted normals and missing buildings that are hard to diagnose in the integrated pipeline.
+**Delivers:** `parseOvertureBuildings()` within `src/lib/buildings/overture.ts` that correctly handles Polygon and MultiPolygon geometry, normalizes ring winding order to match the OSM pipeline's expectations, maps Overture properties to `BuildingFeature.properties`, and applies a 15 m² minimum area filter. Gap-fill buildings use the area-heuristic height fallback with the reason documented in code.
+**Uses:** `@mapbox/vector-tile`, `pbf`, tile-to-WGS84 coordinate math (~10 lines of arithmetic, no additional library)
+**Implements:** `src/lib/buildings/overture.ts` (parsing and adapter portion)
+**Avoids:** Pitfall 6 (height null for ML buildings — document and use area fallback explicitly), Pitfall 8 (ring winding order — normalize in parser before shared geometry code), Pitfall 9 (MultiPolygon not handled — emit one BuildingFeature per polygon entry), Pitfall 3 (roofprint displacement — accept as known limitation, document in code comment)
 
-### Phase 6: Water Layer
+### Phase 3: Spatial Deduplication
 
-**Rationale:** Water integration with the elevation grid is architecturally the most complex of the new layers — it modifies the upstream terrain pipeline, not just adds a downstream mesh. Building it after roads means the lib module pattern is established and the store integration is proven.
-**Delivers:** `lib/water/` module; `applyWaterToElevationGrid()` function that runs BEFORE terrain mesh generation; water depression baked into terrain STL geometry; `WaterMesh.tsx` visual overlay (blue, preview only); toggleable water layer.
-**Addresses:** Water bodies as flat depressions, toggleable water layer.
-**Avoids:** Pitfall 10 (multipolygon relations) — use `osmtogeojson` for ring assembly; test against lake-with-islands. Pitfall 11 (coastlines not in Overpass) — scope ocean to elevation-zero raster fallback for v1; skip raw coastline ways. Pitfall 13 (smoothing destroys water edges) — water is applied to elevation grid before smoothing, so depression is preserved through the smoothing pass. Pitfall 17 (CSG cost) — use vertex displacement (clamp terrain Z within water polygon), not CSG.
-**Research flag:** Needs research-phase for coastal/ocean handling — Pitfall 11 requires a concrete decision: elevation-zero raster fallback, osmdata.openstreetmap.de water polygon shapefile, or scope out ocean for v1. This affects water architecture and must be decided before implementation begins.
+**Rationale:** Deduplication is the highest-complexity component and the most likely to produce subtle bugs. False negatives (missed duplicates) produce double-rendered buildings and non-manifold STL errors. The algorithm must be built and unit-tested against synthetic test cases with known outcomes before it is wired into the live pipeline.
+**Delivers:** `mergeAndDeduplicateBuildings(osm, overture)` in `src/lib/buildings/deduplicate.ts` with unit tests covering: OSM-only buildings pass through unchanged; Overture buildings matching OSM (by bbox IoU > 0.3) are discarded; Overture buildings with no OSM match are added; L-shaped buildings with OSM coverage are not double-rendered; overall feature count and memory stay within bounds for a 4 km² dense urban bbox.
+**Avoids:** Pitfall 4 (deduplication false negatives — IoU-based, not centroid-distance), Pitfall 5 (Overture re-publishes OSM data — run own deduplication regardless of Overture's internal conflation), Pitfall 7 (data volume blowup — area filter already applied in Phase 2; add count cap before geometry generation if needed)
 
-### Phase 7: Vegetation Layer + Terrain Smoothing
+### Phase 4: Pipeline Integration and End-to-End Verification
 
-**Rationale:** Vegetation is geometrically the simplest new layer (earcut-triangulated flat polygon extruded upward, identical to building floor caps). Smoothing is a parameter change to `buildTerrainGeometry()` with a UI slider — no new data pipeline. They are grouped because both are lower-complexity and best tested together (smoothing quality is visible only with all layers active).
-**Delivers:** `lib/vegetation/` module; `VegetationMesh.tsx`; vegetation in STL export; `smoothingPasses` parameter in `TerrainMeshParams`; box-blur function in `lib/mesh/terrain.ts`; smoothing slider in sidebar (debounced 250ms); loading indicator during rebuild.
-**Addresses:** Vegetation as raised patches, terrain smoothing slider with live preview.
-**Avoids:** Pitfall 12 (empty vegetation results) — treat zero features as valid state; show count next to layer toggle ("Vegetation — 0 features found in this area"). Pitfall 13 (smoothing destroys features) — smooth elevation grid first (before all feature placement happens); cap slider at 5 iterations.
-**Research flag:** Standard patterns for both — skip research-phase. Vegetation follows building floor-cap pattern exactly. Smoothing is a standard 2-pass separable box filter documented in the STACK.md implementation sketch.
-
-### Phase 8: Web Worker Offload
-
-**Rationale:** Worker refactoring requires the full feature set to be stable — every geometry type (terrain, buildings, roads, vegetation) must have its typed-array interface defined before the Worker module is built. Refactoring mid-feature-development would force managing two code paths simultaneously. This phase adds no new features; it is a performance and UX improvement.
-**Delivers:** `lib/worker/meshWorker.worker.ts`; typed-array interfaces for all geometry builders; `BufferGeometry` reconstructors on main thread; non-blocking UI during generation; production artifact verified with Worker function completing without errors.
-**Uses:** `comlink@4.4.2` + `vite-plugin-comlink@5.3.0`; Vite native `{ type: 'module' }` worker pattern; `worker: { format: 'es' }` in vite config.
-**Addresses:** Web Worker mesh generation (non-blocking UI).
-**Avoids:** Pitfall 14 (many-buffer postMessage overhead) — merge all geometry into three typed arrays before transfer; never per-feature buffers. Pitfall 15 (Vite production build) — keep worker self-contained, set `worker: { format: 'es' }`, verify `vite build` + Worker completion as explicit acceptance test.
-**Research flag:** Needs research-phase for comlink + vite-plugin-comlink integration with multiple geometry entry points and shared code paths — documented edge cases warrant a focused spike before full implementation.
+**Rationale:** Once the three functional components are independently validated, wire them into `GenerateButton.tsx` with parallel fetching and graceful degradation, then verify the complete pipeline against real geographic areas with known characteristics.
+**Delivers:** Modified `fetchOsmLayersStandalone()` using `Promise.allSettled()` for parallel OSM + Overture fetches; merged `BuildingFeature[]` flowing into the existing worker and STL export unchanged; graceful OSM-only fallback on Overture failure with no UI error shown.
+**Verify against the "Looks Done But Isn't" checklist:** OSM-sparse area shows gap-fill buildings; OSM-dense area (Manhattan, central Berlin) shows no double-rendered buildings; Overture endpoint broken intentionally → app produces valid OSM-only STL without crashing; winding order check (no black/inverted-normal buildings in 3D preview); all 176 existing Vitest tests still pass; `npx tsc --noEmit` clean; `npx vite build` succeeds.
 
 ### Phase Ordering Rationale
 
-- **Controls before geometry (Phase 4 first):** Zustand state extensions and toggle UI must exist before any new mesh component reads them, preventing build-order breakage and enabling immediate toggle testing.
-- **Roads before water (Phase 5 before 6):** Roads are geometrically independent; water modifies the elevation pipeline which is architecturally upstream. Establishing the lib module pattern on roads first makes water integration cleaner.
-- **Water before vegetation (Phase 6 before 7):** Water modifies terrain; vegetation is placed on top of the (potentially water-modified) smoothed terrain. Correct ordering produces correct base Z for vegetation vertices.
-- **Smoothing grouped with vegetation (Phase 7):** Smoothing is a DEM-grid parameter, logically independent but visually tested with all layers active. Both are lower-complexity and group naturally.
-- **Worker last (Phase 8):** The Worker refactors all geometry builders simultaneously. Doing this before features are stable creates double maintenance burden. Feature stability is the prerequisite.
-- **Displacement over CSG for roads and water:** PITFALLS.md Pitfall 17 is explicit — per-layer CSG against terrain produces quadratic time growth for dense cities. Roads and water use vertex displacement on the DEM grid; CSG is reserved for building-terrain only.
+- Phase 1 before Phase 2 because the MVT layer name and CORS behavior are unvalidated assumptions that could force parser rework. Discovering them first avoids rework.
+- Phase 2 before Phase 3 because deduplication operates on `BuildingFeature[]` — unit-testing it requires the adapter to produce correctly structured inputs with known ring geometry.
+- Phase 3 before Phase 4 because integrating unvalidated deduplication into the live pipeline makes bugs harder to isolate. Unit tests in Phase 3 make Phase 4 integration debugging minimal.
+- Parallel fetch design (Phase 4) adds no additional latency — both OSM and Overture fetches start simultaneously and the merge waits only for whichever completes last.
 
 ### Research Flags
 
-Phases needing a research spike during planning:
-- **Phase 5 (Roads):** Road intersection polygon merging strategy — the choice between vertex displacement and junction polygon computation has significant consequences for mesh quality and STL validity; needs a focused decision spike.
-- **Phase 6 (Water):** Coastal/ocean handling — Pitfall 11 makes raw Overpass coastlines unusable; the v1 decision (scope out, raster fallback, or pre-processed shapefile) affects architecture and must be made before water implementation begins.
-- **Phase 8 (Worker):** comlink + vite-plugin-comlink with shared geometry lib code — production build edge cases (Pitfall 15) and multi-entry-point Worker configuration need a spike before full implementation.
+Phases needing empirical validation before proceeding:
+- **Phase 1:** Verify the MVT layer name by fetching one tile at pmtiles.io with the Overture buildings URL and inspecting layer names. This is a 5-minute check but it is the only LOW-confidence fact in the milestone. Do not write the parser until it is confirmed.
+- **Phase 1:** Test CORS from the actual production deployment domain (not localhost). The public Overture S3 bucket is expected to allow cross-origin range requests, but must be validated before committing to the PMTiles approach.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 4 (Controls):** Zustand state extension and React context visibility patterns are thoroughly documented.
-- **Phase 7 (Vegetation + Smoothing):** Vegetation follows building floor-cap pattern exactly; smoothing is a standard separable box filter with implementation sketch already in STACK.md.
+Phases with standard patterns (no additional research needed):
+- **Phase 2:** Ring normalization, MultiPolygon handling, and property mapping follow RFC 7946 and the existing OSM parser conventions — both are well-documented.
+- **Phase 3:** Bounding-box IoU is elementary arithmetic. The algorithm is fully specified in `ARCHITECTURE.md` with working TypeScript code.
+- **Phase 4:** `Promise.allSettled()` parallel fetch with graceful degradation is a standard JavaScript pattern with no unknowns.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Direct `npm info` queries verified all versions and peer deps; Vite docs confirmed worker syntax; existing codebase confirmed integration points; earcut version split confirmed via GitHub releases |
-| Features | MEDIUM-HIGH | Live competitor pages (TerraPrinter, Map2Model, TerrainForge3D) confirmed feature sets; OSM wiki authoritative for tag hierarchies; some vegetation geometry style inferred from domain context + existing building patterns |
-| Architecture | HIGH | Based on direct codebase inspection of existing `lib/`, `store/`, and `components/Preview/` patterns; all new features confirmed to slot into established grooves without redesign |
-| Pitfalls | MEDIUM | Cross-verified via OSM wiki, Three.js discourse, Chrome DevTools documentation, slicer community; some performance numbers (44x postMessage regression) from community benchmarks, not primary research |
+| Stack | HIGH | `pmtiles`, `@mapbox/vector-tile`, and `@turf/boolean-intersects` verified via npm registry, official docs, and Azure Maps reference implementation. Version compatibility with Vite 6 confirmed. |
+| Features | HIGH | Overture schema verified via official docs. Feature boundaries (P1/P2/v2+) are clear. Anti-features are specifically confirmed impossible (no confidence score field in the buildings theme). |
+| Architecture | HIGH | Integration seam identified via direct codebase inspection of `GenerateButton.tsx`, `mapStore.ts`, and the full buildings pipeline. Component boundaries and property mapping are fully specified. One LOW-confidence item: MVT layer name. |
+| Pitfalls | MEDIUM-HIGH | 10 pitfalls documented with prevention strategies. Most verified against official Overture docs and the Azure Maps PMTiles implementation. Roofprint displacement and performance traps are inferred from Overture's documented data sources and standard computational geometry principles. |
 
-**Overall confidence:** HIGH for implementation approach; MEDIUM for edge-case behavior (coastlines, dense-city road intersection geometry at junctions, Worker production build edge cases with shared chunks)
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Ocean / coastline handling:** The OSM Overpass coastline limitation (Pitfall 11) requires a concrete v1 decision before water layer architecture is finalized. Options: (a) scope out ocean and document it, (b) use elevation-zero raster fallback on the DEM (terrain vertices with elevation <= 0 treated as water), (c) fetch osmdata.openstreetmap.de water polygons clipped to bbox. Resolve in Phase 6 research spike.
-- **Road intersection polygon strategy:** `geometry-extrude` handles miter joints for single polylines but does not merge overlapping ribbons at multi-way junctions. The project must decide: (a) vertex displacement on terrain grid (no intersection problem, less geometrically precise), (b) junction polygon computation (correct geometry, more complex), or (c) accept minor slicer warnings at dense junctions. Resolve in Phase 5 research spike.
-- **Worker shared chunk edge cases:** `vite-plugin-comlink` + geometry lib shared-import edge cases (Pitfall 15) are documented but not fully characterized for this project's specific import graph. A production build spike must be the first deliverable of Phase 8.
-- **Overpass rate limits at scale:** Current single-user usage does not surface Overpass rate limits. The single combined Overpass query for all feature types (recommended in ARCHITECTURE.md anti-pattern 1) reduces exposure. Flagged for v1.x infrastructure if traffic grows.
+- **MVT layer name inside Overture PMTiles archive (LOW confidence):** Expected `"building"` based on Azure Maps sample code and STACK.md source-layer documentation, but not confirmed in PMTiles typedoc. Resolve in Phase 1 by fetching one tile at [pmtiles.io](https://pmtiles.io) with the Overture buildings URL. This is the only unresolved technical unknown in the milestone.
+- **CORS from production deployment domain:** The Overture S3 bucket's CORS policy allows cross-origin range requests for their own hosted explorer, but whether the MapMaker production domain is covered requires a live test. Resolve in Phase 1.
+- **IoU threshold tuning with real data:** The 0.3 bounding-box IoU threshold is derived from Overture's own 0.5 polygon IoU threshold, adjusted conservatively for raw coordinate differences between OSM and ML-derived footprints. Validate empirically in Phase 4 by testing against a known well-covered OSM city (central London) and confirming no visible duplicate buildings and no valid gap-fills incorrectly discarded.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `npm info geometry-extrude`, `npm info comlink`, `npm info vite-plugin-comlink` — version, peer deps, last modified dates (direct npm registry query)
-- Vite Web Workers official docs (vitejs.dev) — native worker syntax, TypeScript support, production build behavior
-- geometry-extrude GitHub README — extrudePolyline/extrudePolygon API, TypedArray output format
-- earcut GitHub releases — 3.0.0 ESM-only vs. 2.2.4 CJS distinction, confirming the two-copy npm behavior
-- MapMaker codebase (direct inspection) — existing `overpass.ts`, `elevationSampler.ts`, `types.ts`, `buildingMesh.ts`, `mapStore.ts` patterns
-- OSM Highway wiki (wiki.openstreetmap.org/wiki/Key:highway) — tag hierarchy and classification
-- OSM water features wiki (wiki.openstreetmap.org/wiki/Tag:natural=water) — water/waterway tags
-- OSM landuse wiki (wiki.openstreetmap.org/wiki/Key:landuse) — vegetation/park tags
-- Overpass API Language Guide — compound queries, `out geom` format, relation member assembly
+- [Overture Maps Buildings Schema Reference](https://docs.overturemaps.org/schema/reference/buildings/building/) — field types, nullability, geometry as Polygon/MultiPolygon
+- [Overture Maps Buildings Overview](https://docs.overturemaps.org/guides/buildings/) — conflation methodology, IoU deduplication, OSM source priority
+- [Overture Maps PMTiles Documentation](https://docs.overturemaps.org/examples/overture-tiles/) — PMTiles URL format, zoom levels
+- [Overture Maps STAC Catalog (2026)](https://docs.overturemaps.org/blog/2026/02/11/stac/) — dynamic URL discovery via `latest` field
+- [Overture Data Retention Policy](https://docs.overturemaps.org/blog/2025/09/24/release-notes/) — 60-day retention window, two most recent releases kept
+- [Azure Maps Overture Buildings PMTiles Sample](https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/main/Samples/PMTiles/Overture%20Building%20Theme/Buildings.html) — confirms source-layer `"building"`, CORS pattern, `height` property from browser-side PMTiles
+- [pmtiles npm@4.4.0](https://www.npmjs.com/package/pmtiles) — ES module, no WASM, `getZxy(z, x, y)` API
+- [PMTiles TypeDoc: PMTiles class](https://pmtiles.io/typedoc/classes/PMTiles.html) — `getZxy()` is the only tile fetch method
+- [@mapbox/vector-tile npm@2.0.4](https://www.npmjs.com/package/@mapbox/vector-tile) — MVT decode, `toGeoJSON()` method, `pbf` peer dependency
+- [@turf/boolean-intersects npm@7.3.1](https://www.npmjs.com/package/@turf/boolean-intersects) — 13.4KB, ES module with `sideEffects: false`
+- [Protomaps: Cloud Storage CORS Requirements](https://docs.protomaps.com/cloud-storage) — `range` in AllowedHeaders, `etag` in ExposeHeaders
+- [RFC 7946: GeoJSON](https://www.rfc-editor.org/rfc/rfc7946) — exterior ring CCW, hole rings CW, no closing vertex duplicate
+- MapMaker v1.0 codebase (direct inspection) — `GenerateButton.tsx`, `BuildingFeature` interface, `buildAllBuildings()`, `meshBuilder.worker.ts`, `terrainRaycaster.ts`, `height.ts`
 
 ### Secondary (MEDIUM confidence)
-- TerraPrinter, Map2Model, TerrainForge3D live pages — competitor feature analysis
-- OSM 3D printing wiki (2013, outdated) — confirmed recessed road approach as community expectation
-- Three.js discourse — smoothing discussion, Worker BufferGeometry round-trip pattern
-- Laplacian smoothing Wikipedia — algorithm description and shrinkage property of uniform Laplacian
-- vite-plugin-comlink GitHub — plugin configuration pattern, TypeScript types path
-- Evil Martians article — Three.js OffscreenCanvas + Web Worker patterns with Transferable ArrayBuffers
-- GameDev.net article (box filtering height maps) — separable box filter for height map smoothing rationale
-- Nosferalatu — Laplacian mesh smoothing implementation reference
+- [DuckDB-WASM + Overture (Camptocamp blog)](https://dev.to/camptocamp-geo/querying-overture-maps-geoparquet-directly-in-the-browser-with-duckdb-wasm-4jn4) — confirms HTTPFS not available in WASM; S3 GeoParquet not browser-accessible
+- [HeiGIT: OSM Completeness with Overture Maps Data](https://heigit.org/osm-completeness-with-overture-maps-data/) — gap-fill coverage analysis and methodology
+- [Overture vs OSM Building Footprints Analysis](https://milanjanosov.substack.com/p/overture-vs-osm-building-footprints) — third-party coverage comparison across regions
 
 ### Tertiary (LOW confidence)
-- Chrome DevTools postMessage 44x regression benchmark (Pitfall 14) — community benchmark post, not primary research; directionally correct but specific multiplier needs validation against this project's geometry sizes
-- OSM coastline handling via osmdata.openstreetmap.de — inferred from osmdata documentation; not tested against actual coastline bbox query
+- MVT layer name `"building"` — inferred from Azure Maps sample and STAC docs but not confirmed in PMTiles typedoc; requires empirical verification in Phase 1
 
 ---
-*Research completed: 2026-02-24*
+*Research completed: 2026-02-28*
 *Ready for roadmap: yes*

@@ -1,215 +1,225 @@
 # Stack Research
 
-**Domain:** Map-to-3D-printable-STL web application — Milestone additions (roads, water, vegetation, mesh smoothing, Web Workers)
-**Researched:** 2026-02-24
-**Confidence:** HIGH for Web Worker approach; HIGH for road geometry; MEDIUM for mesh smoothing (implementation is custom, no dominant library)
+**Domain:** Overture Maps building footprint integration — bounding-box fetch, vector tile decode, spatial deduplication against OSM buildings
+**Researched:** 2026-02-28
+**Confidence:** HIGH for fetch approach (PMTiles + pmtiles npm); HIGH for vector tile decode (@mapbox/vector-tile + pbf); MEDIUM for spatial deduplication (turf vs. rbush trade-offs are well-understood but need benchmark validation against real datasets)
 
 ---
 
-> **Scope note:** This document covers ONLY the new stack additions for the current milestone.
-> The existing validated stack (Vite 6, React 19, TypeScript, Tailwind v4, MapLibre GL JS, Three.js 0.183, Zustand, @mapbox/martini, earcut 3, proj4, osmtogeojson, three-bvh-csg, manifold-3d) is not re-researched here.
+> **Scope note:** This document covers ONLY the new stack additions for the v1.1 milestone.
+> The existing validated stack (React 19, Three.js R3F, Zustand, Vite 6, Vitest, MapLibre GL JS 5,
+> @mapbox/martini, earcut, proj4, osmtogeojson, geometry-extrude, comlink, three-bvh-csg, manifold-3d)
+> is not re-researched here.
 
 ---
 
 ## Recommended Stack — New Additions
 
-### Roads: Polyline-to-Mesh Extrusion
+### 1. Overture Buildings Fetch: PMTiles + pmtiles npm
 
 | Library | Version | Purpose | Why Recommended |
 |---------|---------|---------|-----------------|
-| `geometry-extrude` | `^0.2.1` | Convert OSM road LineString coordinates to extruded 3D ribbon meshes with configurable width | Returns `{indices, position, normal, uv}` TypedArrays that wire directly into `THREE.BufferGeometry` with no intermediate conversion. Handles miter joints at road bends automatically. The `extrudePolyline(coords, { lineWidth, miterLimit })` API matches exactly the OSM road use case. earcut is its only dependency (already in the project). |
+| `pmtiles` | `^4.4.0` | Fetch individual vector tiles from the Overture buildings PMTiles archive via HTTP range requests | Overture publishes buildings as PMTiles (MVT format inside a single `.pmtiles` file on S3). The `pmtiles` npm package implements the PMTiles spec in JavaScript/TypeScript, works in the browser via Fetch API, uses HTTP range requests so only the tiles covering the bounding box are downloaded — NOT the entire ~50 GB file. Version 4.4.0 is the current release (published ~23 days before this research date). Ships as ES module. No WASM. No server required. |
 
-**Integration pattern:**
+**Why NOT DuckDB WASM:** DuckDB WASM does not support the `httpfs` extension, so it cannot query Overture's S3-hosted GeoParquet files from the browser. A workaround (pre-extract + host locally) defeats the purpose of a client-side-only architecture.
+
+**Why NOT direct GeoParquet in browser:** No maintained JavaScript-native GeoParquet browser parser exists. The official approach is server-side (Python CLI, DuckDB server, AWS Athena). DuckDB WASM is the closest option but is blocked by the httpfs limitation above.
+
+**Why NOT Fused UDF HTTP API:** Fused provides a serverless UDF platform that can expose Overture data via HTTP endpoints, but it is a third-party service with its own authentication and pricing, introduces a dependency on an external SaaS, and is not appropriate for a client-only open-data tool.
+
+**Why NOT the unofficial overturemapsapi.com:** A community-maintained API that deploys via GCP/BigQuery. Requires the user to self-host and introduces a backend dependency. Not suitable for MapMaker's fully client-side architecture.
+
+**Fetch pattern:**
 ```typescript
-import { extrudePolyline } from 'geometry-extrude';
+import { PMTiles } from 'pmtiles';
 
-const { indices, position, normal } = extrudePolyline(roadCoords, {
-  lineWidth: roadWidthInModelUnits,
-  miterLimit: 2,
-});
-const geo = new THREE.BufferGeometry();
-geo.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
-geo.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
-geo.setIndex(new THREE.Uint32BufferAttribute(indices, 1));
+const OVERTURE_BUILDINGS_URL =
+  'https://tiles.overturemaps.org/2026-02-18.0/buildings.pmtiles';
+
+const p = new PMTiles(OVERTURE_BUILDINGS_URL);
+
+// Convert bbox [minLon, minLat, maxLon, maxLat] to z/x/y tiles at zoom 14
+// then call p.getZxy(z, x, y) for each tile in range
+const tileData = await p.getZxy(14, tileX, tileY);
 ```
 
-**Earcut version note (HIGH confidence):** `geometry-extrude@0.2.1` declares `"earcut": "^2.1.3"` as a dependency. The project already has `earcut@3.0.2` installed. npm will install earcut 2.x separately inside `node_modules/geometry-extrude/node_modules/` to satisfy its peer constraint. This is normal npm deduplication behavior — no conflict, two copies. No action required.
+**PMTiles URL discovery:** Overture publishes a STAC catalog at `https://stac.overturemaps.org/catalog.json` with a `latest` field. The catalog structure is:
+```
+https://labs.overturemaps.org/stac/{release}/buildings/catalog.json
+  → link rel="pmtiles" → https://tiles.overturemaps.org/{release}/buildings.pmtiles
+```
+The application should hard-code a known-good release URL and update it monthly, OR dynamically resolve via the STAC catalog on startup.
 
-### Water Bodies: No New Library Needed
+**Data retention warning (MEDIUM confidence):** As of September 2025, Overture maintains only the two most recent monthly releases (~60 days). Hard-coded URLs will break after ~2 months. Dynamic STAC discovery is the correct long-term approach.
 
-Water body depressions (rivers, lakes, ocean) use the same OSM polygon pipeline that buildings already use:
+**CORS:** The `tiles.overturemaps.org` domain (confirmed for 2026-02-18.0 release) is publicly accessible. The Overture S3 buckets have CORS configured for GET/HEAD with the `range` header allowed, which is required for PMTiles HTTP range requests. This works from the browser without a proxy.
 
-1. Overpass query for `natural=water`, `waterway=riverbank`, `natural=coastline` within the bounding box (already done via `osmtogeojson`).
-2. `earcut` triangulates the water polygon (already installed at 3.0.2).
-3. Custom vertex displacement: find terrain mesh vertices within the polygon bounds, clamp their Z to a flat water-level elevation.
-4. `three-bvh-csg` can perform a boolean subtraction if depression geometry is needed for STL watertightness (already installed).
+---
 
-**No new library required.** This is a data query + vertex manipulation problem, not a new geometry primitive problem.
+### 2. Vector Tile Decoding: @mapbox/vector-tile + pbf
 
-### Vegetation/Parks: No New Library Needed
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| `@mapbox/vector-tile` | `^2.0.4` | Parse MVT (Mapbox Vector Tile) binary data into JavaScript feature objects with geometry and properties | PMTiles stores tiles in MVT format. The `@mapbox/vector-tile` library is the reference implementation for the MVT spec. Provides `VectorTile` class that parses tile bytes into layers. Source layer for Overture buildings is `"building"`. Returns feature geometry as pixel coordinates that must be converted back to geographic coordinates. |
+| `pbf` | `^4.0.1` | Low-level Protocol Buffer decoder — required peer dependency of `@mapbox/vector-tile` | `@mapbox/vector-tile` takes a `Protobuf` instance (from `pbf`) as input. The `pbf` library is 3KB gzipped, maintained by Mapbox. MapLibre GL JS (already in the project) bundles pbf internally, but it should be added as an explicit dependency since we need to import it in our code. |
 
-Parks and forest areas follow the same extruded-polygon pipeline as buildings:
+**Source layer name:** `"building"` (confirmed from Azure Maps + Overture sample code).
 
-1. Overpass query for `leisure=park`, `landuse=forest`, `landuse=grass` etc. (extend existing Overpass queries).
-2. `earcut` triangulates the footprint polygon (already installed).
-3. `geometry-extrude` `extrudePolygon()` builds a thin prism (low depth) placed on the terrain surface.
+**Available properties from MVT tiles:**
+- `height` — float, building height in meters (may be absent; default to 3.0m = 1 floor)
+- `subtype` — string, building category (residential, commercial, etc.)
+- `names` — JSON-encoded string (stringify nested object)
+- `sources` — JSON-encoded string
 
-**No new library required.** The vegetation layer reuses road/building geometry infrastructure with different Overpass tags and extrusion depth.
+**Zoom level:** Buildings are present from zoom 13 through zoom 15 (max). Zoom 14 is the recommended query zoom for MapMaker's bounding box sizes (1–25 km²). At zoom 14, one tile covers ~2.4 km × 2.4 km, so a 4 km² bbox requires ~4 tiles at most.
 
-### Terrain Mesh Smoothing: Custom Implementation (No Library)
-
-There is no dominant npm library for height-field Gaussian smoothing that is maintained, TypeScript-native, and suitable for a Float32Array grid. The correct approach is a custom implementation:
-
-| Technique | What It Is | Why Use It |
-|-----------|-----------|-----------|
-| Separable box/Gaussian filter on height grid | 2-pass 1D convolution (horizontal then vertical) on the raw elevation `Float32Array` before passing to `@mapbox/martini` | Operates directly on the existing elevation grid data structure. Zero new dependencies. Controllable via a single `radius` parameter (0 = raw DEM, 1–5 = progressively smoother). Separable passes are O(n·r) not O(n·r²) so stays fast for large grids. |
-
-**Why NOT `three-subdivide`:** Loop subdivision works on triangle connectivity and applies curvature-based smoothing — it will cause noticeable tearing on flat grid geometries and is not designed for height field data. Published Aug 2023, no updates since. The problem it solves is organic model smoothing, not terrain DEM smoothing.
-
-**Why NOT a general signal-processing library:** The height array is a simple 2D grid of `Float32` values. A custom 3×3 or 5×5 Gaussian kernel is 30 lines of TypeScript and runs in < 1ms for a 512×512 grid. Adding a dependency for this is unjustified.
-
-**Implementation sketch:**
+**Decode pattern:**
 ```typescript
-function smoothHeightGrid(
-  heights: Float32Array,
-  width: number,
-  height: number,
-  radius: number   // 0 = off, 1-5 = strength
-): Float32Array {
-  if (radius === 0) return heights;
-  const out = new Float32Array(heights.length);
-  // Pass 1: horizontal box filter
-  // Pass 2: vertical box filter on Pass 1 output
-  // Each pass: for each cell, average neighbors within [-radius, +radius]
-  return out;
+import { VectorTile } from '@mapbox/vector-tile';
+import Protobuf from 'pbf';
+
+function decodeTile(buffer: ArrayBuffer) {
+  const tile = new VectorTile(new Protobuf(buffer));
+  const layer = tile.layers['building'];
+  if (!layer) return [];
+
+  const features = [];
+  for (let i = 0; i < layer.length; i++) {
+    const feature = layer.feature(i);
+    // feature.loadGeometry() returns pixel coordinates [0..4096]
+    // Must convert to lon/lat using tile z/x/y + extent (4096)
+    const geometry = feature.loadGeometry();
+    const props = feature.properties;
+    features.push({ geometry, props });
+  }
+  return features;
 }
 ```
-The slider in the UI maps to `radius` (integer 0–5). This runs synchronously or can be offloaded to the Web Worker (see below).
 
-### Web Worker for Mesh Generation
+**Coordinate conversion:** MVT geometry is in tile-local pixel coordinates (0–4096 range). To convert back to WGS84 lon/lat, use the standard tile-to-lnglat formula based on z/x/y and the pixel position within the tile. No additional library needed — this is ~10 lines of math.
 
-| Approach | Recommended? | Why |
-|----------|-------------|-----|
-| Native Vite Web Worker (`new Worker(new URL(...), { type: 'module' })`) | Yes — base approach | Vite 6 handles this natively with no plugin. Workers compile TypeScript, support ESM imports, are bundled correctly for production. URL must be static string literal. |
-| `comlink@4.4.2` + `vite-plugin-comlink@5.3.0` | Yes — add on top of native | Comlink eliminates the `postMessage`/`onmessage` boilerplate. Worker functions become async-callable from the main thread with proper TypeScript types. `vite-plugin-comlink@5.3.0` requires `comlink@^4.3.1` as a peer dep (satisfied by 4.4.2). Compatible with `vite>=2.9.6` (project uses Vite 6). |
+**Types:** `@types/mapbox__vector-tile` provides TypeScript types for the library.
 
-**Recommended combination:** `comlink` + `vite-plugin-comlink`. The ergonomics improvement for this use case (calling async `generateMesh()` from a React component, receiving back `ArrayBuffer`s) is significant enough to justify the small dependency.
+---
 
-**What to offload to the worker:**
-- Elevation grid smoothing (`smoothHeightGrid`)
-- `@mapbox/martini` mesh generation
-- Road/building/vegetation geometry computation (`geometry-extrude` calls, `earcut` triangulation)
-- STL serialization (final `STLExporter` call, which serializes potentially large geometry)
+### 3. Spatial Deduplication: @turf/boolean-intersects (tree-shaken import)
 
-**What stays on the main thread:**
-- Overpass API fetch calls (HTTP is async by nature, no benefit to worker)
-- MapTiler tile fetch + RGB decode (already async, minimal CPU)
-- Three.js `BufferGeometry` object construction (Three.js objects are not `Transferable`; pass raw `ArrayBuffer` from worker, build geometry on main thread)
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| `@turf/boolean-intersects` | `^7.3.1` | Test whether two polygons intersect (share any area) | The deduplication algorithm is: for each Overture footprint, check if any OSM building polygon intersects it. If yes, discard the Overture footprint (OSM wins). `booleanIntersects` returns true if the intersection of two geometries is non-empty — exactly the right predicate. Package is 13.4 KB, ships as ES module (tree-shaking works). |
 
-**Vite config addition:**
+**Why NOT full `turf` package:** The monolithic `turf` package is 68+ KB even tree-shaken for this use case. Installing only `@turf/boolean-intersects` gives a 13.4 KB package with the exact predicate needed.
+
+**Why NOT `@turf/intersect`:** `intersect` computes the actual intersection polygon (more expensive). For deduplication, we only need a boolean answer. `booleanIntersects` is faster.
+
+**Why NOT `rbush` alone:** rbush is a spatial index that accelerates bounding-box candidate lookup, but it only tests bounding box overlap — not polygon overlap. Bounding boxes of adjacent buildings can overlap even when the buildings themselves do not. For accurate deduplication we need actual polygon intersection testing. rbush would be an optimization layer on top of `booleanIntersects` if performance demands it (see Stack Patterns section below).
+
+**Why NOT custom polygon intersection:** Robust polygon intersection is a non-trivial computational geometry problem (handling shared edges, floating-point precision, non-convex polygons). Using turf's battle-tested implementation avoids subtle bugs.
+
+**Deduplication algorithm:**
 ```typescript
-// vite.config.ts
-import comlink from 'vite-plugin-comlink';
-export default {
-  plugins: [comlink(), react()],
-  worker: {
-    plugins: () => [comlink()],
-  },
-};
+import { booleanIntersects } from '@turf/boolean-intersects';
+import type { Feature, Polygon } from 'geojson';
+
+function deduplicateOverture(
+  osmBuildings: Feature<Polygon>[],
+  overtureBuildings: Feature<Polygon>[]
+): Feature<Polygon>[] {
+  return overtureBuildings.filter((overture) =>
+    !osmBuildings.some((osm) => booleanIntersects(osm, overture))
+  );
+}
 ```
 
-**tsconfig addition:**
-```json
-// vite-env.d.ts (or global.d.ts)
-/// <reference types="vite-plugin-comlink/client" />
-```
+**Performance note:** For typical MapMaker bounding boxes (≤25 km²), expected OSM building counts are 50–2000, and Overture footprints in the same area are 100–5000. The naive O(n×m) `booleanIntersects` loop should complete in < 100ms for these sizes. If profiling reveals a bottleneck, add `rbush@4.0.0` as a bounding-box pre-filter to reduce candidates before calling `booleanIntersects`.
+
+---
 
 ## Installation
 
 ```bash
-# Road geometry extrusion (only new runtime dependency)
-npm install geometry-extrude
+# Overture fetch
+npm install pmtiles
 
-# Web Worker ergonomics
-npm install comlink
-npm install -D vite-plugin-comlink
+# MVT decode
+npm install @mapbox/vector-tile pbf
+npm install -D @types/mapbox__vector-tile
+
+# Spatial deduplication
+npm install @turf/boolean-intersects
 ```
-
-No new libraries needed for water bodies, vegetation, or terrain smoothing — these use existing dependencies.
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| `geometry-extrude` for road mesh | Three.js `ExtrudeGeometry` with `Shape` + `Path` | `ExtrudeGeometry` works but requires converting polyline to `THREE.Shape` manually, does not handle miter joints at road bends, produces more vertices. Use if `geometry-extrude` causes build issues due to earcut version conflict. |
-| `geometry-extrude` for road mesh | Custom ribbon mesh from scratch | Use only if road geometry needs to drape exactly on terrain surface (projected along Z from terrain height) — `geometry-extrude` produces flat XY ribbons that need post-processing elevation adjustment anyway. A custom implementation could do both in one pass. If draping complexity is high, go custom. |
-| Custom Gaussian height-field smoothing | `three-subdivide@1.1.5` | Do not use — causes tearing on flat grid geometries, last updated Aug 2023, designed for organic mesh smoothing not height field DEM smoothing. |
-| `comlink` + `vite-plugin-comlink` | Raw `postMessage` / `onmessage` | Use raw postMessage only if the worker API is trivially simple (single function, single return). For this project with multiple mesh generation functions and TypeScript types, Comlink is the correct choice. |
-| `comlink` + `vite-plugin-comlink` | Vite native `?worker` import | Native `?worker` import works fine for basic cases. The difference is that `vite-plugin-comlink` additionally transforms the worker module to expose Comlink's `Remote<T>` types, eliminating manual `postMessage` serialization. |
+| `pmtiles` npm + HTTP range requests | DuckDB WASM + GeoParquet | If DuckDB WASM adds httpfs support in a future release. As of Feb 2026, httpfs is not available in WASM, making this approach impossible for S3-hosted GeoParquet. |
+| `pmtiles` npm + HTTP range requests | Self-hosted proxy server (DuckDB/Python backend) | If the project adds a backend in the future. Would allow arbitrary Parquet queries. Not suitable for current client-only architecture. |
+| `@mapbox/vector-tile` | Manual Protobuf parsing | Only if `@mapbox/vector-tile` is no longer maintained. It is the reference implementation and is actively maintained (v2.0.4, Jul 2025). |
+| `@turf/boolean-intersects` | Custom point-in-polygon overlap test | If Overture footprints are convex and simple, a centroid-based test (is the centroid inside the OSM polygon?) would work as a 90% approximation. Use only if booleanIntersects is too slow for very dense areas. |
+| `@turf/boolean-intersects` alone | `rbush` + `@turf/boolean-intersects` | Add `rbush@4.0.0` as a bounding-box pre-filter if O(n×m) intersection is too slow. For MapMaker's bounding box sizes this is unlikely to be needed — benchmark first. |
 
 ## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `three-geo` | Unmaintained (last release 2022), requires Mapbox tiles. | Already excluded; use Overpass API + custom geometry code. |
-| `turf.js` | 68 KB+ bundle even tree-shaken. For this project the only needed geo operations are coordinate projection (proj4 already installed) and polygon bounding box checks (3 lines of math). Turf adds significant bundle size for minimal benefit. | proj4 (already installed) + inline math. |
-| Any general-purpose mesh smoothing npm library | No maintained, TypeScript-native library exists that targets height-field DEM data specifically. Available options are Python-oriented (meshpro/optimesh), academic implementations (Laplacian-Mesh-Smoothing), or unmaintained. | Custom separable Gaussian convolution on the Float32Array height grid. |
-| `worker-loader` (webpack) | Project uses Vite, not webpack. webpack plugins are incompatible. | Vite native worker support + `vite-plugin-comlink`. |
-| `Workbox` / service worker libraries | Workbox is for offline PWA caching, not computation offloading. | `comlink` for computation offloading. |
+| DuckDB WASM | No httpfs in WASM as of Feb 2026. Cannot query S3 GeoParquet from browser. Build size impact is also 6+ MB. | `pmtiles` npm with HTTP range requests |
+| Full `turf` package (`import turf from '@turf/turf'`) | 68+ KB bundle weight for a feature that only needs a 13 KB sub-package | Import `@turf/boolean-intersects` directly |
+| `overturemaps-py` Python CLI | Server-side tool, incompatible with browser-only architecture | `pmtiles` npm |
+| GeoParquet browser parsers (`geoarrow-js`, `@loaders.gl/parquet`) | No stable, well-maintained GeoParquet library for browsers exists as of Feb 2026 that can range-request partial Parquet files from S3. These libraries require full file download or a server. | `pmtiles` npm reading from Overture's PMTiles distribution |
+| `rbush` as the primary deduplication method | rbush indexes bounding boxes, not polygons. Two buildings can have overlapping bboxes but non-overlapping footprints. Bounding-box-only deduplication produces false positives (discards valid gap-fill buildings). | `@turf/boolean-intersects` for polygon-level accuracy |
 
-## Stack Patterns by Feature
+## Stack Patterns by Variant
 
-**Roads (OSM highway ways):**
-- Overpass query → `osmtogeojson` → `GeoJSON.MultiLineString.coordinates` → `geometry-extrude.extrudePolyline()` → `THREE.BufferGeometry` (width driven by `highway` tag value)
-- Road style (recessed/raised/flat) controlled by Z-offset applied after mesh generation, before terrain CSG
+**If bounding box is small (< 4 km²):**
+- Fetch tiles at zoom 14 (typically 1–4 tiles)
+- Decode all features in one pass
+- Run `booleanIntersects` deduplication inline (no pre-filter needed)
 
-**Water (OSM natural=water, waterway=riverbank):**
-- Overpass query → `osmtogeojson` → `GeoJSON.MultiPolygon.coordinates` → earcut triangulation → flat mesh at water-level Z
-- For STL export: use `three-bvh-csg` boolean subtraction to cut depression into terrain mesh (same pattern as buildings)
-- Alternative simpler: stamp water-level Z onto terrain vertices inside polygon bounds (no new geometry, less watertight but simpler)
+**If bounding box is at the 25 km² hard limit:**
+- Fetch tiles at zoom 13 (fewer, larger tiles) OR zoom 14 (more tiles but better feature granularity)
+- Consider adding `rbush` bbox pre-filter before `booleanIntersects` to keep deduplication under 200ms
+- Run deduplication inside the existing Web Worker to keep UI non-blocking
 
-**Vegetation (OSM landuse=forest, leisure=park):**
-- Overpass query → `osmtogeojson` → `GeoJSON.MultiPolygon.coordinates` → `geometry-extrude.extrudePolygon({ depth: 1-3mm equivalent })` → thin prism mesh placed on terrain surface
-- Toggled as a layer (Zustand store flag)
+**If Overture PMTiles URL changes (monthly releases):**
+- Fetch `https://labs.overturemaps.org/stac/catalog.json`, read `latest` field
+- Navigate to `https://labs.overturemaps.org/stac/{latest}/buildings/catalog.json`
+- Find the link with `rel: "pmtiles"` and use its `href` as the PMTiles URL
+- Cache the resolved URL for the session
 
-**Terrain smoothing:**
-- DEM elevation `Float32Array` → `smoothHeightGrid(heights, w, h, radius)` → `@mapbox/martini` mesh generation
-- Slider (0–5) maps to `radius` parameter; 0 bypasses smoothing entirely for performance
-- Run inside Web Worker alongside martini call
+## Integration Points with Existing Code
 
-**Web Worker wiring:**
-```
-React component → comlink ComlinkWorker → worker.ts exposes { generateMesh }
-generateMesh({ bbox, features, smoothing, dimensions }) →
-  [fetch elevation, fetch OSM data] →
-  smoothHeightGrid → martini → extrudePolyline/extrudePolygon → earcut →
-  returns { terrainBuffer, buildingBuffer, roadBuffer, waterBuffer, vegetationBuffer }
-→ main thread builds THREE.BufferGeometry from ArrayBuffers →
-→ STLExporter serializes merged geometry
-```
+| Existing File | How v1.1 Integrates |
+|---------------|---------------------|
+| `src/lib/buildings/types.ts` | Add `overtureSource?: true` flag to `BuildingFeature` to mark gap-fill buildings |
+| `src/lib/buildings/parse.ts` | Add parallel `parseOvertureFeatures(tiles)` function that converts MVT features to `BuildingFeature` array |
+| `src/lib/buildings/merge.ts` | Add `mergeWithOverture(osmBuildings, overtureBuildings)` that runs deduplication and returns combined array |
+| `src/lib/overpass.ts` or new `src/lib/overture.ts` | New file: `fetchOvertureBuildings(bbox)` — resolves tiles from bbox, calls `pmtiles.getZxy()`, decodes MVT |
+| `src/workers/meshBuilder.worker.ts` | Extend worker to call `fetchOvertureBuildings` in parallel with the existing Overpass fetch |
 
 ## Version Compatibility
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `geometry-extrude@0.2.1` | `earcut@^2.1.3` (installs its own) | Project has earcut@3.0.2 at root; geometry-extrude will get earcut 2.x in its own node_modules. npm handles this automatically. Earcut 3.x is ESM-only; 2.x is CJS — different module systems, no conflict. |
-| `comlink@4.4.2` | `vite-plugin-comlink@5.3.0` | vite-plugin-comlink requires `comlink@^4.3.1` — satisfied by 4.4.2. |
-| `vite-plugin-comlink@5.3.0` | `vite>=2.9.6` | Project uses Vite 6.0.5 — compatible. Plugin must appear before React plugin in `plugins` array. |
-| `geometry-extrude@0.2.1` | `three@0.183.x` | No direct three.js dependency in geometry-extrude. Output TypedArrays are agnostic to Three.js version. Compatible. |
+| `pmtiles@4.4.0` | Vite 6, ES module builds | Ships as ES module. No WASM, no native Node addons. Works in Vite's dev server and production build. |
+| `@mapbox/vector-tile@2.0.4` | `pbf@4.x` | Requires `pbf` as a peer. MapLibre GL JS 5 bundles its own pbf internally — do NOT share; install pbf explicitly so our import resolves independently. |
+| `@turf/boolean-intersects@7.3.1` | Vite 6, tree-shaking | v7 is ES module with proper `sideEffects: false`. Vite tree-shakes correctly. |
+| `pmtiles@4.4.0` | `maplibre-gl@5.x` | MapLibre GL JS already registers the `pmtiles://` protocol handler internally if the `pmtiles` package is present. To avoid double-registration, check before calling `Protocol.add()`. |
 
 ## Sources
 
-- [geometry-extrude GitHub README](https://github.com/pissang/geometry-extrude) — extrudePolyline/extrudePolygon API, TypedArray output format (HIGH confidence, official repo)
-- `npm info geometry-extrude` — v0.2.1 latest, last modified 2022-07-21, `earcut@^2.1.3` dependency (HIGH confidence, direct npm registry query)
-- `npm info comlink` — v4.4.2 latest, last modified 2024-11-07 (HIGH confidence, direct npm registry query)
-- `npm info vite-plugin-comlink` — v5.3.0 latest, peer deps `comlink@^4.3.1`, `vite>=2.9.6` (HIGH confidence, direct npm registry query)
-- [Vite Web Workers docs](https://vite.dev/guide/features.html) — native `new Worker(new URL(...))` pattern, TypeScript support, production build behavior (HIGH confidence, official Vite docs)
-- [vite-plugin-comlink GitHub](https://github.com/mathe42/vite-plugin-comlink) — plugin config pattern, vite.config.ts setup, TypeScript types path (MEDIUM confidence, WebSearch verified)
-- [earcut GitHub Releases](https://github.com/mapbox/earcut/releases) — 3.0.0 is ESM-only, breaks CJS consumers; 2.2.4 last CJS release (HIGH confidence, official repo)
-- `npm info three-subdivide` — v1.1.5, last modified 2023-08-03; unsuitable for height-field terrain (HIGH confidence — metadata confirmed, suitability assessed from documentation)
-- [THREE.Terrain GitHub](https://github.com/IceCreamYou/THREE.Terrain) — includes height field smoothing reference implementation (MEDIUM confidence — WebSearch, older project)
-- [Box Filtering Height Maps for Smooth Rolling Hills — GameDev.net](https://www.gamedev.net/tutorials/programming/general-and-gameplay-programming/box-filtering-height-maps-for-smooth-rolling-hills-r2164/) — separable box filter for height field smoothing rationale (MEDIUM confidence — WebSearch, classic technique article)
+- [Overture Maps PMTiles documentation](https://docs.overturemaps.org/examples/overture-tiles/) — PMTiles URL format, zoom levels, source layer name `"building"` (MEDIUM confidence, official docs; source-layer confirmed via Azure Maps sample code)
+- [Azure Maps Overture Buildings sample](https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/main/Samples/PMTiles/Overture%20Building%20Theme/Buildings.html) — source-layer `"building"`, `height` property, PMTiles URL pattern (HIGH confidence, official Microsoft sample)
+- STAC catalog navigation `https://labs.overturemaps.org/stac/2026-02-18.0/buildings/catalog.json` — resolved exact PMTiles URL `https://tiles.overturemaps.org/2026-02-18.0/buildings.pmtiles` (HIGH confidence, direct catalog inspection)
+- [pmtiles npm](https://www.npmjs.com/package/pmtiles) — version 4.4.0, published ~23 days before this research date (HIGH confidence, npm registry)
+- [PMTiles TypeDoc: PMTiles class](https://pmtiles.io/typedoc/classes/PMTiles.html) — `getZxy(z, x, y)` is the only tile fetch method; no built-in bbox query (HIGH confidence, official docs)
+- [Overture Maps STAC announcement](https://docs.overturemaps.org/blog/2026/02/11/stac/) — `latest` field in root catalog, STAC-based URL discovery pattern (HIGH confidence, official blog)
+- [Overture data retention policy](https://docs.overturemaps.org/blog/2025/09/24/release-notes/) — 60-day window, two most recent releases kept (HIGH confidence, official release notes)
+- [@mapbox/vector-tile npm](https://www.npmjs.com/package/@mapbox/vector-tile) — version 2.0.4, last published Jul 2025 (HIGH confidence, npm registry)
+- [@turf/boolean-intersects npm](https://www.npmjs.com/package/@turf/boolean-intersects) — version 7.3.1, package size 13.4 KB (HIGH confidence, npm registry)
+- [Overture buildings schema reference](https://docs.overturemaps.org/schema/reference/buildings/building/) — `height` is `float64` in meters, `num_floors` is `int32` (HIGH confidence, official schema docs)
+- [DuckDB WASM + GeoParquet browser article](https://dev.to/camptocamp-geo/querying-overture-maps-geoparquet-directly-in-the-browser-with-duckdb-wasm-4jn4) — confirms httpfs not available in WASM; requires pre-extracted data (HIGH confidence, verifies the limitation)
 
 ---
-*Stack research for: MapMaker milestone — roads, water, vegetation, mesh smoothing, Web Workers*
-*Researched: 2026-02-24*
+*Stack research for: MapMaker v1.1 — Overture Maps building footprint integration*
+*Researched: 2026-02-28*
