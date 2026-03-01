@@ -30,7 +30,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 - [x] **Phase 10: Overture Access** — Establish PMTiles fetch with validated CORS and graceful fallback (completed 2026-03-01)
 - [x] **Phase 11: MVT Parser** — Decode and adapt Overture tiles into the existing BuildingFeature format (Plan 11-01 complete 2026-03-01)
-- [ ] **Phase 12: Deduplication** — Spatial merge that removes Overture footprints overlapping OSM buildings
+- [x] **Phase 12: Deduplication** — Spatial merge that removes Overture footprints overlapping OSM buildings (completed 2026-03-01)
 - [ ] **Phase 13: Pipeline Integration** — Wire parallel fetching and merged buildings into preview and export
 
 ## Phase Details
@@ -107,5 +107,5 @@ Plans:
 | 9. Performance Hardening | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
 | 11. MVT Parser | v1.1 | Complete    | 2026-03-01 | 2026-03-01 |
-| 12. Deduplication | v1.1 | 0/1 | Not started | - |
+| 12. Deduplication | 1/1 | Complete   | 2026-03-01 | - |
 | 13. Pipeline Integration | v1.1 | 0/? | Not started | - |

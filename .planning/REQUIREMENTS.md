@@ -21,7 +21,7 @@ Requirements for Overture Maps building coverage gap-fill. Each maps to roadmap 
 
 ### Deduplication
 
-- [ ] **DEDUP-01**: Overture buildings overlapping existing OSM buildings are removed via bbox IoU (OSM detail preserved)
+- [x] **DEDUP-01**: Overture buildings overlapping existing OSM buildings are removed via bbox IoU (OSM detail preserved)
 
 ### Integration
 
@@ -64,7 +64,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARSE-02 | Phase 11 | Complete |
 | PARSE-03 | Phase 11 | Complete |
 | PARSE-04 | Phase 11 | Complete |
-| DEDUP-01 | Phase 12 | Pending |
+| DEDUP-01 | Phase 12 | Complete |
 | INTEG-01 | Phase 13 | Pending |
 | INTEG-02 | Phase 13 | Pending |
 | INTEG-03 | Phase 13 | Pending |

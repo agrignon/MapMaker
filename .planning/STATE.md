@@ -18,30 +18,31 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 11 — MVT Parser
+**Current focus:** Phase 12 — Deduplication
 
 ## Current Position
 
-Phase: 11 of 13 (MVT Parser)
-Plan: 11-01 (complete — plan done)
-Status: Phase 11 Plan 01 Complete — proceeding to next plan
-Last activity: 2026-03-01 — Plan 11-01 executed (parseOvertureTiles implementation)
+Phase: 12 of 13 (Deduplication)
+Plan: 12-01 (complete — plan done)
+Status: Phase 12 Plan 01 Complete — proceeding to next plan
+Last activity: 2026-03-01 — Plan 12-01 executed (deduplicateOverture AABB IoU implementation)
 
-Progress: [██████████] 100% of phase 11 plan 01 (1/1 plans so far)
+Progress: [██████████] 100% of phase 12 plan 01 (1/1 plans so far)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 3.7 min
-- Total execution time: 11 min
+- Total plans completed: 4
+- Average duration: 3.3 min
+- Total execution time: 13 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 10-overture-access | 2/2 | 7 min | 3.5 min |
-| 11-mvt-parser | 1/? | 3 min | 3 min |
+| 11-mvt-parser | 1/1 | 3 min | 3 min |
+| 12-deduplication | 1/1 | 2 min | 2 min |
 
 *Updated after each plan completion*
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 11-01]: Export computeFootprintAreaM2 from merge.ts (DRY) rather than inlining a copy in parse.ts
 - [Phase 11-01]: Normalize winding in parser (parse.ts) not downstream — parser is the data boundary
 - [Phase 11-01]: Mock computeFootprintAreaM2 in area tests, use real computeSignedArea in winding tests
+- [Phase 12-01]: Threshold is >= 0.3 (not strict >) — IoU exactly 0.3 counts as duplicate (locked from STATE.md)
+- [Phase 12-01]: Return ONLY filtered Overture gap-fill list; Phase 13 handles merge with OSM features
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 11-01-PLAN.md — parseOvertureTiles MVT parser with full TDD coverage
+Stopped at: Completed 12-01-PLAN.md — deduplicateOverture AABB IoU deduplication filter
 Resume file: None
