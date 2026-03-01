@@ -105,7 +105,7 @@ Plans:
 | 7. Vegetation + Terrain Smoothing | v1.0 | 2/2 | Complete | 2026-02-26 |
 | 8. Edit-Iterate + Export Polish | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 9. Performance Hardening | v1.0 | 2/2 | Complete | 2026-02-28 |
-| 10. Overture Access | 2/2 | Complete   | 2026-03-01 | - |
+| 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
 | 11. MVT Parser | v1.1 | 0/? | Not started | - |
 | 12. Deduplication | v1.1 | 0/? | Not started | - |
 | 13. Pipeline Integration | v1.1 | 0/? | Not started | - |

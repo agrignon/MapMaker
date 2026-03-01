@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Building Coverage
-status: active
-last_updated: "2026-03-01"
+status: unknown
+last_updated: "2026-03-01T00:58:24.452Z"
 progress:
-  total_phases: 4
-  completed_phases: 0
+  total_phases: 1
+  completed_phases: 1
   total_plans: 2
   completed_plans: 2
 ---
