@@ -1,5 +1,23 @@
 # Milestones
 
+## v1.1 Building Coverage (Shipped: 2026-03-01)
+
+**Phases completed:** 4 phases, 5 plans, 0 tasks
+
+**Key accomplishments:**
+- Overture Maps PMTiles fetch with silent OSM-only fallback and 5-second timeout
+- MVT tile decoder with winding normalization, MultiPolygon flattening, and 15m² area filter
+- AABB IoU deduplication removing overlapping Overture footprints (OSM detail preserved)
+- Parallel OSM + Overture fetch wired into generation pipeline via Promise.allSettled
+- 88 new tests added (264 total across 21 files), zero regressions
+
+**Stats:**
+- 13,994 lines of TypeScript
+- 35 commits in 1 day (2026-02-28)
+- 10/10 v1.1 requirements satisfied
+
+---
+
 ## v1.0 MVP (Shipped: 2026-02-28)
 
 **Phases completed:** 9 phases, 25 plans, 6 tasks

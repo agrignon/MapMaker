@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A web application that converts any real-world location into a 3D-printable STL model. Users specify a location (city name, street address, or lat/lon), define a bounding box on an interactive map, toggle geographic features (terrain, buildings, roads, water, vegetation), adjust physical dimensions and smoothing, and export a print-ready STL file. The app pairs a 2D map editor with a live 3D preview for real-time feedback, with all processing running client-side.
+A web application that converts any real-world location into a 3D-printable STL model. Users specify a location (city name, street address, or lat/lon), define a bounding box on an interactive map, toggle geographic features (terrain, buildings, roads, water, vegetation), adjust physical dimensions and smoothing, and export a print-ready STL file. The app pairs a 2D map editor with a live 3D preview for real-time feedback, with all processing running client-side. Buildings are sourced from both OSM and Overture Maps for global coverage.
 
 ## Core Value
 
@@ -19,7 +19,7 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 - ✓ Terrain exaggeration slider + minimum height floor for flat areas — v1.0
 - ✓ Terrain mesh smoothing slider for smoother STL output — v1.0
 - ✓ Side-by-side 2D map + 3D preview layout with orbit/zoom/pan — v1.0
-- ✓ OSM buildings with real heights, detailed roof geometry, height fallback cascade — v1.0
+- ✓ OSM buildings with real heights, detailed roof geometry (gabled/hipped), and height fallback cascade — v1.0
 - ✓ Buildings correctly placed on terrain surface — v1.0
 - ✓ OSM road network as 3D geometry with configurable style (recessed/raised/flat) and type-based widths — v1.0
 - ✓ Water bodies (rivers, lakes) as flat depressions baked into terrain — v1.0
@@ -33,23 +33,16 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 - ✓ STL dimensions match specified mm measurements — v1.0
 - ✓ Web Worker mesh generation for non-blocking UI — v1.0
 - ✓ Production build compiles without TypeScript errors — v1.0
-
-## Current Milestone: v1.1 Building Coverage
-
-**Goal:** Fill building data gaps by merging Overture Maps footprints with existing OSM data so buildings appear everywhere, not just where OSM has coverage.
-
-**Target features:**
-- Fetch Overture Maps building footprints alongside existing OSM query
-- Deduplicate by spatial overlap (OSM preferred, Overture fills gaps)
-- Gap-fill buildings rendered as simple extruded boxes (default height, flat roof)
-- Automatic — no UI changes, seamless merge
+- ✓ Overture Maps building footprint fetching via PMTiles for selected bounding box — v1.1
+- ✓ Silent fallback to OSM-only when Overture data is unavailable — v1.1
+- ✓ MVT tile decoding with winding normalization, MultiPolygon flattening, area filtering — v1.1
+- ✓ Spatial deduplication of Overture footprints against OSM buildings (AABB IoU) — v1.1
+- ✓ Parallel OSM + Overture fetch with merged building pipeline — v1.1
+- ✓ Gap-fill buildings in 3D preview and STL export — v1.1
 
 ### Active
 
-- [ ] Overture Maps building footprint fetching for selected bounding box
-- [ ] Spatial deduplication of Overture footprints against OSM buildings
-- [ ] Gap-fill building geometry (extruded boxes with default height)
-- [ ] Merged building pipeline integrated into existing preview and export
+(None — next milestone not yet started)
 
 ### Out of Scope
 
@@ -59,21 +52,25 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 - Real-time collaboration — single-user tool
 - Custom polygon / freehand selection — rectangle covers 90%+ of use cases
 - Texture/satellite imagery overlay — FDM printers can't reproduce texture
+- Overture building parts (roof geometry) — adds complexity without clear print benefit
+- Real-time STAC polling for Overture URL updates — pin to known release, update per MapMaker release cycle
+- Server-side proxy for Overture data — breaks client-side architecture; PMTiles works from browser
 
 ## Context
 
-Shipped v1.0 with 12,191 lines of TypeScript across 9 phases.
+Shipped v1.1 with 13,994 lines of TypeScript across 13 phases (v1.0 + v1.1).
 Tech stack: React 19, Three.js (R3F), Zustand, Vite, Vitest, MapLibre GL JS.
-Data sources: MapTiler (elevation DEM tiles), Overpass/OSM (buildings, roads, water, vegetation).
+Data sources: MapTiler (elevation DEM tiles), Overpass/OSM (buildings, roads, water, vegetation), Overture Maps (gap-fill buildings via PMTiles).
 All processing is client-side: coordinate projection, elevation decode, mesh generation, STL serialization.
-176 tests passing across 15 test files. Production build compiles clean.
+264 tests passing across 21 test files. Production build compiles clean.
 
 ## Constraints
 
-- **Data availability**: Building detail depends on OSM coverage — some areas have rich 3D building data, others only footprints
+- **Data availability**: Building detail depends on OSM coverage — some areas have rich 3D building data, others only footprints. Overture Maps fills gaps with basic footprints.
 - **Browser performance**: Bbox area capped at 25 km² (hard) / 4 km² (soft warning) to prevent OOM on dense areas
 - **STL file size**: Dense areas with many buildings produce large files — mesh generation runs in Web Worker to keep UI responsive
 - **Elevation data resolution**: Free DEM sources at ~30m SRTM resolution; smoothing slider helps interpolate rough transitions
+- **Overture URL rotation**: Overture PMTiles URL rotates every ~60 days; pinned to known release with STAC catalog documented for updates
 
 ## Key Decisions
 
@@ -94,6 +91,12 @@ All processing is client-side: coordinate projection, elevation decode, mesh gen
 | Earcut base plate | Exact perimeter match with wall edges eliminates boundary edge gaps | ✓ Good |
 | CSS visibility:hidden for preview preservation | Instant re-entry when going Back to Edit; WebGL context not destroyed | ✓ Good |
 | Caller-side smoothing pipeline | smooth → water depression → build terrain; all callers follow same order | ✓ Good |
+| PMTiles via browser-native `pmtiles` package | Only viable option; DuckDB WASM lacks HTTPFS support | ✓ Good |
+| Merge at data ingestion in GenerateButton | Single integration point; store and mesh layers unchanged | ✓ Good |
+| Promise.allSettled for parallel fetch | Overture failures degrade silently to OSM-only; no added latency | ✓ Good |
+| AABB IoU at 0.3 threshold for dedup | Polygon-level overlap detection; handles L-shaped and courtyard buildings | ✓ Good |
+| Winding normalization in parser | Parser is the data boundary; downstream code trusts consistent CCW outer rings | ✓ Good |
+| Fixed zoom 14 for Overture fetch | Archive maxzoom; only level with complete building properties | ✓ Good |
 
 ---
-*Last updated: 2026-02-28 after v1.1 milestone start*
+*Last updated: 2026-03-01 after v1.1 milestone completion*

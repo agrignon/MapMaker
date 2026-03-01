@@ -48,6 +48,47 @@
 
 ---
 
+## Milestone: v1.1 — Building Coverage
+
+**Shipped:** 2026-03-01
+**Phases:** 4 | **Plans:** 5 | **Timeline:** 1 day
+
+### What Was Built
+- Overture Maps PMTiles fetch module with silent OSM-only fallback and 5s timeout
+- MVT tile decoder converting raw Overture tiles to BuildingFeature[] (winding, MultiPolygon, area filter)
+- AABB IoU deduplication removing Overture footprints overlapping OSM buildings
+- Parallel fetch pipeline wired into GenerateButton via Promise.allSettled — gap-fill buildings flow into preview and export
+
+### What Worked
+- Linear dependency chain (fetch → parse → dedup → integrate) made each phase independently testable
+- Merging at data ingestion in GenerateButton.tsx meant zero changes to BuildingMesh or ExportPanel
+- Each phase produced a standalone, unit-tested module before wiring in Phase 13
+- Promise.allSettled pattern made Overture failures invisible to users (no conditional UI needed)
+- Reusing existing computeFootprintAreaM2 and computeSignedArea from v1.0 buildings code (DRY)
+
+### What Was Inefficient
+- First milestone audit ran before Phases 12-13 were built — all gaps were just "not started yet" (same lesson as v1.0)
+- Summary frontmatter `one_liner` field not populated — manual extraction needed during completion
+
+### Patterns Established
+- PMTiles browser fetch: AbortController with setTimeout for bounded tile requests
+- Silent fallback: catch-all → return { available: false } — never throw from data fetch modules
+- Winding normalization at parse boundary (parser normalizes, downstream trusts CCW)
+- Store flag for data source availability (overtureAvailable) — ready for future UI surfacing
+
+### Key Lessons
+1. Audit only after all phases are complete — mid-development audits produce noise, not signal
+2. Data source merge at ingestion point (GenerateButton) keeps downstream components source-agnostic
+3. Promise.allSettled is the right pattern for optional parallel data sources (fail silently, merge what's available)
+4. AABB IoU is sufficient for building dedup — polygon intersection not needed at this scale
+
+### Cost Observations
+- Model mix: balanced profile (sonnet executors, sonnet integration checker)
+- Timeline: 1 day, 5 plans across 4 phases — very high throughput
+- Notable: 35 commits, 88 new tests, zero regressions — cleanest milestone yet
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -55,14 +96,18 @@
 | Milestone | Timeline | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | 5 days | 9 | Initial milestone — established GSD workflow patterns |
+| v1.1 | 1 day | 4 | Fastest yet — linear dependency chain + reuse of v1.0 building infra |
 
 ### Cumulative Quality
 
 | Milestone | Tests | LOC | Plans |
 |-----------|-------|-----|-------|
 | v1.0 | 176 | 12,191 | 25 |
+| v1.1 | 264 | 13,994 | 5 |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. Z alignment consistency across all layers is the most critical integration concern for 3D terrain apps
 2. Phase dependency ordering (foundation → terrain → features) prevents costly rework
+3. Audit only after all phases are complete — mid-development audits are noise (confirmed v1.0 + v1.1)
+4. Data source merge at a single ingestion point keeps downstream components source-agnostic
