@@ -65,27 +65,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | — | Pending |
-| LAYOUT-02 | — | Pending |
-| LAYOUT-03 | — | Pending |
-| LAYOUT-04 | — | Pending |
-| SHEET-01 | — | Pending |
-| SHEET-02 | — | Pending |
-| SHEET-03 | — | Pending |
-| SHEET-04 | — | Pending |
-| SHEET-05 | — | Pending |
-| TOUCH-01 | — | Pending |
-| TOUCH-02 | — | Pending |
-| TOUCH-03 | — | Pending |
-| ANIM-01 | — | Pending |
-| ANIM-02 | — | Pending |
-| ANIM-03 | — | Pending |
+| LAYOUT-01 | Phase 14 | Pending |
+| LAYOUT-02 | Phase 17 | Pending |
+| LAYOUT-03 | Phase 15 | Pending |
+| LAYOUT-04 | Phase 16 | Pending |
+| SHEET-01 | Phase 16 | Pending |
+| SHEET-02 | Phase 16 | Pending |
+| SHEET-03 | Phase 16 | Pending |
+| SHEET-04 | Phase 16 | Pending |
+| SHEET-05 | Phase 16 | Pending |
+| TOUCH-01 | Phase 18 | Pending |
+| TOUCH-02 | Phase 14 | Pending |
+| TOUCH-03 | Phase 18 | Pending |
+| ANIM-01 | Phase 18 | Pending |
+| ANIM-02 | Phase 18 | Pending |
+| ANIM-03 | Phase 18 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-01*
-*Last updated: 2026-03-01 after initial definition*
+*Last updated: 2026-03-01 after roadmap creation*
