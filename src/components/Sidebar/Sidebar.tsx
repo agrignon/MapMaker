@@ -9,7 +9,7 @@ export function Sidebar() {
     <div
       style={{
         position: 'absolute',
-        bottom: 12,
+        bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
         left: 12,
         zIndex: 10,
         width: 'min(260px, calc(100vw - 24px))',
