@@ -108,4 +108,4 @@ Plans:
 | 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
 | 11. MVT Parser | v1.1 | Complete    | 2026-03-01 | 2026-03-01 |
 | 12. Deduplication | 1/1 | Complete    | 2026-03-01 | - |
-| 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
+| 13. Pipeline Integration | v1.1 | Complete    | 2026-03-01 | 2026-03-01 |
