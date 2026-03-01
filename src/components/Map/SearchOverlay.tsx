@@ -100,7 +100,7 @@ export function SearchOverlay() {
         top: 10,
         left: 10,
         zIndex: 10,
-        width: 320,
+        width: 'min(320px, calc(100vw - 80px))',
       }}
     >
       <GeocodingControl

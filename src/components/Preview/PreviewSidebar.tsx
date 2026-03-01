@@ -56,7 +56,7 @@ export function PreviewSidebar() {
         <div
           style={{
             pointerEvents: 'auto',
-            width: '240px',
+            width: 'min(240px, calc(100vw - 44px))',
             maxHeight: '100%',
             backgroundColor: 'rgba(17, 24, 39, 0.55)',
             backdropFilter: 'blur(12px)',

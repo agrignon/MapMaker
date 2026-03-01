@@ -2,6 +2,18 @@
 
 body {
   @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+input, select, textarea {
+  font-size: 16px;
 }
 
 @keyframes spin {

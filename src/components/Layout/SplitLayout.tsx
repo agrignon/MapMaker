@@ -154,10 +154,15 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     dragging.current = false;
   }, []);
 
+  const prevShowPreview = useRef(showPreview);
   useEffect(() => {
-    if (showPreview && isMobile) {
+    if (showPreview && !prevShowPreview.current && isMobile) {
       setActiveTab('preview');
     }
+    if (!showPreview && isMobile) {
+      setActiveTab('map');
+    }
+    prevShowPreview.current = showPreview;
   }, [showPreview, isMobile]);
 
   if (isMobile) {

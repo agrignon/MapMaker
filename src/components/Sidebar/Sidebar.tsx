@@ -12,7 +12,7 @@ export function Sidebar() {
         bottom: 12,
         left: 12,
         zIndex: 10,
-        width: '260px',
+        width: 'min(260px, calc(100vw - 24px))',
         backgroundColor: 'rgba(17, 24, 39, 0.65)',
         backdropFilter: 'blur(12px)',
         borderRadius: '10px',
@@ -24,14 +24,12 @@ export function Sidebar() {
         pointerEvents: 'auto',
       }}
     >
-      {/* Header */}
       <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
           MapMaker
         </h1>
       </div>
 
-      {/* Body */}
       <div style={{ padding: '12px 14px', flex: 1, overflowY: 'auto' }}>
         {hasBbox ? (
           <SelectionInfo />
@@ -42,7 +40,6 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Footer */}
       <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
         <GenerateButton />
       </div>
