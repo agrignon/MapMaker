@@ -11,9 +11,11 @@ import * as THREE from 'three';
 import { buildTerrainGeometry, smoothElevations } from '../lib/mesh/terrain';
 import { buildRoadGeometry } from '../lib/roads/roadMesh';
 import { buildAllBuildings } from '../lib/buildings/merge';
+import { applyWaterDepressions } from '../lib/water/depression';
 import type { TerrainMeshParams } from '../lib/mesh/terrain';
 import type { RoadGeometryParams } from '../lib/roads/types';
 import type { BuildingGeometryParams } from '../lib/buildings/types';
+import type { WaterFeature } from '../lib/water/types';
 import type { ElevationData, BoundingBox } from '../types/geo';
 
 // ─── Message types ─────────────────────────────────────────────────────────
@@ -32,6 +34,8 @@ interface BuildRoadsMessage {
   terrainParams: TerrainMeshParams;
   roadParams: Omit<RoadGeometryParams, 'terrainGeometry'>;
   smoothingLevel: number;
+  waterFeatures?: WaterFeature[];
+  waterVisible?: boolean;
 }
 
 interface BuildBuildingsMessage {
@@ -48,6 +52,8 @@ interface BuildBuildingsMessage {
   terrainParams: TerrainMeshParams;
   buildingParams: Omit<BuildingGeometryParams, 'terrainGeometry'>;
   smoothingLevel: number;
+  waterFeatures?: WaterFeature[];
+  waterVisible?: boolean;
 }
 
 type WorkerMessage = BuildRoadsMessage | BuildBuildingsMessage;
@@ -119,8 +125,18 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       ? { ...elevData, elevations: smoothElevations(elevData.elevations, elevData.gridSize, radius) }
       : elevData;
 
-    // Build terrain geometry for BVH raycasting (from smoothed data)
-    const terrainGeo = buildTerrainGeometry(smoothedElevData, msg.terrainParams);
+    // Apply water depressions to match the visible terrain in TerrainMesh.tsx.
+    // Without this, buildTerrainGeometry recomputes min/max from its input —
+    // depressions push min down, shifting the entire Z coordinate system.
+    // Roads/buildings raycasted against a non-depressed terrain sit below
+    // the visible (depressed) terrain surface.
+    const hasWater = Boolean(msg.waterFeatures && msg.waterFeatures.length > 0 && msg.waterVisible);
+    const effectiveElevData: ElevationData = hasWater
+      ? applyWaterDepressions(smoothedElevData, msg.waterFeatures!, msg.bbox)
+      : smoothedElevData;
+
+    // Build terrain geometry for BVH raycasting (from smoothed + depressed data)
+    const terrainGeo = buildTerrainGeometry(effectiveElevData, msg.terrainParams);
 
     let result: THREE.BufferGeometry | null = null;
 
@@ -129,13 +145,13 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         ...msg.roadParams,
         terrainGeometry: terrainGeo,
       };
-      result = buildRoadGeometry(msg.features, msg.bbox, elevData, params);
+      result = buildRoadGeometry(msg.features, msg.bbox, effectiveElevData, params);
     } else if (msg.type === 'buildBuildings') {
       const params: BuildingGeometryParams = {
         ...msg.buildingParams,
         terrainGeometry: terrainGeo,
       };
-      result = buildAllBuildings(msg.features, msg.bbox, elevData, params);
+      result = buildAllBuildings(msg.features, msg.bbox, effectiveElevData, params);
     }
 
     terrainGeo.dispose();

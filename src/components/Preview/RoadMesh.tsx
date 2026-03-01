@@ -39,6 +39,8 @@ export function RoadMesh() {
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const utmZone = useMapStore((s) => s.utmZone);
+  const waterFeatures = useMapStore((s) => s.waterFeatures);
+  const waterVisible = useMapStore((s) => s.layerToggles.water);
   const setRebuildingLayers = useMapStore((s) => s.setRebuildingLayers);
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -103,7 +105,9 @@ export function RoadMesh() {
         targetReliefMM,
         topFaceOnly: true,
       },
-      smoothingLevel
+      smoothingLevel,
+      waterFeatures,
+      waterVisible
     );
     seqRef.current = seqId;
 
@@ -162,6 +166,8 @@ export function RoadMesh() {
     dimensions,
     bbox,
     utmZone,
+    waterFeatures,
+    waterVisible,
     setRebuildingLayers,
   ]);
 

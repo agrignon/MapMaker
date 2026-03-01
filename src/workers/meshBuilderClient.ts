@@ -9,6 +9,7 @@
 import type { TerrainMeshParams } from '../lib/mesh/terrain';
 import type { RoadGeometryParams, RoadFeature } from '../lib/roads/types';
 import type { BuildingGeometryParams, BuildingFeature } from '../lib/buildings/types';
+import type { WaterFeature } from '../lib/water/types';
 import type { ElevationData, BoundingBox } from '../types/geo';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -89,7 +90,9 @@ export function buildRoadsInWorker(
   elevData: ElevationData,
   terrainParams: TerrainMeshParams,
   roadParams: Omit<RoadGeometryParams, 'terrainGeometry'>,
-  smoothingLevel = 25
+  smoothingLevel = 25,
+  waterFeatures?: WaterFeature[] | null,
+  waterVisible?: boolean
 ): { promise: Promise<MeshArrays | null>; seqId: number } {
   const seqId = ++roadSeqId;
   const id = nextRequestId++;
@@ -107,6 +110,8 @@ export function buildRoadsInWorker(
       terrainParams,
       roadParams,
       smoothingLevel,
+      waterFeatures: waterFeatures ?? undefined,
+      waterVisible: waterVisible ?? false,
     });
   });
 
@@ -128,7 +133,9 @@ export function buildBuildingsInWorker(
   elevData: ElevationData,
   terrainParams: TerrainMeshParams,
   buildingParams: Omit<BuildingGeometryParams, 'terrainGeometry'>,
-  smoothingLevel = 25
+  smoothingLevel = 25,
+  waterFeatures?: WaterFeature[] | null,
+  waterVisible?: boolean
 ): { promise: Promise<MeshArrays | null>; seqId: number } {
   const seqId = ++buildingSeqId;
   const id = nextRequestId++;
@@ -146,6 +153,8 @@ export function buildBuildingsInWorker(
       terrainParams,
       buildingParams,
       smoothingLevel,
+      waterFeatures: waterFeatures ?? undefined,
+      waterVisible: waterVisible ?? false,
     });
   });
 
@@ -167,7 +176,9 @@ export function buildRoadsForExport(
   elevData: ElevationData,
   terrainParams: TerrainMeshParams,
   roadParams: Omit<RoadGeometryParams, 'terrainGeometry'>,
-  smoothingLevel = 25
+  smoothingLevel = 25,
+  waterFeatures?: WaterFeature[] | null,
+  waterVisible?: boolean
 ): Promise<MeshArrays | null> {
   const id = nextRequestId++;
   const w = getWorker();
@@ -183,6 +194,8 @@ export function buildRoadsForExport(
       terrainParams,
       roadParams,
       smoothingLevel,
+      waterFeatures: waterFeatures ?? undefined,
+      waterVisible: waterVisible ?? false,
     });
   });
 }
@@ -198,7 +211,9 @@ export function buildBuildingsForExport(
   elevData: ElevationData,
   terrainParams: TerrainMeshParams,
   buildingParams: Omit<BuildingGeometryParams, 'terrainGeometry'>,
-  smoothingLevel = 25
+  smoothingLevel = 25,
+  waterFeatures?: WaterFeature[] | null,
+  waterVisible?: boolean
 ): Promise<MeshArrays | null> {
   const id = nextRequestId++;
   const w = getWorker();
@@ -214,6 +229,8 @@ export function buildBuildingsForExport(
       terrainParams,
       buildingParams,
       smoothingLevel,
+      waterFeatures: waterFeatures ?? undefined,
+      waterVisible: waterVisible ?? false,
     });
   });
 }

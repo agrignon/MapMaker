@@ -232,7 +232,8 @@ export function ExportPanel() {
 
         // Building geometry runs off-thread so the UI stays responsive during export
         const buildingArrays = await buildBuildingsForExport(
-          buildingFeatures, bbox, elevationData, terrainParamsForBuildings, buildingParams, smoothingLevel
+          buildingFeatures, bbox, elevationData, terrainParamsForBuildings, buildingParams, smoothingLevel,
+          waterFeatures, waterVisible
         );
 
         if (buildingArrays) {
@@ -298,7 +299,8 @@ export function ExportPanel() {
 
         // Road geometry runs off-thread so the UI stays responsive during export
         const roadArrays = await buildRoadsForExport(
-          roadFeatures, bbox, elevationData, terrainParamsForRoads, roadParams, smoothingLevel
+          roadFeatures, bbox, elevationData, terrainParamsForRoads, roadParams, smoothingLevel,
+          waterFeatures, waterVisible
         );
 
         if (roadArrays) {

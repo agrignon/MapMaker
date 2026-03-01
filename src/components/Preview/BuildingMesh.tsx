@@ -37,6 +37,8 @@ export function BuildingMesh() {
   const dimensions = useMapStore((s) => s.dimensions);
   const bbox = useMapStore((s) => s.bbox);
   const utmZone = useMapStore((s) => s.utmZone);
+  const waterFeatures = useMapStore((s) => s.waterFeatures);
+  const waterVisible = useMapStore((s) => s.layerToggles.water);
   const setRebuildingLayers = useMapStore((s) => s.setRebuildingLayers);
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -100,7 +102,9 @@ export function BuildingMesh() {
         minElevationM: elevationData.minElevation,
         targetReliefMM,
       },
-      smoothingLevel
+      smoothingLevel,
+      waterFeatures,
+      waterVisible
     );
     seqRef.current = seqId;
 
@@ -158,6 +162,8 @@ export function BuildingMesh() {
     dimensions,
     bbox,
     utmZone,
+    waterFeatures,
+    waterVisible,
     setRebuildingLayers,
   ]);
 
