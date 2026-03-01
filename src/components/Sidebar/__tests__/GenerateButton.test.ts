@@ -6,7 +6,12 @@
  * Strategy: Test through triggerRegenerate() (public export).
  *   - Mock elevation fetch so the elevation path resolves immediately.
  *   - Mock all OSM + Overture dependencies to control data flow.
- *   - Assert store state and mock call arguments after each run.
+ *   - Use vi.waitFor to handle async fire-and-forget OSM layer fetch.
+ *   - Assert store state and mock call counts after each run.
+ *
+ * Note: fetchOsmLayersStandalone is called via `void` (fire-and-forget) in
+ * triggerRegenerate. Tests use vi.waitFor to poll until store state settles
+ * or mock call counts are reached.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -105,8 +110,9 @@ const overtureRawBuilding: BuildingFeature = {
 /** Synthetic OSM data object — parsers receive this but are mocked anyway. */
 const FAKE_OSM_DATA = { type: 'FeatureCollection', features: [] };
 
-/** Synthetic elevation result. */
-const FAKE_ELEVATION = {
+/** Synthetic elevation result — matches ElevationData shape (loosely). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const FAKE_ELEVATION: any = {
   grid: new Float32Array(0),
   width: 1,
   height: 1,
@@ -137,7 +143,7 @@ beforeEach(() => {
   useMapStore.getState().setBbox(TEST_BBOX_SW, TEST_BBOX_NE);
 
   // Default mock implementations
-  mockFetchElevationForBbox.mockResolvedValue(FAKE_ELEVATION as ReturnType<typeof useMapStore.getState>['elevationData'] extends infer T ? T : never);
+  mockFetchElevationForBbox.mockResolvedValue(FAKE_ELEVATION);
   mockFetchAllOsmData.mockResolvedValue(FAKE_OSM_DATA);
   mockFetchOvertureTiles.mockResolvedValue({ tiles: new Map(), available: true });
   mockParseOvertureTiles.mockReturnValue([]);
@@ -152,6 +158,25 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * Wait for fetchOsmLayersStandalone to complete.
+ *
+ * fetchOsmLayersStandalone is called with `void` (fire-and-forget) inside
+ * triggerRegenerate. After triggerRegenerate resolves, the OSM layer fetch
+ * is still in progress. We poll until buildingGenerationStatus leaves 'fetching'.
+ */
+async function waitForOsmLayers() {
+  await vi.waitFor(
+    () => {
+      const status = useMapStore.getState().buildingGenerationStatus;
+      if (status === 'fetching' || status === 'idle') {
+        throw new Error('Still fetching...');
+      }
+    },
+    { timeout: 2000 }
+  );
+}
+
 // ---- Tests ----
 
 describe('GenerateButton — parallel Overture integration', () => {
@@ -159,6 +184,7 @@ describe('GenerateButton — parallel Overture integration', () => {
   // Test 1 — INTEG-01: Both fetchAllOsmData and fetchOvertureTiles are called
   it('INTEG-01: calls both fetchAllOsmData and fetchOvertureTiles when generating', async () => {
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     expect(mockFetchAllOsmData).toHaveBeenCalledTimes(1);
     expect(mockFetchOvertureTiles).toHaveBeenCalledTimes(1);
@@ -174,6 +200,7 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockParseBuildingFeatures.mockReturnValue([osmBuilding1, osmBuilding2]);
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     const state = useMapStore.getState();
     expect(state.buildingFeatures).toEqual([osmBuilding1, osmBuilding2, gapFillBuilding]);
@@ -185,6 +212,7 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockParseBuildingFeatures.mockReturnValue([osmBuilding1, osmBuilding2]);
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     const state = useMapStore.getState();
     expect(state.buildingFeatures).toEqual([osmBuilding1, osmBuilding2]);
@@ -198,6 +226,7 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockParseBuildingFeatures.mockReturnValue([osmBuilding1]);
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     const state = useMapStore.getState();
     expect(state.buildingFeatures).toEqual([osmBuilding1]);
@@ -208,6 +237,7 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockFetchOvertureTiles.mockResolvedValue({ tiles: new Map(), available: true });
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     expect(useMapStore.getState().overtureAvailable).toBe(true);
   });
@@ -217,35 +247,31 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockFetchOvertureTiles.mockResolvedValue({ tiles: new Map(), available: false });
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     expect(useMapStore.getState().overtureAvailable).toBe(false);
   });
 
   // Test 7 — status text: Building status shows 'Fetching buildings...' not 'Fetching OSM data...'
-  it('status text: building status shows "Fetching buildings..." during fetch', async () => {
-    const statusCalls: Array<{ status: string; step: string }> = [];
+  it('status text: building status shows "Fetching buildings..." during fetch, not "Fetching OSM data..."', async () => {
+    const capturedSteps: string[] = [];
 
-    // Intercept setBuildingGenerationStatus calls via store subscription
-    const originalSet = useMapStore.getState().setBuildingGenerationStatus;
+    // Intercept setBuildingGenerationStatus to capture initial call
+    const originalFn = useMapStore.getState().setBuildingGenerationStatus;
     vi.spyOn(useMapStore.getState(), 'setBuildingGenerationStatus').mockImplementation(
       (status, step = '') => {
-        statusCalls.push({ status, step });
-        originalSet(status, step);
+        capturedSteps.push(step);
+        originalFn(status, step);
       }
     );
 
-    // Delay OSM resolve to capture the "during fetch" status
-    mockFetchAllOsmData.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(FAKE_OSM_DATA), 10))
-    );
-
     await triggerRegenerate();
+    await waitForOsmLayers();
 
-    // First call should show 'Fetching buildings...' (not 'Fetching OSM data...')
-    expect(statusCalls.length).toBeGreaterThan(0);
-    const firstStep = statusCalls[0]?.step;
-    expect(firstStep).toBe('Fetching buildings...');
-    expect(firstStep).not.toBe('Fetching OSM data...');
+    // First step should be 'Fetching buildings...' (not 'Fetching OSM data...')
+    expect(capturedSteps.length).toBeGreaterThan(0);
+    expect(capturedSteps[0]).toBe('Fetching buildings...');
+    expect(capturedSteps[0]).not.toBe('Fetching OSM data...');
   });
 
   // Test 8 — OSM error: when OSM fetch fails, all layer statuses set to error
@@ -254,6 +280,15 @@ describe('GenerateButton — parallel Overture integration', () => {
 
     await triggerRegenerate();
 
+    // Wait for the error status to propagate (OSM error exits early)
+    await vi.waitFor(
+      () => {
+        const status = useMapStore.getState().buildingGenerationStatus;
+        if (status !== 'error') throw new Error('Not error yet');
+      },
+      { timeout: 2000 }
+    );
+
     const state = useMapStore.getState();
     expect(state.buildingGenerationStatus).toBe('error');
     expect(state.roadGenerationStatus).toBe('error');
@@ -261,7 +296,7 @@ describe('GenerateButton — parallel Overture integration', () => {
     expect(state.vegetationGenerationStatus).toBe('error');
   });
 
-  // Test 9 — INTEG-03: setBuildingFeatures receives merged list (same slot used by ExportPanel)
+  // Test 9 — INTEG-03: setBuildingFeatures receives merged list (same store slot used by ExportPanel)
   it('INTEG-03: merged building list is stored in buildingFeatures (same slot ExportPanel reads)', async () => {
     const fakeTiles = new Map([['14/8192/5461', new ArrayBuffer(8)]]);
     mockFetchOvertureTiles.mockResolvedValue({ tiles: fakeTiles, available: true });
@@ -270,11 +305,12 @@ describe('GenerateButton — parallel Overture integration', () => {
     mockParseBuildingFeatures.mockReturnValue([osmBuilding1]);
 
     await triggerRegenerate();
+    await waitForOsmLayers();
 
     // ExportPanel reads useMapStore.getState().buildingFeatures — verify it has merged list
     const state = useMapStore.getState();
-    expect(state.buildingFeatures).toContain(osmBuilding1);
-    expect(state.buildingFeatures).toContain(gapFillBuilding);
+    expect(state.buildingFeatures).not.toBeNull();
+    expect(state.buildingFeatures).toEqual([osmBuilding1, gapFillBuilding]);
     expect(state.buildingFeatures?.length).toBe(2);
   });
 

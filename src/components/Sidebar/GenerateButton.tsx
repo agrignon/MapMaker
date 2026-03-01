@@ -13,11 +13,15 @@
 import { useMapStore } from '../../store/mapStore';
 import { fetchElevationForBbox } from '../../lib/elevation/stitch';
 import { fetchAllOsmData } from '../../lib/overpass';
+import { fetchOvertureTiles } from '../../lib/overture/index';
+import { parseOvertureTiles } from '../../lib/overture/parse';
+import { deduplicateOverture } from '../../lib/overture/dedup';
 import { parseBuildingFeatures } from '../../lib/buildings/parse';
 import { parseRoadFeatures } from '../../lib/roads/parse';
 import { parseWaterFeatures } from '../../lib/water/parse';
 import { parseVegetationFeatures } from '../../lib/vegetation/parse';
 import type { BoundingBox } from '../../types/geo';
+import type { BuildingFeature } from '../../lib/buildings/types';
 
 /**
  * Reverse geocode a coordinate to get a place name via MapTiler API.
@@ -39,41 +43,69 @@ async function reverseGeocode(lon: number, lat: number, apiKey: string): Promise
 
 /**
  * Fetch all OSM layers (buildings, roads, water, vegetation) in a single Overpass request,
- * then parse each layer from the combined response. One request eliminates 429
- * rate limiting that occurred with three sequential requests.
+ * then fetch Overture building tiles in parallel. Gap-fill buildings from Overture are
+ * deduplicated against OSM and merged into a single combined list.
+ *
+ * Uses Promise.allSettled so Overture failures degrade silently to OSM-only.
  */
 async function fetchOsmLayersStandalone(bbox: BoundingBox, s: ReturnType<typeof useMapStore.getState>) {
-  s.setBuildingGenerationStatus('fetching', 'Fetching OSM data...');
+  s.setBuildingGenerationStatus('fetching', 'Fetching buildings...');
   s.setRoadGenerationStatus('fetching', 'Fetching OSM data...');
   s.setWaterGenerationStatus('fetching', 'Fetching OSM data...');
   s.setVegetationGenerationStatus('fetching', 'Fetching OSM data...');
 
-  try {
-    const osmData = await fetchAllOsmData(bbox);
+  // Internal controller — abort Overture if OSM fails
+  const controller = new AbortController();
 
-    // Parse each layer from the combined response — parsers filter by tag
-    const buildings = parseBuildingFeatures(osmData);
-    s.setBuildingFeatures(buildings);
-    s.setBuildingGenerationStatus('ready', `${buildings.length} buildings found`);
+  // Launch both fetches in parallel — neither awaited before both start
+  const [osmResult, overtureResult] = await Promise.allSettled([
+    fetchAllOsmData(bbox),
+    fetchOvertureTiles(bbox, controller.signal),
+  ]);
 
-    const roads = parseRoadFeatures(osmData);
-    s.setRoadFeatures(roads);
-    s.setRoadGenerationStatus('ready', `${roads.length} roads found`);
-
-    const water = parseWaterFeatures(osmData);
-    s.setWaterFeatures(water);
-    s.setWaterGenerationStatus('ready', `${water.length} water bodies found`);
-
-    const vegetation = parseVegetationFeatures(osmData);
-    s.setVegetationFeatures(vegetation);
-    s.setVegetationGenerationStatus('ready', `${vegetation.length} vegetation areas found`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'OSM fetch failed';
+  // --- OSM branch ---
+  if (osmResult.status === 'rejected') {
+    const message = osmResult.reason instanceof Error ? osmResult.reason.message : 'OSM fetch failed';
     s.setBuildingGenerationStatus('error', message);
     s.setRoadGenerationStatus('error', message);
     s.setWaterGenerationStatus('error', message);
     s.setVegetationGenerationStatus('error', message);
+    controller.abort();
+    return;
   }
+  const osmData = osmResult.value;
+
+  // Parse OSM buildings
+  const osmBuildings = parseBuildingFeatures(osmData);
+
+  // --- Overture branch (fetchOvertureTiles NEVER throws — always 'fulfilled') ---
+  let gapFill: BuildingFeature[] = [];
+  if (overtureResult.status === 'fulfilled') {
+    const { tiles, available } = overtureResult.value;
+    s.setOvertureAvailable(available);
+    if (available && tiles.size > 0) {
+      const overtureBuildings = parseOvertureTiles(tiles);
+      gapFill = deduplicateOverture(osmBuildings, overtureBuildings);
+    }
+  }
+
+  // Merge and set — single combined list (INTEG-02 + INTEG-03)
+  const mergedBuildings = [...osmBuildings, ...gapFill];
+  s.setBuildingFeatures(mergedBuildings);
+  s.setBuildingGenerationStatus('ready', `${mergedBuildings.length} buildings found`);
+
+  // Roads, water, vegetation — unchanged from OSM data
+  const roads = parseRoadFeatures(osmData);
+  s.setRoadFeatures(roads);
+  s.setRoadGenerationStatus('ready', `${roads.length} roads found`);
+
+  const water = parseWaterFeatures(osmData);
+  s.setWaterFeatures(water);
+  s.setWaterGenerationStatus('ready', `${water.length} water bodies found`);
+
+  const vegetation = parseVegetationFeatures(osmData);
+  s.setVegetationFeatures(vegetation);
+  s.setVegetationGenerationStatus('ready', `${vegetation.length} vegetation areas found`);
 }
 
 /**
