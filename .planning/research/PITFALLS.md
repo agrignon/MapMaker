@@ -1,251 +1,174 @@
 # Pitfalls Research
 
-**Domain:** Adding Overture Maps building footprints as fallback to an existing OSM-based 3D building pipeline (MapMaker v1.1)
+**Domain:** Adding responsive UI (bottom sheet, animations, three-tier layout) to an existing React 19 + Three.js R3F + MapLibre GL JS map/3D app (MapMaker v1.2)
 **Researched:** 2026-02-28
-**Confidence:** MEDIUM-HIGH (Overture official docs + PMTiles/protomaps docs verified; some integration pitfalls are MEDIUM from training data + search corroboration)
+**Confidence:** HIGH for touch/WebGL interaction pitfalls (verified via Three.js issue tracker, R3F discussion threads, MDN); MEDIUM for animation/layout shift pitfalls (multiple corroborating sources, MDN + community patterns); LOW flagged individually where only single sources available.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: No Browser-Native REST API — Wrong Access Pattern
+### Pitfall 1: R3F Canvas Mounted in `display: none` Initializes at 300x150px and Never Recovers
 
 **What goes wrong:**
-The developer assumes Overture Maps has a REST endpoint like Overpass (POST a query, get GeoJSON back). It does not. Overture's official distribution is GeoParquet files on S3/Azure (230+ GB total for buildings). Calling S3 GeoParquet directly from a browser produces CORS errors and massive downloads. The app silently fetches nothing, or downloads hundreds of MB per request.
+When the R3F `<Canvas>` is first mounted inside a container that has `display: none`, Three.js reads the container dimensions at mount time and gets 0 (or the W3C default canvas size of 300x150). Even after the container becomes visible, the canvas does not automatically resize to fill its parent. The 3D scene renders at 300x150 and appears as a tiny square. The `visibility: hidden` pattern the app already uses for desktop (in SplitLayout.tsx) avoids this because the container still occupies layout space and has real dimensions — `display: none` removes the element from layout.
 
 **Why it happens:**
-Overpass has trained developers to expect "send a bbox query, get features back." Overture docs emphasize DuckDB, Python CLI, and BigQuery — server-side tools. Browser-friendly access options are buried in the PMTiles and Fused examples, not the main "Getting Data" page.
+R3F's `<Canvas>` resolves the WebGL viewport from the DOM container's `getBoundingClientRect()` at mount time. A `display: none` parent returns `{width: 0, height: 0}`. R3F uses these dimensions to set the renderer size. The R3F renderer does not poll for size changes — it relies on a ResizeObserver that fires when the container dimensions change, but if the container was already rendered at 0 and then becomes `display: block`, the ResizeObserver fires and the canvas recovers only if R3F re-mounts the Canvas at that point (which it does not by default).
 
 **How to avoid:**
-Use one of exactly two viable browser-accessible approaches:
-1. **PMTiles via HTTP Range Requests**: Overture publishes buildings as PMTiles archives at `https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/<RELEASE>/buildings.pmtiles`. Use the `pmtiles` npm package to decode specific tiles via HTTP Range Requests — no server, no full download. The library handles the range request math and MVT decoding.
-2. **Third-party bbox API (overturemapsapi.com)**: A community REST API wrapping Overture data. Requires an API key. Returns GeoJSON. Simpler to call but introduces a key management dependency and a third-party rate limit not under your control.
-
-Do not attempt to fetch GeoParquet from S3 directly in the browser. Do not build a server proxy unless the above two options are ruled out.
+Never use `display: none` on the container holding the R3F `<Canvas>`. Use `visibility: hidden` + `position: absolute` + `pointer-events: none` to hide it while preserving layout dimensions. This is exactly what the desktop SplitLayout branch already does correctly. The mobile branch in SplitLayout.tsx uses `display: block/none` on the container div — for v1.2, extend the `visibility:hidden` pattern to mobile as well. If the canvas must be conditionally mounted, unmount it entirely (conditional render) rather than `display: none`, so it re-mounts fresh when shown.
 
 **Warning signs:**
-- Search results returning large (>50 MB) responses for a modest bounding box
-- CORS preflight failures in the browser console on S3/Azure URLs
-- Network tab showing "content-type: application/octet-stream" for what you expected to be JSON
+- R3F canvas renders a tiny 300x150 square in the corner of the preview panel on first open
+- `gl.getParameter(gl.VIEWPORT)` in browser console returns `[0, 0, 300, 150]` after the panel becomes visible
+- The issue disappears on second open of the preview (after the canvas has unmounted and remounted)
 
 **Phase to address:**
-Phase 1 (Overture fetch strategy) — must be resolved before any other work; it determines the entire integration architecture.
+Phase 1 (Layout restructure) — apply `visibility: hidden` pattern consistently across all breakpoints; audit every conditional show/hide of the canvas container.
 
 ---
 
-### Pitfall 2: PMTiles S3 CORS Misconfiguration Silently Fails
+### Pitfall 2: OrbitControls Sets `touch-action: none` on the Canvas, Blocking Bottom Sheet Drag
 
 **What goes wrong:**
-PMTiles HTTP Range Requests require specific CORS headers from the S3 bucket. If `range` is not in `AllowedHeaders` and `etag` is not in `ExposeHeaders`, the browser's `pmtiles` library either hangs, throws a cryptic fetch error, or returns corrupted tile data. The failure mode is non-obvious — no "CORS blocked" error appears because the preflight OPTIONS may succeed while the actual range request fails.
+Three.js `OrbitControls` (and therefore `@react-three/drei`'s `<OrbitControls>`) sets `touch-action: none` on its DOM element (the canvas) unconditionally and without an opt-out mechanism. On mobile, any touch that starts over the R3F canvas is completely consumed by OrbitControls — the browser never fires `pointermove`/`touchmove` upward to ancestor elements. If the bottom sheet sits above the canvas in z-order and the user touches a drag handle that visually overlaps the canvas, the drag gesture is intercepted by OrbitControls and the sheet does not move. This is a known upstream issue filed against both three.js and drei.
 
 **Why it happens:**
-Overture's S3 bucket has CORS configured for their own hosted explorer domain. If you're developing on localhost or a different domain, the `AllowedOrigins` in their bucket policy may not include your origin. The PMTiles docs note that S3 only supports HTTP/1.1 (not HTTP/2), which affects how connections are reused. Developers configure `AllowedOrigins: ["*"]` but forget `AllowedHeaders: ["range", "if-match"]` and `ExposeHeaders: ["etag"]`.
+OrbitControls calls `event.preventDefault()` on all touch events to prevent iOS Safari from triggering its default pan/scroll behavior on the page body, which would conflict with 3D orbit. The CSS `touch-action: none` is the companion declarative instruction that tells the browser to hand all touch coordinates to JavaScript without attempting native scroll. This is correct behavior for a 3D viewport, but incorrect when the sheet drag handle needs to intercept vertical drags over the same screen region.
 
 **How to avoid:**
-If self-hosting a PMTiles extract: Set S3 CORS policy to exactly:
-```json
-[{
-  "AllowedOrigins": ["*"],
-  "AllowedMethods": ["GET", "HEAD"],
-  "AllowedHeaders": ["range", "if-match"],
-  "ExposeHeaders": ["etag"],
-  "MaxAgeSeconds": 3000
-}]
-```
-If relying on Overture's public S3 bucket: Test from your actual deployment domain before launch — the bucket CORS may allow `*` origins but future policy changes could break it. Cache a local extract to avoid runtime dependency on Overture's bucket policy.
+- Structure the z-order so the bottom sheet sits in the DOM above the canvas and uses `pointer-events: auto` on its drag handle with a high z-index. Touch events that start on the drag handle are captured by the sheet before reaching the canvas/OrbitControls.
+- Use `pointer-events: none` on the canvas container when a gesture is active in the sheet (toggle via Zustand state during sheet drag).
+- Alternatively, on mobile when the bottom sheet is at half or full height, call `controls.enabled = false` on the OrbitControls instance to stop it consuming events during sheet interaction.
+- Do NOT attempt to patch OrbitControls internals or remove `touch-action: none` from the canvas — this breaks pinch-to-zoom on the 3D view.
 
 **Warning signs:**
-- `pmtiles` library throws "ETag mismatch" or "416 Range Not Satisfiable"
-- Network tab shows OPTIONS succeeds but GET returns 403
-- Tiles load in production but not on localhost (origin-specific CORS)
+- Dragging the bottom sheet handle over the canvas area does nothing; the 3D view orbits instead
+- Sheet gesture listeners fire `touchstart` but never `touchmove`
+- `event.cancelable` is false on touch events that start over the canvas (browser has already decided due to `touch-action: none`)
 
 **Phase to address:**
-Phase 1 (Overture fetch strategy) — test CORS from localhost and from the production deployment domain before committing to PMTiles approach.
+Phase 2 (Bottom sheet implementation) — design the DOM layering and pointer-event toggling before wiring gesture detection. Test on real iOS hardware, not just Chrome DevTools touch simulation (DevTools does not emulate `touch-action` enforcement the same way).
 
 ---
 
-### Pitfall 3: Roofprint vs. Footprint Geometry Displacement
+### Pitfall 3: MapLibre Pan Gestures and Bottom Sheet Drag Conflict on Single-Touch
 
 **What goes wrong:**
-Overture buildings schema states geometry is "the most outer footprint or roofprint if traced from satellite/aerial imagery." ML-derived buildings (Google Open Buildings, Microsoft ML Buildings) are traced from above-nadir satellite imagery — the outlined polygon is a **roofprint**, not the ground footprint. For tall buildings at high latitudes or steep off-nadir imagery, the roofprint can be displaced 5–20 meters horizontally from the actual ground footprint. When these buildings are placed on terrain and extruded downward, the base sits in the wrong location. In 3D printing this means buildings that visibly don't sit where they should, and potential floating/sunken artifacts.
+On mobile, when the bottom sheet is in peek or half height, the visible map area beneath the sheet can still receive touch events if the sheet's drag handle has `pointer-events: none` or if the user touches the sheet body area where the map is partially visible. MapLibre's `DragPanHandler` consumes single-finger drag events for map panning. A bottom sheet that uses `pointermove` to detect vertical drag direction will race with MapLibre for the same touch stream. The result: either the sheet never drags (MapLibre wins), or the map never pans when the user intends to move it (sheet wins), or the behavior flickers unpredictably.
 
 **Why it happens:**
-Developers treat all Overture geometry as ground-truth footprints, the same way OSM `way["building"]` geometries always represent the ground plan. OSM mappers draw footprints from street-level knowledge or near-nadir imagery. Overture's ML sources use raw satellite imagery where parallax displacement is uncompensated.
+Both handlers listen at the `document` or container level. The sheet drag handler tries to detect "is this drag predominantly vertical?" before deciding to handle it, but MapLibre's pan handler has already called `setPointerCapture` on the first `pointerdown`, claiming exclusive ownership of the touch sequence. Once pointer capture is set, `pointermove` events only go to the capturing element — the sheet's gesture detector receives nothing.
 
 **How to avoid:**
-- Accept the displacement as a known limitation of ML-derived data — it only affects the gap-fill buildings (Overture-only, not in OSM). OSM buildings in the app are correct.
-- Add a note in the UI or documentation that Overture gap-fill buildings are approximate positions.
-- Do NOT attempt to correct displacement: you don't have building height + imagery metadata needed to compute the correction vector. The cost exceeds the benefit for 3D printing at typical model scales (4 km² → ~40mm × 40mm model; a 10m displacement = ~0.1mm error — below print resolution).
-- At small model scales (< 1 km²), consider suppressing Overture gap-fill if the displacement would be more noticeable.
+- Give the sheet drag handle its own dedicated element with sufficient hit area (44px minimum per Apple HIG) that sits above the map in z-order and stops event propagation at the handle level (`e.stopPropagation()`). Only the drag handle element should initiate sheet movement; touching the sheet body should pass through to the map.
+- For the sheet body area: use `touch-action: pan-y` so the browser natively distinguishes vertical scroll (sheet content scroll) from the map below.
+- When the sheet is in full-height position, disable MapLibre's drag pan (`map.dragPan.disable()`) since the map is invisible; re-enable when sheet returns to peek.
+- Consider MapLibre's `cooperative gestures` mode during sheet animation to suppress accidental map panning.
 
 **Warning signs:**
-- Gap-fill buildings appear offset from roads or parcel lines in the 3D preview
-- Buildings from `sources[0].dataset = "microsoftMLBuildings"` or `"googleOpenBuildings"` cluster around a displaced zone
+- Tapping and dragging upward on the sheet initiates a map pan instead of expanding the sheet
+- `pointercancel` fires on the sheet drag gesture handler immediately after `pointerdown` (MapLibre claimed capture)
+- Map pans wildly when user intends to drag the bottom sheet closed
 
 **Phase to address:**
-Phase 2 (data quality and parser) — document this in code comments when parsing Overture source properties.
+Phase 2 (Bottom sheet implementation) — the gesture boundary between sheet and map must be explicitly designed, not left to chance event propagation.
 
 ---
 
-### Pitfall 4: Spatial Deduplication False Negatives — Buildings Rendered Twice
+### Pitfall 4: iOS Safari Viewport Height Causes Layout Overflow or Bottom Sheet Clipping
 
 **What goes wrong:**
-Overture already includes OSM data internally. If you fetch Overture buildings AND OSM buildings for the same area, many buildings appear in both datasets. Naive deduplication by centroid proximity or bounding box overlap fails to catch all duplicates — especially for large irregular buildings (L-shaped, U-shaped, courtyard buildings) where centroid distance is large despite 100% footprint overlap. The result is buildings rendered twice on top of each other, doubling wall thickness and making the STL non-manifold.
+On iOS Safari, `100vh` computes to the full screen height including the browser chrome (address bar + bottom toolbar). When the toolbar collapses on scroll, `100vh` is larger than the visual viewport, causing layout overflow — the bottom sheet peek position appears below the fold and the user never sees it. Additionally, the bottom safe area inset (`env(safe-area-inset-bottom)`) is non-zero on devices with home indicator but only works when `viewport-fit=cover` is set in the `<meta viewport>` tag. Without it, the sheet's bottom edge sits behind the home indicator bar.
 
 **Why it happens:**
-Developers pick an "obvious" deduplication heuristic: "if centers are within X meters, they're the same building." This works for rectangular buildings but fails badly for complex shapes. Overture's own internal deduplication uses IoU ≥ 50% (Intersection over Union), which requires polygon intersection area computation — a more expensive operation that developers skip for performance.
+Safari's handling of viewport height is inconsistent with other browsers. The `100vh` unit is calculated from the "layout viewport" which includes dynamic browser chrome. The `100dvh` (dynamic viewport height) unit was introduced specifically to fix this, computing height based on the currently visible viewport. Developers who test on desktop Chrome or Android miss these iOS-specific behaviors entirely.
 
 **How to avoid:**
-Use IoU-based spatial deduplication. For each Overture footprint, compute intersection area with each OSM footprint in the same spatial neighborhood (grid-bucketed for performance). If `intersection_area / union_area > 0.5`, the Overture feature is a duplicate of the OSM feature. Drop the Overture feature (OSM preferred per the project spec).
-
-Implementation shortcut: Use a bounding box pre-filter to narrow candidates, then run Sutherland-Hodgman polygon clipping only on candidate pairs. Libraries: `polygon-clipping` (npm) handles GeoJSON polygon intersection and difference. Avoid full O(n²) comparison — bucket OSM buildings by a spatial grid first.
+- The app already uses `height: 100dvh` with a `100vh` fallback in `src/index.css` — this is correct for the root. Ensure the same pattern applies to the sheet's height calculations, not hardcoded pixel values.
+- Add `viewport-fit=cover` to the `<meta name="viewport">` tag in `index.html`.
+- Use `padding-bottom: env(safe-area-inset-bottom, 0px)` (or `max(8px, env(safe-area-inset-bottom, 8px))`) on the sheet's inner content — already partially done in the current MobileSidebar. Apply this consistently in the new bottom sheet component.
+- Set snap height percentages relative to `100dvh`, not `100vh` or pixel values.
+- Test on a real iPhone with Safari, not just Chrome DevTools device simulation (DevTools does not simulate the bottom toolbar dynamic behavior or home indicator safe area).
 
 **Warning signs:**
-- Dense urban areas show suspiciously thick building walls in the STL
-- STL non-manifold errors reported by slicer on buildings in well-covered OSM areas
-- `manifold-3d` reports internal intersecting faces at building positions
+- On iPhone 14/15 in Safari, the bottom of the sheet is cut off or appears behind the home indicator
+- Layout overflow causes a faint scrollbar to appear on the body (which should be `overflow: hidden`)
+- Sheet peek position is not visible when the Safari toolbar is in its expanded state
 
 **Phase to address:**
-Phase 3 (deduplication logic) — this is the highest complexity phase; requires unit tests with known duplicate/non-duplicate building pairs.
+Phase 1 (Layout restructure) — set up `viewport-fit=cover` and safe area inset variables as a global foundation before any sheet geometry is calculated. Phase 2 (Bottom sheet) — apply `dvh`-relative snap points.
 
 ---
 
-### Pitfall 5: Overture Includes OSM Data — IoU Deduplication Still Misses Edge Cases
+### Pitfall 5: CSS Transitions on Map/Canvas Container Cause Rendering Glitch During Resize
 
 **What goes wrong:**
-Overture re-publishes OSM buildings as part of their dataset (OSM is their highest-priority source). You might think: "since Overture already deduped against OSM, I can trust Overture is only gap-fills." This is wrong. Overture's IoU threshold is 50% — buildings with 40% overlap (e.g., neighboring buildings sharing a party wall) survive as distinct features in Overture even though they're in OSM. When you stack your OSM query result on top of Overture data without your own deduplication, you'll double-render OSM buildings that Overture kept as separate from themselves.
-
-Additionally, OSM data has changed since the last Overture release (Overture releases ~monthly). Newly added OSM buildings won't be in the Overture dataset yet, but the older version of those buildings may be in Overture under a slightly different geometry.
+When animating the width or height of the MapLibre container (e.g., the map pane shrinking to make room for a sidebar, or a tab-switch animation), the map canvas internally renders at the old dimensions during the CSS transition. MapLibre's ResizeObserver fires on every frame of the transition, calling internal `resize()` continuously. This causes the map to "stutter" — tiles re-render at intermediate sizes, the canvas flickers, and satellite imagery tiles reload for the new viewport. On low-power mobile devices this can cause visible frame drops (< 20 fps) for the duration of the 300ms transition.
 
 **Why it happens:**
-Trusting Overture's internal deduplication as a substitute for your own. Overture is designed for map rendering, not for feeding a secondary OSM-merge pipeline.
+MapLibre GL v3+ uses a ResizeObserver to automatically resize its canvas when the container element changes size. This is correct behavior for programmatic resize, but it was not designed for animated CSS transitions where the container changes size on every rendered frame. The map's WebGL render loop runs at 60fps and must regenerate draw calls at each intermediate size, which is expensive.
 
 **How to avoid:**
-Always run your own IoU deduplication pass after fetching both datasets, regardless of what Overture has done internally. Treat any Overture feature with `sources[0].dataset == "OpenStreetMap"` with extra skepticism — flag it and prefer the raw OSM version from your Overpass query which is more current.
+- Avoid animating `width`, `height`, or `flex` values on the map container directly. Instead, animate an overlay or a sibling element and use `transform: translateX()` on the canvas container — `transform` changes do not trigger layout and do not fire ResizeObserver.
+- If width/height animation is unavoidable (e.g., sidebar slide-in pushes the map), wait for the CSS transition to complete before calling `map.resize()` once: attach a `transitionend` listener and call `map.resize()` inside it.
+- Consider using `visibility` toggling with instant layout changes (no transition on the map container) and only animate UI elements that don't contain WebGL canvases.
 
 **Warning signs:**
-- Buildings in OSM-dense areas (central London, Manhattan) appear in both datasets with slightly different geometries
-- Overture features tagged with dataset "OpenStreetMap" that have slightly different ring vertices from your Overpass result
+- During view-switch animation (map to preview), the map canvas flickers or shows tearing
+- Satellite imagery tiles appear at incorrect zoom levels during the animation
+- MapLibre fires `movestart`/`moveend` events during what should be a static viewport transition
 
 **Phase to address:**
-Phase 3 (deduplication logic) — add a `sources` property check: prefer Overpass result whenever Overture's source is OpenStreetMap.
+Phase 3 (Transitions and animations) — design all animation keyframes to avoid triggering MapLibre ResizeObserver. Test transitions on mid-range Android hardware, not just desktop.
 
 ---
 
-### Pitfall 6: Height Property Is Null for the Majority of ML-Derived Buildings
+### Pitfall 6: iOS Safari Rubber Banding Breaks Bottom Sheet Dismissal Gesture
 
 **What goes wrong:**
-The Overture `height` property is optional (`float64 | null`). For ML-derived buildings (Microsoft and Google), height is almost universally null — these are 2D footprints only. The app's existing height fallback cascade (`height` → `building:levels * 3m` → `4m default`) was designed for OSM data where `building:levels` is often present. Overture ML buildings have neither `height` nor `num_floors`. Every gap-fill building falls through to the default height, resulting in a uniform 4m stub across the entire gap-fill layer.
+iOS Safari applies elastic overscroll ("rubber banding") to any element — including the document body. When a bottom sheet is open and the user drags upward past the sheet's maximum extent, or drags down from the sheet to dismiss it past the fully-closed position, iOS rubber banding kicks in and the body bounces. The gesture handler loses track of where "zero" is, causing the sheet to spring back to a random position rather than snap to a defined stop point. The sheet can also remain stuck in a mid-state that its gesture logic does not recognize.
 
-This is acceptable (the spec says "flat roof, default height") but developers often don't realize it happens for 99%+ of Overture features and try to implement more complex height logic that finds nothing.
+**Why it happens:**
+iOS Safari does not fully honor `overscroll-behavior: none` on the document body in all versions. The rubber banding effect is a native layer above CSS — it applies to the visual viewport itself, not the scroll container. When the user's gesture extends beyond the sheet's drag range, the visual viewport starts to shift, which the sheet's gesture logic interprets as continued drag movement.
 
 **How to avoid:**
-Explicitly document in the parser that Overture gap-fill buildings default to a single configurable height constant (e.g., 4m). Do NOT implement complex height inference for Overture buildings — it won't find data that doesn't exist.
-
-Apply the default height directly in the Overture parser, before it reaches the shared building geometry pipeline. This makes it explicit and keeps the shared pipeline clean.
+- Set `overscroll-behavior: none` on `body` (already in `src/index.css`) and additionally on the sheet container element itself.
+- Clamp the sheet's `translateY` transform in the gesture handler — do not allow it to go above 0 (fully expanded) or below the peek position when dismissing. Clamp to valid snap-point range before updating the DOM.
+- When implementing gesture velocity for snap-to-stop: measure velocity over the last 100ms window, not the full gesture distance, to avoid overscroll frames inflating the perceived velocity.
+- Avoid using `scroll` events to drive the sheet position — use `pointer` or `touch` events directly where you have full control over coordinate clamping.
 
 **Warning signs:**
-- All Overture buildings render at exactly 4m height regardless of building type
-- Height inference code returns the same fallback for >95% of Overture features
-- Significant time spent debugging "why is height null" when the answer is simply "it's ML data"
+- Sheet snaps to wrong position after fast swipe-to-dismiss on iPhone
+- After dismissal, a faint visual shift of the body is visible (rubber band recovery)
+- Sheet appears to "jump" when the drag overshoots the minimum extent
 
 **Phase to address:**
-Phase 2 (Overture parser) — hardcode the gap-fill height constant clearly and document why.
+Phase 2 (Bottom sheet implementation) — velocity clamping and overscroll containment must be part of the initial gesture design, not a post-launch fix.
 
 ---
 
-### Pitfall 7: Data Volume Blowup in Dense Cities
+### Pitfall 7: Two Instances of `useIsMobile` Hook Create Hydration-Style Inconsistency
 
 **What goes wrong:**
-Overture has 2.3+ billion building footprints globally, with very high density in urban areas. A 4 km² bounding box over central Tokyo or Manhattan could return 5,000–15,000 Overture buildings. Combined with OSM buildings (already dense in these areas), the merged feature array may reach 20,000+ features. The existing browser memory cap (25 km² hard limit) was designed for OSM density, which is lower than Overture density in covered areas. Processing 20,000 buildings in the Web Worker causes:
-- Worker postMessage transfer of enormous ArrayBuffers
-- Three.js `mergeGeometries` slow on 20,000+ geometries
-- Total VRAM for the merged BufferGeometry exceeds WebGL limits
+The codebase currently has `useIsMobile` defined identically in both `SplitLayout.tsx` and `Sidebar.tsx`. Each instance independently reads `window.innerWidth` on initial render and then subscribes to `matchMedia` changes. If these two components are ever in different React render batches at a breakpoint boundary (e.g., during a resize animation or a fast orientation change), they can briefly return different values — one saying "mobile" while the other says "desktop." This causes layout conflicts: the Sidebar renders its mobile bottom sheet while SplitLayout renders the desktop side-by-side view.
 
 **Why it happens:**
-Overture gap-fill only adds buildings where OSM is absent. In practice, the OSM coverage "gaps" at the scale of a 4 km² bbox are often in moderate-density areas. But in cities where OSM has good coverage of main buildings but misses small structures (sheds, garages, kiosks), Overture can add thousands of small ML-detected features.
+Duplicated state that should be a single source of truth. The two hooks are independent React state instances, so React's reconciliation cannot guarantee they update atomically. On a device rapidly crossing the 768px threshold (e.g., iOS split-view mode), this becomes a real edge case.
 
 **How to avoid:**
-- Apply a minimum area threshold when parsing Overture buildings. Overture already excludes features below their internal minimum, but applying an explicit area filter (e.g., skip buildings with footprint area < 15 m²) removes the shed/kiosk noise that doesn't matter at 3D printing scale.
-- Cap total combined feature count before mesh generation. If OSM + Overture exceeds the soft limit (e.g., 8,000 buildings for a 4 km² box), sample the Overture gap-fills down rather than reject the entire request.
-- Run deduplication before merging geometry (not after) to remove duplicates early.
+- Extract breakpoint state into the Zustand store or a single shared context/hook at the app root level.
+- For v1.2, the migration to a three-tier breakpoint system should define breakpoints once (e.g., in a `useBreakpoint` hook or as Zustand state) and import it everywhere. All layout components read from one source.
+- Alternatively, drive layout with CSS media queries only (no JavaScript at all for breakpoints) using CSS custom properties and `@media` queries. Reserve JavaScript breakpoint detection for behaviors that cannot be done in CSS (e.g., disabling MapLibre pan on mobile).
 
 **Warning signs:**
-- `buildAllBuildings` call takes > 3 seconds in the Web Worker for dense areas
-- Browser tab memory climbs above 1.5 GB on Manhattan or Tokyo bounding boxes
-- `mergeGeometries` throws "WebGL: INVALID_OPERATION: drawElements: no buffer is bound to enabled attribute" (buffer size overflow)
+- Brief flash of incorrect layout at breakpoint boundary (e.g., mobile sheet appears while side-by-side layout is active)
+- Console warnings about state update batching during rapid window resize
+- Different components disagreeing about layout tier at the same moment
 
 **Phase to address:**
-Phase 3 (deduplication) and Phase 4 (geometry generation) — add area filter in the Overture parser (Phase 2) and feature count cap before geometry generation (Phase 4).
-
----
-
-### Pitfall 8: Ring Winding Order Inconsistency Between OSM and GeoJSON
-
-**What goes wrong:**
-The existing OSM building parser produces rings in OSM's winding convention (first vertex repeated at the end, removed by `stripClosingVertex`). Overture buildings arrive as GeoJSON Polygons/MultiPolygons following RFC 7946: exterior rings counter-clockwise, hole rings clockwise, no closing vertex duplication. If the Overture parser passes rings directly to the shared `buildAllBuildings` pipeline without ensuring consistent winding:
-- Earcut may triangulate holes as exterior rings, producing inside-out caps
-- The `computeSignedArea` sign check (used to detect clockwise vs. counter-clockwise) may flip, affecting hole detection
-- STL faces have inverted normals for Overture-derived buildings
-
-**Why it happens:**
-OSM rings from Overpass `out geom` already include the closing duplicate vertex. GeoJSON does not include closing duplicates. Developers pass Overture GeoJSON rings directly to code written for OSM rings, bypassing `stripClosingVertex` (which is a no-op on GeoJSON rings since first != last vertex), and don't verify winding assumptions.
-
-**How to avoid:**
-- In the Overture parser, normalize all rings to the same convention used by the OSM parser before passing to shared geometry code.
-- Specifically: GeoJSON exterior rings should be in CCW order per RFC 7946 — verify this and do NOT call `stripClosingVertex` (there is no closing vertex to strip in valid GeoJSON).
-- Write a unit test with a known Overture polygon and verify that `computeSignedArea` returns positive for the exterior ring (CCW) and negative for holes (CW), matching the OSM pipeline's expectations.
-
-**Warning signs:**
-- Overture buildings have visually correct shapes but faces are dark/black (inverted normals)
-- Earcut returns empty or wrong triangulation for Overture multi-polygon buildings
-- `computeSignedArea` returns negative for what should be an exterior ring
-
-**Phase to address:**
-Phase 2 (Overture parser) — normalize rings immediately after GeoJSON parsing, before any shared geometry code is called.
-
----
-
-### Pitfall 9: MultiPolygon Buildings Not Handled
-
-**What goes wrong:**
-Overture building geometry is declared as "Polygon or MultiPolygon." Simple rectangular buildings are Polygons. Complex buildings (campus buildings, buildings with multiple distinct footprints under one roof) are MultiPolygons. The existing OSM parser handles OSM `relation["building"]["type"="multipolygon"]` but converts them to individual `BuildingFeature` objects (one outer ring + holes). An Overture MultiPolygon building with disconnected rings passed as a single `BuildingFeature` will fail earcut triangulation and be silently skipped.
-
-**Why it happens:**
-Developers parse `feature.geometry.type === "Polygon"` and forget to handle `"MultiPolygon"`. The Overture schema allows both, and ML-derived buildings occasionally produce multi-part geometries for buildings that appear contiguous in imagery but are geometrically separated.
-
-**How to avoid:**
-In the Overture parser, explicitly check `geometry.type`. For `"MultiPolygon"`, emit one `BuildingFeature` per polygon ring group (each entry in `coordinates[]`). This matches how the OSM relation parser already decomposes building relations into separate features.
-
-**Warning signs:**
-- Some large complex buildings are missing from the Overture gap-fill layer
-- Parser returns fewer features than expected for known campus/complex sites
-- `buildSingleBuilding` throws on rings with coordinates embedded in a nested extra array
-
-**Phase to address:**
-Phase 2 (Overture parser) — MultiPolygon must be handled in the initial parse, not discovered later.
-
----
-
-### Pitfall 10: Overture Release Version Drift
-
-**What goes wrong:**
-Overture releases new dataset versions approximately monthly. PMTiles URLs embed the release date: `https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2024-08-20/buildings.pmtiles`. If the app hardcodes a release date URL, it will eventually serve stale data — or worse, the URL 404s when Overture rotates old releases off S3. Requests for that URL return empty results or errors, and users see no gap-fill buildings with no explanation.
-
-**Why it happens:**
-Developers hardcode the PMTiles URL that works at development time. Overture does not guarantee permanent URL retention for old releases.
-
-**How to avoid:**
-- Check Overture's STAC catalog (Overture adopted STAC in February 2026) to discover the latest release URL dynamically, rather than hardcoding.
-- Alternatively, hardcode the URL but pin it to a known stable release, and add a comment marking it as "needs periodic review."
-- Log a warning in the app if the PMTiles fetch returns 404, with a fallback to OSM-only mode rather than a hard failure.
-
-**Warning signs:**
-- PMTiles fetch returns HTTP 404 or 403 for a previously working URL
-- Users report gap-fill buildings suddenly disappeared after an Overture release cycle
-
-**Phase to address:**
-Phase 1 (Overture fetch strategy) — implement URL discovery or fallback-to-OSM-only as part of the initial fetch design.
+Phase 1 (Layout restructure) — consolidate all breakpoint detection into a single source before building the three-tier system on top of it.
 
 ---
 
@@ -255,78 +178,78 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Skip IoU deduplication, use centroid distance | Simpler code, faster | Double-renders complex buildings; non-manifold STL in OSM-covered areas | Never — IoU is required for correctness |
-| Trust Overture's internal OSM deduplication | No need for own dedup logic | Overture data lags OSM by up to 1 month; re-duplicate in areas with recent OSM edits | Never |
-| Hardcode Overture PMTiles URL with release date | Works immediately | 404s when Overture rotates old releases; silent data failure | Acceptable as MVP with mandatory "needs review" comment and 404-fallback |
-| Pass all Overture features to geometry pipeline without area filter | Simplest code | OOM on dense urban bounding boxes; 10k+ tiny sheds | Never — apply minimum 15 m² area filter |
-| Use default 4m height for ALL Overture buildings without documenting why | Avoids complex height logic | Future developers re-investigate, waste time, find same null result | Acceptable — but MUST be documented with a comment explaining ML source lacks height data |
-| Fetch both OSM and Overture unconditionally | Simpler control flow | Overture fetch may fail (CORS, 404) and break building layer entirely | Never — Overture must be a fallback that degrades gracefully to OSM-only |
+| Use `display: none` to hide the R3F canvas on mobile | Simple conditional render logic | Canvas initializes at 300x150; requires remount cycle to recover; kills the instant-preview UX | Never — use `visibility: hidden` pattern |
+| Hardcode breakpoints as magic numbers (768, 1024) in multiple files | Works immediately | Two independent copies diverge during refactor; breakpoint changes require grep-and-replace | MVP only, with a follow-up task to consolidate |
+| Animate `width/height` on MapLibre container | Familiar CSS pattern | ResizeObserver fires on every frame; map flickers and re-renders tiles; janky on mobile | Never for map container — use `transform` or instant swap |
+| Drive sheet position from `scroll` events | Easy to hook into native scroll | `scroll` events are passive by default and cannot call `preventDefault`; cannot prevent body scroll chaining | Never for bottom sheet gesture |
+| Disable OrbitControls globally on mobile | Fixes touch conflict immediately | Removes 3D orbit entirely on mobile; 3D preview becomes unusable | Acceptable as a temporary workaround during sheet-gesture development only |
+| Use `window.innerWidth` synchronously in component initialization | Simple, no hook needed | Server/SSR risks aside, fires before CSS layout is ready; misreads at subpixel boundaries | Never in a component that renders layout — use `matchMedia` |
+| Apply `will-change: transform` to every animated element | Promotes to GPU layer | Excessive GPU layers on mobile cause OOM; on old iPhones even 8 will-change elements can crash the tab | Only on elements actively animating, removed after transition ends |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting Overture Maps data to the existing pipeline.
+Common mistakes when adding responsive features to the existing MapLibre + R3F stack.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| PMTiles fetch | Fetching the full PMTiles archive file (230 GB) | Use `pmtiles` npm library with HTTP Range Requests — fetches only the tile(s) covering the bbox |
-| Overture S3 CORS | Missing `range` in `AllowedHeaders`, `etag` in `ExposeHeaders` | Set exact S3 CORS policy per Protomaps docs; test from production domain, not just localhost |
-| Ring parsing | Calling `stripClosingVertex` on GeoJSON rings (no-op but may reveal wrong assumptions) | GeoJSON rings have no closing vertex; skip `stripClosingVertex`; verify winding direction separately |
-| MultiPolygon handling | Passing `geometry.coordinates` of a MultiPolygon directly as a ring array | Check `geometry.type`; for MultiPolygon, iterate `coordinates[]` and emit one `BuildingFeature` per polygon entry |
-| Height resolution | Running existing OSM height fallback cascade on Overture features | Overture ML features have no `num_floors` or height tags; default to a flat constant immediately in the Overture parser |
-| Deduplication | Running dedup after geometry generation | Dedup before geometry generation — cheaper to compare polygons than dispose BufferGeometries |
-| Overture source check | Ignoring `sources[0].dataset` property | Check dataset name; features with `dataset == "OpenStreetMap"` should defer to the live Overpass result |
-| Error handling | Throwing on Overture fetch failure | Overture fetch failure MUST fall back silently to OSM-only; buildings are a degraded-but-functional layer |
+| R3F `<Canvas>` + CSS hide | Hiding canvas container with `display: none` | Use `visibility: hidden` + `pointer-events: none`; never `display: none` on a mounted canvas |
+| OrbitControls + touch | Expecting touch events to bubble past canvas | Structure DOM so sheet drag handle is above canvas in z-order and stops propagation at handle |
+| MapLibre + sheet drag | Letting both handlers compete for the same pointerdown | Disable MapLibre pan during sheet gesture; use `setPointerCapture` on the sheet handle exclusively |
+| MapLibre + CSS transition | Animating the map container's width/height | Animate a wrapper via `transform: translateX`; call `map.resize()` once on `transitionend` |
+| iOS safe areas | Forgetting `viewport-fit=cover` in `<meta viewport>` | Add to `index.html`; all safe-area `env()` values return 0 without this |
+| iOS 100dvh | Using `100vh` for full-height sheet | Use `100dvh` with `100vh` fallback; test on real Safari; DevTools device sim does not reproduce the toolbar dynamic height |
+| iOS rubber banding | Relying on `overscroll-behavior: none` alone to stop body bounce | Also clamp sheet transform in gesture handler; `overscroll-behavior` is partially unsupported on iOS |
+| Breakpoint JS + CSS | Duplicating breakpoint value (768) in multiple hooks and CSS | Define breakpoints once; use CSS `@media` for layout, single JS hook for behavior-only logic |
+| Animation + WebGL | Running CSS keyframe animations on elements that overlap the WebGL canvas | Keep animated elements on separate GPU layers (`transform/opacity` only); avoid `filter`, `box-shadow`, `clip-path` near the canvas |
 
 ---
 
 ## Performance Traps
 
-Patterns that work at small scale but fail with dense urban Overture data.
+Patterns that work fine on desktop but degrade on mobile with WebGL running alongside.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| O(n²) IoU deduplication | Dedup takes > 10 seconds for dense cities | Pre-bucket OSM features by spatial grid; only test Overture against OSM features in adjacent cells | ~500 OSM buildings + 500 Overture candidates → 250,000 comparisons |
-| No area threshold on Overture features | 10,000+ tiny sheds/kiosks included; Worker OOM | Filter Overture features with footprint area < 15 m² before dedup or geometry generation | Any urban bbox with ML-derived data |
-| Sequential OSM + Overture fetch (await one, then other) | Total fetch time = OSM time + Overture time | Run both fetches in parallel with `Promise.all`; either can fail independently | Always — serial fetch is always slower |
-| Merging Overture and OSM geometries into one giant BufferGeometry pre-filtering | `mergeGeometries` slow; can't selectively discard duplicates | Deduplicate feature arrays first; only merge geometries for surviving features | > 2,000 buildings total |
-| PMTiles tile over-fetch (fetching zoom level 0) | Downloads entire world or continent tile | Use zoom level 14–15 for building detail; `pmtiles` library picks correct zoom from bbox automatically | Any bbox request |
-
----
-
-## Security Mistakes
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Embedding a third-party Overture API key in client-side JavaScript bundle | API key exposed; third party can rack up costs against your key | Use the official PMTiles approach (no key needed) or proxy the third-party API through a minimal server-side function that injects the key |
-| Fetching from Overture S3 with `AllowedOrigins: ["*"]` in production | Any site can use your S3 bucket as a CORS proxy for Overture data | If self-hosting a PMTiles extract, restrict `AllowedOrigins` to your production domain + localhost for development |
+| CSS `filter` or `backdrop-filter` on elements overlapping WebGL canvas | Severe jank (< 20 fps) on mid-range Android during animations; causes compositor to rasterize layers containing the canvas | Use `background-color` with opacity instead of `backdrop-filter` for sheet background; or accept that backdrop-filter is desktop-only | Any mobile device with a GPU budget shared between WebGL and compositing |
+| Too many `will-change` promotions | Tab crashes on older iPhones (2GB RAM devices); excessive VRAM use | Only apply `will-change: transform` immediately before animation starts; remove it immediately after | More than ~6 promoted layers on an iPhone 12 or older |
+| Animating `height` for snap transitions | Triggers layout on every frame; 300ms transition causes 18 reflows | Use `transform: translateY()` for sheet snap animation — translate does not trigger layout | Every frame during animation |
+| Sheet gesture using passive scroll events | Cannot call `preventDefault`; body scrolls behind the sheet during drag | Use `pointerdown/pointermove` with `{passive: false}` for the gesture; keep content scroll passive | Always — passive scroll cannot prevent body scroll chain |
+| Framer Motion animating too many elements while WebGL renders | Both share the main thread rAF; when mesh generation Worker finishes and posts result, React's state update + Framer Motion's animations all queue in same frame | Use CSS transitions for layout-level animations (not Framer Motion); reserve Framer Motion for micro-interactions only | During mesh generation → preview transition |
+| `window.addEventListener('resize', handler)` without debounce | MapLibre resize fires hundreds of times per second during animation; map re-renders at every intermediate size | Use ResizeObserver (already in MapLibre v3+) or debounce window resize handler to 100ms | Any animated layout change |
 
 ---
 
 ## UX Pitfalls
 
+Common user experience mistakes when adding responsive features to a tool-heavy map app.
+
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Silently adding thousands of tiny shed/kiosk buildings from Overture ML data | Model looks cluttered with meaningless structures; STL quality degraded | Apply area threshold (≥ 15 m²) to filter out sub-scale features; user expects buildings, not every shed |
-| No visual distinction between OSM buildings and Overture gap-fills in preview | User cannot identify data quality difference | Per spec, no UI changes are needed; but consider a subtle console log or dev-mode indicator during development |
-| Overture fetch timeout blocks the Generate button | User waits indefinitely if Overture S3 is slow | Set a 5-second timeout on the Overture fetch; on timeout, proceed with OSM-only and log a warning |
-| Gap-fill buildings appear in correct-coverage areas when OSM is used | User notices duplicates or double walls in STL | Confirm deduplication runs before geometry; test in a known well-covered OSM city (e.g., central Berlin) |
+| Bottom sheet covers the bounding box draw button on mobile | Users cannot draw a selection area with the sheet open | At peek height, sheet must not overlap the MapLibre map's interactive controls; design snap heights with button clearance in mind |
+| Sheet half-open state blocks map interaction without providing controls | User is stuck: map is covered, controls aren't visible | Either make the sheet fully scrollable at half height with all controls, or go directly from peek to full; do not leave a useless intermediate state |
+| Tab switch (Map/Preview) while mesh is generating clears visual feedback | User switches to map thinking generation failed; spinner disappears | Persist generation progress indicator in a persistent location (top bar) outside the tab content area |
+| Orbit controls with default settings allow camera to go underground | On mobile with one-finger pan enabled, users accidentally flip the terrain upside down | Set `minPolarAngle` and `maxPolarAngle` on OrbitControls to prevent camera going below terrain plane; already important on desktop but especially noticeable on touch |
+| Sheet drag handle target too small for fat fingers | Users miss the handle and accidentally pan the map | Minimum 44x44pt hit target (Apple HIG); use a wide invisible touch target above the visible handle bar |
+| No visual feedback during sheet snap | Sheet jumps to snap position; feels broken | Use CSS `transition: transform 250ms ease-out` when releasing drag; only disable transition during active drag |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
+Things that appear complete in desktop browser testing but fail on real mobile devices.
 
-- [ ] **Overture fetch returns data:** Verify with an OSM-sparse area (rural Sub-Saharan Africa, rural India) — not just a well-mapped city where Overture and OSM fully overlap.
-- [ ] **Deduplication works:** Verify with a bounding box containing a known complex (L-shaped or courtyard) building in both OSM and Overture; assert it appears only once in the STL.
-- [ ] **Overture fetch failure gracefully degrades:** Kill the Overture endpoint (wrong URL, timeout); assert the app still produces a valid OSM-only STL without UI errors.
-- [ ] **Height defaults to constant:** Verify that 100% of Overture features with `null` height use the documented default, not `NaN` or 0 (which would produce zero-height buildings).
-- [ ] **MultiPolygon buildings present:** Check the output for a known campus or complex site; assert buildings from MultiPolygon geometry appear in the model.
-- [ ] **Winding order correct for Overture rings:** Verify Overture buildings have correctly oriented face normals in the 3D preview (not black/inverted).
-- [ ] **Area filter in place:** Log the count of Overture features before and after the area filter; confirm small features are excluded.
-- [ ] **Existing OSM building tests still pass:** The Overture integration must not regress OSM building behavior; run `npx vitest run` before shipping.
+- [ ] **Canvas hide/show:** Open Preview tab on mobile, switch to Map tab, switch back — verify the canvas is at full size and rendering correctly (not 300x150).
+- [ ] **Sheet gesture on canvas overlap:** When bottom sheet is at peek height with canvas visible behind it, drag the sheet handle upward — verify the sheet expands and the 3D view does not orbit.
+- [ ] **Map pan vs sheet dismiss:** With sheet at half height, finger-drag downward on the map area below the sheet — verify the map pans, not the sheet dismisses.
+- [ ] **iOS safe area:** On iPhone with home indicator, verify the sheet's bottom edge and the peek-height handle are fully above the home indicator bar (not clipped by it).
+- [ ] **iOS 100dvh:** On Safari iPhone, verify no body scrollbar appears and the layout exactly fills the visual viewport without overflow.
+- [ ] **Rubber banding:** Fast swipe-to-dismiss on iPhone — verify the sheet snaps cleanly to peek/closed without body bounce visible behind it.
+- [ ] **Breakpoint consistency:** Resize browser window through 768px rapidly — verify no flash of both mobile sheet and desktop sidebar simultaneously.
+- [ ] **Animation + generation:** Start mesh generation, then immediately switch to Preview tab — verify the loading indicator is still visible and animation does not drop below 30fps.
+- [ ] **MapLibre after layout change:** After sidebar slide-in on tablet, verify the map tiles fill the correct viewport (no gray area on the right edge from stale canvas dimensions).
+- [ ] **will-change cleanup:** After sheet snap animation completes, verify the sheet element no longer has `will-change: transform` in computed styles (not a GPU memory leak).
 
 ---
 
@@ -336,13 +259,13 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| PMTiles CORS failure in production | LOW | Add correct CORS headers to S3 bucket policy; no code change needed; deploy in minutes |
-| Double-rendered buildings causing non-manifold STL | MEDIUM | Tighten IoU threshold or add source-ID matching; redeploy; no user migration needed |
-| Overture URL 404 after release rotation | LOW | Update hardcoded URL to latest release; redeploy; add STAC discovery logic to prevent recurrence |
-| OOM from too many Overture features | LOW | Lower area threshold; add feature count cap before geometry generation; redeploy |
-| Roofprint displacement complaints | LOW | Document as known limitation; optionally suppress Overture gap-fills for small bbox scales |
-| Inverted normals on Overture buildings | LOW | Fix winding normalization in Overture parser; rerun tests; redeploy |
-| MultiPolygon buildings missing | LOW | Add MultiPolygon branch to Overture parser; add test case; redeploy |
+| Canvas 300x150 on mobile (display:none) | MEDIUM | Replace `display: none` with `visibility: hidden` pattern; audit all canvas container conditionals; redeploy |
+| Sheet gesture fights OrbitControls | MEDIUM | Add `pointer-events: none` toggle on canvas container during sheet drag; wire to Zustand sheet drag state |
+| Map pan conflicts with sheet drag | MEDIUM | Audit gesture handler order; add `stopPropagation` on sheet drag handle; add `map.dragPan.disable()` during sheet gesture |
+| iOS rubber banding corrupts sheet position | LOW | Add transform clamping in gesture handler; test with `overscroll-behavior: none` on sheet container; redeploy |
+| MapLibre canvas stale after layout animation | LOW | Add `transitionend` listener calling `map.resize()` once; already supported in MapLibre v3+ via ResizeObserver |
+| Breakpoint flash between mobile/desktop | LOW | Move breakpoint state to Zustand or shared context; remove duplicate `useIsMobile` definitions |
+| Animation jank from backdrop-filter near canvas | LOW | Replace `backdrop-filter: blur()` on sheet with `background-color` with alpha; CSS compositing cost drops immediately |
 
 ---
 
@@ -352,41 +275,40 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| No browser-native Overture REST API | Phase 1: Overture fetch strategy | Confirm PMTiles or API-key approach fetches data in a browser devtools network tab |
-| PMTiles S3 CORS misconfiguration | Phase 1: Overture fetch strategy | Fetch from localhost AND production domain; assert no CORS errors in console |
-| Overture release version drift | Phase 1: Overture fetch strategy | Simulate 404 on Overture URL; assert app falls back to OSM-only without crashing |
-| Height null for ML buildings | Phase 2: Overture parser | Assert 0 buildings with `NaN` or `0` height in the parsed feature array |
-| MultiPolygon not handled | Phase 2: Overture parser | Unit test: parse a known MultiPolygon Overture feature; assert it produces 2+ `BuildingFeature` objects |
-| Ring winding order inconsistency | Phase 2: Overture parser | Unit test: assert `computeSignedArea` returns positive for Overture exterior rings |
-| Roofprint displacement | Phase 2: Overture parser | Document in code comment; accept as known limitation |
-| Spatial deduplication false negatives | Phase 3: Deduplication logic | Test with L-shaped building present in both OSM and Overture; assert single STL output |
-| Overture includes OSM re-published data | Phase 3: Deduplication logic | Test in OSM-dense area; assert Overpass-sourced building takes precedence over Overture OSM-sourced feature |
-| Data volume blowup (dense cities) | Phase 2 (area filter) + Phase 3 (count cap) | Test 4 km² Manhattan bbox; assert browser memory < 1.5 GB; generation completes < 10 s |
-| O(n²) deduplication performance | Phase 3: Deduplication logic | Benchmark with 1,000 OSM + 1,000 Overture features; assert dedup < 500 ms in Web Worker |
-| Double-rendered buildings non-manifold STL | Phase 3: Deduplication logic + Phase 4: Geometry | Export STL for well-mapped OSM area; run `manifold-3d` check; assert 0 non-manifold edges |
+| R3F canvas 300x150 from display:none | Phase 1 (Layout restructure) | Open Preview on mobile, tab-switch away, tab-switch back — assert canvas fills full panel |
+| Duplicate `useIsMobile` inconsistency | Phase 1 (Layout restructure) | Single breakpoint source; grep for duplicate definitions confirms zero |
+| iOS 100dvh / safe area missing | Phase 1 (Layout restructure) | Test on real iPhone Safari; assert no overflow scrollbar, sheet clear of home indicator |
+| MapLibre canvas stale after animation | Phase 1 (Layout restructure) | Animate sidebar open; assert map tiles fill full width after transition |
+| OrbitControls touch-action conflict | Phase 2 (Bottom sheet) | Drag sheet handle over canvas area on iOS — assert sheet moves, not 3D view |
+| MapLibre pan vs sheet drag conflict | Phase 2 (Bottom sheet) | Drag map through sheet body area — assert map pans; drag handle — assert sheet moves |
+| iOS rubber banding corrupts sheet snap | Phase 2 (Bottom sheet) | Fast swipe-to-dismiss on iPhone — assert clean snap with no body bounce |
+| Animation jank near WebGL | Phase 3 (Transitions) | Run animations during active mesh generation; assert > 30fps on mid-range Android (Chrome DevTools Performance panel) |
+| MapLibre ResizeObserver during animation | Phase 3 (Transitions) | Profile tab-switch transition in Chrome DevTools; assert zero tile reloads during animation |
+| will-change GPU layer leak | Phase 3 (Transitions) | Inspect sheet element in Chrome DevTools Layers panel after animation completes; assert no promoted layer |
 
 ---
 
 ## Sources
 
-- [Overture Maps: Accessing the Data](https://docs.overturemaps.org/getting-data/) — No browser REST API; DuckDB/Python CLI/S3 only
-- [Overture Maps: Buildings Overview](https://docs.overturemaps.org/guides/buildings/) — Data sources, height properties, IoU deduplication, quality considerations
-- [Overture Maps: Building Schema Reference](https://docs.overturemaps.org/schema/reference/buildings/building/) — Property types including nullable `height`, `geometry` as Polygon/MultiPolygon
-- [Overture Maps: PMTiles Access](https://docs.overturemaps.org/examples/overture-tiles/) — PMTiles archive URLs, HTTP access pattern
-- [Protomaps: Cloud Storage for PMTiles](https://docs.protomaps.com/cloud-storage) — CORS requirements: `range` in AllowedHeaders, `etag` in ExposeHeaders
-- [Protomaps: PMTiles Concepts](https://docs.protomaps.com/pmtiles/) — HTTP Range Request mechanism, browser Fetch API usage
-- [pmtiles npm package](https://www.npmjs.com/package/pmtiles) — Client-side library for reading PMTiles archives
-- [OpenSource Overture Maps API](https://www.overturemapsapi.com/) — Third-party API wrapper requiring API key authentication
-- [Overture Maps STAC adoption (February 2026)](https://docs.overturemaps.org/blog/2026/02/11/stac/) — Dynamic release URL discovery
-- [Overture Maps August 2025 Release Notes](https://docs.overturemaps.org/blog/2025/08/20/release-notes/) — Microsoft ML buildings `is_underground` bug discovered; patch released
-- [Overture Buildings: 2.3B buildings with Google Open Buildings](https://overturemaps.org/blog/2023/overture-buildings-theme-hits-2-3b-buildings-with-addition-of-google-open-buildings-data/) — ML source quality issues (shipping containers, solar panels)
-- [RFC 7946: GeoJSON Specification](https://www.rfc-editor.org/rfc/rfc7946) — Winding order convention: exterior CCW, holes CW, no closing vertex duplicate
-- [Overture Maps: 3D Building Parts](https://docs.overturemaps.org/schema/concepts/by-theme/buildings/3d_buildings/) — building_part ambiguity with type=multipolygon
-- [OSM Completeness with Overture Maps Data | HeiGIT](https://heigit.org/osm-completeness-with-overture-maps-data/) — Gap analysis methodology
-- [Revisiting Overture's Global Geospatial Datasets | Mark's Blog](https://tech.marksblogg.com/overture-2024-revisit.html) — Data volume, GeoParquet size benchmarks
-- [polygon-clipping npm](https://www.npmjs.com/package/polygon-clipping) — Polygon intersection for IoU computation in browser/Web Worker
-- [Azure Samples: Overture Buildings PMTiles](https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/main/Samples/PMTiles/Overture%20Building%20Theme/Buildings.html) — Browser-side PMTiles integration example
+- [pmndrs/drei Issue #1233 — OrbitControls blocks scroll on mobile without ability to opt-out](https://github.com/pmndrs/drei/issues/1233) — Confirmed upstream issue, no opt-out in three.js OrbitControls
+- [three.js Issue #16254 — OrbitControls eats touch events](https://github.com/mrdoob/three.js/issues/16254) — `touch-action: none` set unconditionally on canvas
+- [three.js Issue #8084 — Option to prevent preventDefault in OrbitControls](https://github.com/mrdoob/three.js/issues/8084) — Long-standing request, still unresolved
+- [R3F Discussion #1151 — THREE.WebGLRenderer: Context Lost](https://github.com/pmndrs/react-three-fiber/discussions/1151) — Context loss on unmount; keep canvas mounted, route contents instead
+- [R3F Discussion #672 — Initialize a hidden Canvas](https://github.com/pmndrs/react-three-fiber/discussions/672) — display:none prevents canvas initialization at correct size
+- [technetexperts.com — Fix R3F Canvas Sizing 300x150 Issue](https://www.technetexperts.com/r3f-canvas-viewport-resize-fix/) — Canvas reverts to 300x150 when parent dimensions are zero at mount
+- [bram.us — 100vh in Safari on iOS](https://www.bram.us/2020/05/06/100vh-in-safari-on-ios/) — 100vh includes browser chrome; 100dvh is the fix
+- [Apple Developer Forums — safe-area-inset-bottom does not update for keyboard](https://webventures.rejh.nl/blog/2025/safe-area-inset-bottom-does-not-update/) — Known iOS 2025 behavior; safe area does not resize with keyboard
+- [shadcn/ui Issue #8471 — iOS 26: Sheet leaves bottom gap in Safari](https://github.com/shadcn-ui/ui/issues/8471) — viewport-fit=cover required for safe area to function
+- [MDN — touch-action](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action) — pan-y, pan-x, none semantics
+- [MDN — overscroll-behavior](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overscroll-behavior) — contain vs none; iOS partial support
+- [Motion.dev — Web Animation Performance Tier List](https://motion.dev/blog/web-animation-performance-tier-list) — transform/opacity GPU-accelerated; height/width trigger layout
+- [Motion.dev — When browsers throttle requestAnimationFrame](https://motion.dev/blog/when-browsers-throttle-requestanimationframe) — Animation frame blocking when main thread is busy
+- [MapLibre GL JS — Map.resize()](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/) — Must be called after container shown after CSS hidden; ResizeObserver in v3+
+- [Mapbox PR #9083 — Use ResizeObserver to trigger canvas resize](https://github.com/mapbox/mapbox-gl-js/pull/9083) — Background on ResizeObserver integration
+- [MDN — Animation performance and frame rate](https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/Animation_performance_and_frame_rate) — Main thread blocking causes animation jank
+- [stripearmy.medium.com — I fixed a decade-long iOS Safari body scroll lock problem](https://stripearmy.medium.com/i-fixed-a-decade-long-ios-safari-problem-0d85f76caec0) — Definitive iOS body scroll + overscroll prevention patterns
+- [chrome.dev/issues/40939743 — WebGL context limit of 16 in Chrome](https://issues.chromium.org/issues/40939743) — Do not create multiple canvases; Safari limit applies
 
 ---
-*Pitfalls research for: Overture Maps building footprint integration — MapMaker v1.1*
+*Pitfalls research for: Responsive UI (bottom sheet, animations, three-tier layout) on MapLibre + Three.js R3F app — MapMaker v1.2*
 *Researched: 2026-02-28*

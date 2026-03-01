@@ -1,194 +1,220 @@
 # Project Research Summary
 
-**Project:** MapMaker v1.1 — Overture Maps Building Gap-Fill Integration
-**Domain:** Browser-native geospatial data integration for 3D-printable terrain models
+**Project:** MapMaker v1.2 — Responsive UI
+**Domain:** Responsive three-tier layout for a React 19 + Three.js R3F + MapLibre GL JS map/3D app
 **Researched:** 2026-02-28
-**Confidence:** HIGH (stack and architecture have HIGH confidence from direct codebase inspection and official documentation; one LOW-confidence gap remains on the MVT layer name inside the Overture PMTiles archive)
+**Confidence:** HIGH
 
 ## Executive Summary
 
-MapMaker v1.1 adds a single high-value capability: gap-fill buildings from Overture Maps in areas where OpenStreetMap coverage is sparse. The integration is purely additive — the entire downstream pipeline (mesh worker, geometry builder, STL export) is unchanged. The seam is in `fetchOsmLayersStandalone()` in `GenerateButton.tsx`, where Overture buildings are fetched in parallel with the existing Overpass request, deduplicated against OSM (OSM always wins on overlap), and merged into the same `BuildingFeature[]` array that already flows through the rest of the system.
+MapMaker v1.2 is a responsive UI overhaul of a shipped 3D terrain generator. The current layout is functional but crude: a binary 768px breakpoint, a static (non-draggable) bottom sheet, floating overlay sidebars on desktop, and two duplicated `useIsMobile` hooks. The goal is to bring the app in line with the interaction vocabulary established by Google Maps, Apple Maps, ArcGIS, and Mapbox Studio — all of which converge on a bottom sheet with snap points on mobile, a persistent split-panel sidebar on tablet, and a persistent contextual sidebar on desktop. Research confirms this is the correct model for a map/3D tool with controls panels, and that users arrive at MapMaker expecting this vocabulary. Deviating from it creates friction; implementing it makes the app feel native on every device class.
 
-The recommended browser-access approach for Overture data is PMTiles via HTTP range requests using the `pmtiles` npm package (v4.4.0). This is the only viable option that preserves MapMaker's fully client-side architecture — DuckDB WASM cannot query S3 GeoParquet from the browser due to missing HTTPFS support, and a thin server proxy would require deploying backend infrastructure. PMTiles tiles covering the user's bounding box are fetched at zoom 14, decoded from MVT format using `@mapbox/vector-tile` + `pbf`, and then filtered and adapted to the existing `BuildingFeature` interface. Three new libraries totaling under 100KB are required.
+The recommended implementation approach is layered and dependency-ordered: first establish a single-source three-tier breakpoint system and fix the WebGL visibility pattern, then extract content from layout-coupled sidebar components, then build the new layout shell (vaul-based bottom sheet on mobile, ContextualSidebar on tablet/desktop), then rewrite SplitLayout to orchestrate all three tiers, and finally add transitions and touch polish. This order is dictated by hard architectural dependencies — the breakpoint hook is required by every layout component, and content extraction is required before any layout container can accept sidebar content. The new stack additions are minimal: `vaul@1.1.2` for the bottom sheet and `motion@12.34.3` for transitions, both confirmed compatible with React 19 and all existing dependencies.
 
-The primary risks are: (1) the PMTiles URL is release-date-specific and will 404 after Overture's next monthly rotation — the fix is graceful degradation to OSM-only plus a STAC-catalog URL discovery strategy; (2) spatial deduplication must be IoU-based at the polygon level, not centroid-distance, because complex building footprints defeat naive heuristics and produce double-rendered buildings in the STL; and (3) one operational fact requires empirical verification before code is written — the MVT source-layer name inside the Overture buildings PMTiles archive (expected `"building"`, confirmed via Azure Maps sample code, but must be validated by fetching a tile at pmtiles.io before shipping).
+The dominant risk in this milestone is the intersection of three concurrent touch event consumers: OrbitControls (`touch-action: none` on the R3F canvas), MapLibre DragPanHandler (`setPointerCapture` on first pointerdown), and the vaul bottom sheet gesture recognizer. On iOS, this conflict is not resolved by default and requires deliberate DOM z-layering and pointer-event gating. A second critical risk is the R3F canvas behavior under `display: none` — it initializes at 300x150px and cannot recover without a remount — meaning the `visibility: hidden` pattern must be extended consistently to the mobile layout path. Both of these must be addressed in Phases 1 and 2 before any polishing work begins. Both require validation on real iOS hardware, not Chrome DevTools touch simulation.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-The v1.0 validated stack (React 19, Three.js R3F, Zustand, Vite 6, Vitest, MapLibre GL JS 5, @mapbox/martini, earcut, osmtogeojson, geometry-extrude, comlink, three-bvh-csg, manifold-3d) is unchanged. Three new packages are added:
+The existing stack (React 19, Three.js R3F, Zustand, Vite 6, Tailwind CSS v4, MapLibre GL JS, react-resizable-panels) requires only two new dependencies for v1.2. `vaul@1.1.2` provides the bottom sheet with iOS-style snap points, drag gestures, velocity-aware snapping, and a `modal={false}` prop that is critical for keeping the R3F canvas and MapLibre map interactive behind the sheet — no other bottom sheet library offers this combination. `motion@12.34.3` (formerly Framer Motion, now independent) provides `AnimatePresence` and the `layout` prop for coordinating enter/exit animations and panel resize reflows that CSS transitions alone cannot handle. Breakpoints and touch targets are handled by existing Tailwind v4 utilities and a new 25-line `useBreakpoint` custom hook — no additional libraries needed.
 
-**Core new technologies:**
-- `pmtiles@^4.4.0` — fetches individual vector tiles from the Overture buildings PMTiles archive via HTTP range requests; the only browser-viable approach for querying Overture's S3-hosted dataset without a backend
-- `@mapbox/vector-tile@^2.0.4` + `pbf@^4.0.1` — decodes MVT (Mapbox Vector Tile) binary format from PMTiles tiles into GeoJSON-like feature objects; `pbf` is a required peer dependency; MapLibre GL JS 5 bundles its own `pbf` internally so install `pbf` explicitly for independent resolution
-- `@turf/boolean-intersects@^7.3.1` — 13.4KB tree-shaken package for polygon intersection testing during spatial deduplication; use this sub-package rather than the full 68KB `turf` monolith
+The stack research explicitly rules out: `react-spring-bottom-sheet` (unmaintained since 2022, conflicting peer deps), custom bottom sheet implementations from scratch (300+ lines of pointer math that consistently gets iOS momentum wrong), `@use-gesture/react` upfront (vaul handles all sheet gestures), `tailwindcss-animate` (deprecated in Tailwind v4), `react-responsive` (wraps matchMedia in 3 KB for what 25 lines achieves), and the React `<ViewTransition>` experimental API (canary-only as of Feb 2026, not stable in React 19 production).
 
-**Recommended deduplication approach:** Bounding-box IoU (zero dependencies, ~10 lines of arithmetic) handles 99% of cases correctly and avoids Turf.js bundle weight. Escalate to `@turf/boolean-intersects` for exact polygon testing only if bounding-box IoU produces visible false negatives in testing.
+**Core technologies:**
+- `vaul@1.1.2`: Bottom sheet with snap points — only library that provides `modal={false}` (essential for R3F/MapLibre interactivity), velocity-aware snap, and iOS rubber-band physics without custom implementation
+- `motion@12.34.3`: View transition animations — needed for exit animations and layout-change coordination that CSS transitions cannot express (conditional rendering exit, spring physics on panel resize)
+- Tailwind CSS v4 `@theme` (existing): Three-tier breakpoints via `--breakpoint-md: 48rem` and `--breakpoint-lg: 64rem`; no new library
+- Custom `useBreakpoint` hook (new, no library): Typed `'mobile' | 'tablet' | 'desktop'` return; MediaQueryList-based, not window.resize
 
-**Version compatibility:** `pmtiles@4.4.0` ships as an ES module with no WASM and no native addons — works directly with Vite 6. `@turf/boolean-intersects@7.3.1` is ES module with `sideEffects: false` — Vite tree-shakes correctly.
-
-See `.planning/research/STACK.md` for full alternatives analysis, rejected approaches (DuckDB WASM, GeoParquet, third-party API), and npm installation commands.
+See `.planning/research/STACK.md` for version compatibility matrix, alternatives analysis, and pattern-by-layout-variant implementation guides.
 
 ### Expected Features
 
-This milestone has one goal: more buildings everywhere, seamlessly, with no UI changes visible to users.
+Map/3D tool users arrive with clear expectations set by Google Maps, Apple Maps, ArcGIS, and Mapbox Studio. All four converge on the same interaction vocabulary across device classes. Research confirms that deviating from this vocabulary creates friction, and that implementing it for MapMaker v1.2 is achievable within a single milestone.
 
-**Must have (P1 — v1.1 launch):**
-- Overture building footprint fetch for selected bbox — retrieves Overture buildings via PMTiles browser access using the user's existing `mapBounds` store state
-- Spatial deduplication (OSM preferred) — filters Overture footprints that overlap OSM buildings; OSM wins on any overlap; 30% bounding-box IoU threshold handles GPS/projection alignment differences
-- Overture-to-BuildingFeature adapter — maps Overture GeoJSON Feature fields (`height`, `num_floors`, `subtype`, `class`) to the existing `BuildingFeature.properties` format understood by the height cascade in `height.ts`
-- Gap-fill geometry (extruded flat box) — Overture-sourced buildings render using existing `buildSingleBuilding()` pipeline with no new geometry code
-- Merged pipeline end-to-end — OSM + gap-fill buildings both appear in preview and STL export
+**Must have (P1 — table stakes for v1.2 launch):**
+- Draggable bottom sheet with peek (~80px) / half (~45dvh) / full (~85dvh) snap heights on mobile — the static 45vh sheet in v1.1 fails user expectation
+- Sheet drag handle with minimum 44px touch target — affordance that the sheet is draggable; users will not discover drag without it
+- Full-screen map visible at peek and half snap heights — map must remain usable behind the sheet
+- Persistent contextual sidebar on tablet (768–1199px) and desktop (≥1200px) — floating overlay panels are an anti-pattern at these widths
+- Contextual sidebar content switching: map controls vs. model controls driven by existing `showPreview` state
+- Three-tier breakpoint hook replacing binary `useIsMobile` — foundation for all layout work
+- Touch target audit: 44px minimum tap targets across all interactive controls (sliders, toggles, section headers)
+- Safe area inset compliance (iOS notch/home bar) via `env(safe-area-inset-bottom)` and `viewport-fit=cover`
+- Smooth view transitions (200–300ms crossfade) replacing instant DOM swaps between map and preview
 
-**Should have (P2 — after core works):**
-- Minimum area filter (>= 15 m²) — removes ML-detected sheds, kiosks, and solar panels that slip through Overture's internal noise filter
-- PMTiles release URL maintenance — update the hardcoded PMTiles URL constant when Overture publishes a new monthly release (~60-day window before URLs expire)
-- Source attribution logging — `console.log` counts of OSM vs. Overture buildings in dev mode for debugging coverage gaps
+**Should have (P2 — after core works, polish):**
+- Velocity-aware flick snap on bottom sheet (upward fling jumps to next snap point)
+- Keyboard avoidance via `visualViewport.onresize` when search input receives focus
+- Stale model indicator surfaced in bottom sheet Generate button area on mobile
 
 **Defer (v2+):**
-- Overture building parts (`building_part` theme) — adds roof geometry for some buildings but low global coverage and high parsing complexity
-- LiDAR-derived height preference from Overture `sources[]` — useful in the US where Esri contributes LiDAR heights, but globally sparse
-- Alternative gap-fill sources — Microsoft Global ML Building Footprints as a regional supplement
+- Full View Transitions API (`document.startViewTransition()`) — limited browser support and complex R3F canvas coordination
+- Sidebar icon-only collapse mode on small tablets (768–900px) — significant implementation complexity, P3
+- Drag-to-resize persistent sidebar on desktop
 
 **Anti-features (confirmed problematic, do not implement):**
-- Confidence-score filtering: Overture buildings theme has no confidence score field; `sources[]` lists provenance but not a numeric confidence value
-- Real-time Overture data freshness (live STAC polling on every request): adds fragility; pin to a known release and update per MapMaker release cycle
-- Overture building category styling in 3D preview: conflicts with the single-geometry STL merge; ML footprint category coverage is too sparse to be useful
+- Pull-to-refresh gesture on bottom sheet — conflicts with downward drag-to-dismiss; intent is ambiguous
+- Swipe left/right between Map and Preview on mobile — MapLibre and R3F both intercept horizontal pan events; cannot reliably distinguish from map pan and 3D orbit
+- Bottom sheet on tablet — sheet blocks too much map area; tablet always uses persistent sidebar regardless of orientation
+- Animating `height` of the bottom sheet content area — triggers layout reflow on every frame; use `transform: translateY()` for all sheet position changes
 
-See `.planning/research/FEATURES.md` for the full feature dependency diagram, competitor analysis table, and implementation notes per feature.
+See `.planning/research/FEATURES.md` for feature dependency diagram, competitor analysis table, and implementation notes per feature.
 
 ### Architecture Approach
 
-The integration seam is narrow and well-defined. The only file requiring meaningful modification is `GenerateButton.tsx` — specifically its `fetchOsmLayersStandalone()` function, which gains a parallel Overture fetch and a merge call before `setBuildingFeatures()`. Two new files are created. All other files — the store, `BuildingMesh.tsx`, the mesh worker, `buildAllBuildings()`, and the STL export pipeline — are unchanged.
+The architecture is a layer-by-layer replacement of the existing layout system through a deliberate sequence of refactors. The core insight is that `Sidebar.tsx` and `PreviewSidebar.tsx` currently own both their content AND their positioning — this coupling prevents content from being placed in different layout containers. The prerequisite for all layout work is extracting `MapSidebarContent` and `PreviewSidebarContent` as pure, positioning-agnostic components. Once extracted, the layout system decides where to place them based on the active breakpoint tier.
 
-**New components:**
-1. `src/lib/buildings/overture.ts` — PMTiles fetch + MVT decode + tile-to-WGS84 coordinate transform + property mapping; exports `fetchOvertureBuildings(bbox): Promise<BuildingFeature[]>`
-2. `src/lib/buildings/deduplicate.ts` — `mergeAndDeduplicateBuildings(osm, overture)` using bounding-box IoU at 0.3 threshold; OSM always wins on overlap; returns a single `BuildingFeature[]` for the store
+The R3F canvas visibility constraint runs through every layout decision: never use `display: none` on any ancestor of the R3F `<Canvas>` — always use `visibility: hidden + pointer-events: none` to preserve WebGL context. This must be extended to the mobile layout path in Phase 1 before any other layout work begins.
 
-**Modified file:**
-- `src/components/Sidebar/GenerateButton.tsx` — `fetchOsmLayersStandalone()` runs OSM and Overture fetches in parallel via `Promise.allSettled()`; degrades silently to OSM-only if Overture fails
+**Major components:**
+1. `useBreakpoint` hook (new) — single source of truth for `'mobile' | 'tablet' | 'desktop'` tier; replaces two duplicated `useIsMobile(768)` definitions in `SplitLayout.tsx` and `Sidebar.tsx`
+2. `BottomSheet` (new, mobile only) — vaul-based, 3 snap points, `modal={false}`, `dismissible={false}`; renders `MapSidebarContent` or `PreviewSidebarContent` based on `showPreview`; snap height as local state
+3. `ContextualSidebar` (new, tablet/desktop) — persistent sidebar column (220px tablet / 260px desktop); same contextual content switching via `showPreview`
+4. `MobileViewToggle` (new) — replaces `MobileTabBar`; sets `activeView` in mapStore; drives `visibility` toggling for WebGL preservation
+5. `SplitLayout` (rewrite) — orchestrates three-tier layout; mobile: absolute-position view stack + BottomSheet portal; tablet/desktop: flex row with ContextualSidebar + split columns
+6. `MapSidebarContent` / `PreviewSidebarContent` (extracted) — pure content components; no positioning logic; used by both BottomSheet (mobile) and ContextualSidebar (tablet/desktop)
+7. `uiStore` (new Zustand slice) — `sidebarCollapsed` for future use; keeps `sheetSnap` local in BottomSheet to avoid polluting mapStore's 64 fields
+8. `mapStore` additions — `activeView: 'map' | 'preview'` field; `setActiveView` action; auto-switches to `'preview'` when `showPreview` transitions false → true
 
-**Critical design decisions enforced by research:**
-- Merge at the data ingestion point, not in the store or the mesh layer. One source of truth: `buildingFeatures: BuildingFeature[]` holds the final merged result. Adding a separate `overtureFeatures` store field spreads merge logic across three files.
-- Use `Promise.allSettled()` (not `Promise.all()`) so Overture fetch failures degrade silently to OSM-only without surfacing an error to the user. Overture is an enhancement, not a requirement.
-- Deduplication must run before geometry generation — comparing polygon arrays is orders of magnitude cheaper than disposing merged `BufferGeometry` objects.
-- Always fetch at zoom level 14. Overture buildings appear with full properties at z13+, and the existing 25 km² area cap means a z14 query covers at most ~30 tiles.
+**MapLibre resize coordination:** Call `map.resize()` with a 150–200ms delay after any layout change (view toggle, sidebar open/close, tier change) to let CSS transitions settle before MapLibre redraws tiles.
 
-See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, implementation code samples, build order, and anti-pattern analysis.
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, build order, anti-pattern analysis, and implementation code samples per pattern.
 
 ### Critical Pitfalls
 
-1. **No browser REST API for Overture — wrong access pattern:** Assuming Overture has an Overpass-like endpoint produces CORS errors and full-file downloads of hundreds of MB. Use PMTiles via the `pmtiles` npm package with HTTP range requests only. This is the first thing to validate — it determines the entire integration architecture.
+1. **R3F canvas initializes at 300x150 under `display: none`** — Never use `display: none` on any ancestor of the R3F canvas. The current mobile branch in SplitLayout uses display toggling; this must be converted to `visibility: hidden + pointer-events: none` in Phase 1. Verify by tab-switching on a real mobile device and confirming the canvas fills the panel on return.
 
-2. **Spatial deduplication false negatives (double-rendered buildings):** Centroid-distance deduplication fails for L-shaped and courtyard buildings. Bounding-box IoU at 0.3 threshold is required. Double-renders produce doubled wall thickness and non-manifold STL errors that slicers report at building positions. This is the highest-complexity component and requires unit tests before pipeline integration.
+2. **OrbitControls sets `touch-action: none` on canvas, blocking bottom sheet drag** — Confirmed upstream issue in drei #1233 and three.js #16254; no opt-out. The bottom sheet drag handle must sit above the canvas in DOM z-order with `pointer-events: auto` and call `e.stopPropagation()`. Additionally, toggle `pointer-events: none` on the canvas container via Zustand state during active sheet drag. Test only on real iOS hardware — Chrome DevTools does not enforce `touch-action` the same way.
 
-3. **PMTiles CORS misconfiguration:** HTTP range requests require `range` in `AllowedHeaders` and `etag` in `ExposeHeaders` on the S3 bucket. Failure is non-obvious — OPTIONS preflight may succeed while actual range requests fail. Test from the production deployment domain, not just localhost.
+3. **MapLibre DragPanHandler races with bottom sheet drag for the same touch stream** — MapLibre calls `setPointerCapture` on first `pointerdown`, claiming exclusive ownership of the touch sequence. The sheet drag handle must call `e.stopPropagation()` before MapLibre's listener fires. Disable MapLibre `dragPan` when the sheet is in full-height position (map invisible). Design this gesture boundary explicitly before wiring gesture detection in Phase 2.
 
-4. **Height null for ML-derived buildings:** Overture `height` is null for the vast majority of Microsoft and Google ML footprints — these are 2D footprints only. The existing height cascade's area-heuristic fallback (`resolveHeight()` tier 3) is the correct behavior. Do not attempt complex height inference; document explicitly in code that ML sources lack height data and the area-based default is intentional.
+4. **iOS Safari `100vh` overflow and safe area insets require explicit setup** — `100vh` includes browser chrome on iOS Safari; use `100dvh` with `100vh` fallback everywhere. Add `viewport-fit=cover` to `<meta name="viewport">` in `index.html` — without it, all `env(safe-area-inset-*)` values return 0. This setup belongs in Phase 1 as a global foundation, not Phase 2.
 
-5. **Overture release URL drift:** PMTiles URLs embed the release date and 404 after approximately 60 days when Overture rotates old releases. Implement graceful OSM-only fallback and document the URL constant as requiring periodic update. The Overture STAC catalog (`https://labs.overturemaps.org/stac/catalog.json`) provides dynamic URL discovery as the long-term solution.
+5. **Animating `width`/`height` on the MapLibre container triggers per-frame tile reloads** — MapLibre v3+'s ResizeObserver fires on every frame of a width/height CSS transition, causing continuous tile re-renders and jank on mobile. Use `transform: translateX()` for sidebar slide animations (compositor thread only). Call `map.resize()` once on `transitionend` if container dimensions genuinely change. Never animate map container layout dimensions.
 
-6. **Ring winding order inconsistency (inverted normals):** The OSM parser handles rings with potential closing-vertex duplicates (stripped via `stripClosingVertex`). Overture GeoJSON follows RFC 7946 — exterior CCW, holes CW, no closing duplicate. Passing Overture rings to OSM-coded geometry functions without normalization produces inverted normals and failed earcut triangulation. Normalize winding in the Overture parser before any shared geometry code is called.
+6. **iOS rubber banding corrupts bottom sheet snap position** — iOS's elastic overscroll applies above CSS `overscroll-behavior: none` in some versions. Clamp the sheet's `translateY` transform in the gesture handler to valid snap-point range before updating the DOM. Measure velocity over the last 100ms only (not full gesture) to avoid rubber-band frames inflating perceived velocity.
 
-7. **MultiPolygon buildings silently skipped:** Overture geometry is declared as `Polygon | MultiPolygon`. Handling only `Polygon` causes complex buildings (campus clusters, multi-part footprints) to disappear silently. For `MultiPolygon`, emit one `BuildingFeature` per polygon entry in `coordinates[]`.
-
-8. **Data volume blowup in dense cities:** A 4 km² bbox over central Tokyo or Manhattan can return 5,000–15,000 Overture buildings from ML sources. Apply a 15 m² minimum area filter before deduplication to eliminate shed/kiosk/solar-panel noise. Cap total combined feature count before geometry generation if browser memory exceeds limits.
-
-See `.planning/research/PITFALLS.md` for the full pitfall-to-phase mapping, recovery strategies (all rated LOW-MEDIUM cost), and the "Looks Done But Isn't" verification checklist.
+---
 
 ## Implications for Roadmap
 
-The milestone maps cleanly to four implementation phases ordered by the dependency chain and risk. Each phase is independently testable before the next begins.
+Based on the combined research, the milestone maps to six phases ordered strictly by dependency. The first three phases are pure refactors with no visible user-facing change — they establish the foundation that every subsequent phase requires.
 
-### Phase 1: Overture Fetch Strategy and Access Validation
+### Phase 1: Foundation — Breakpoints, Store Fields, CSS, Visibility Pattern
+**Rationale:** All subsequent phases depend on the `useBreakpoint` hook, the `activeView` store field, the three-tier CSS theme variables, the `viewport-fit=cover` viewport meta tag, and the `visibility: hidden` pattern extended to mobile. These changes are invisible to users but are structural prerequisites for all layout work. Without them, every layout component will either use stale breakpoint values or risk WebGL context loss.
+**Delivers:** `src/hooks/useBreakpoint.ts` with typed `'mobile' | 'tablet' | 'desktop'` tiers; `activeView: 'map' | 'preview'` field and `setActiveView` action in mapStore; `src/store/uiStore.ts` with `sidebarCollapsed`; `@theme` breakpoint variables in `index.css` (md: 48rem / lg: 64rem); `viewport-fit=cover` in `index.html`; `visibility: hidden + pointer-events: none` pattern confirmed on all mobile canvas container code paths
+**Addresses:** Safe area inset foundation; iOS dvh fix; breakpoint consolidation prerequisite
+**Avoids:** Pitfall 4 (iOS viewport/safe-area — must set `viewport-fit=cover` before sheet geometry is calculated); Pitfall 7 (duplicate `useIsMobile` inconsistency — hook established before migration in Phase 2); R3F 300x150 canvas bug on mobile
 
-**Rationale:** All other phases depend on getting Overture data into the browser. The access method (PMTiles) must be validated empirically before writing any parsing or deduplication code. This phase surfaces the MVT layer name gap and CORS behavior early — both are unknowns that could force architectural rework if discovered later.
-**Delivers:** A working `fetchOvertureBuildings(bbox)` stub that returns raw building feature data from the Overture PMTiles archive — tested in isolation with a known bbox, logged to console to verify count and structure. Graceful 404/CORS fallback established and tested by intentionally breaking the URL.
-**Addresses:** P1 feature — Overture building footprint fetch
-**Avoids:** Pitfall 1 (wrong access pattern), Pitfall 2 (CORS misconfiguration), Pitfall 10 (release URL drift)
-**Verify:** Fetch for a known OSM-sparse area (rural India or Sub-Saharan Africa) and confirm buildings are returned. Test CORS from the production deployment domain. Verify the MVT layer name empirically at pmtiles.io by loading the Overture buildings URL and inspecting layer names.
-**Research flag:** This phase requires empirical validation — the MVT layer name is LOW confidence in existing research. Resolve before writing the parser.
+### Phase 2: Breakpoint Migration — Behaviour-Identical Refactor
+**Rationale:** Before building new layout components, existing code must be migrated to consume `useBreakpoint()` in place of the two independent `useIsMobile(768)` definitions. This is a pure refactor with zero visible change — it allows the full 264-test suite to confirm nothing broke. Tablet still maps to the desktop layout at this stage. Consolidating breakpoints into a single source eliminates the risk of a brief layout flash at breakpoint boundaries during rapid resize or orientation change.
+**Delivers:** `SplitLayout.tsx` and `Sidebar.tsx` both consume `useBreakpoint()`; no duplicate breakpoint values in codebase; all 264 tests pass unchanged
+**Uses:** `useBreakpoint` hook from Phase 1
+**Avoids:** Pitfall 7 (breakpoint inconsistency / flash of wrong layout at boundary)
 
-### Phase 2: Overture Parser and Feature Adapter
+### Phase 3: Content Extraction — Layout-Agnostic Sidebar Content
+**Rationale:** `BottomSheet` and `ContextualSidebar` (built in Phase 4) must place the same sidebar content in different layout containers. Currently `Sidebar.tsx` and `PreviewSidebar.tsx` mix content and positioning. Extraction is a pure refactor with zero visible change — it unblocks Phase 4 without adding risk to the working app.
+**Delivers:** `src/components/Sidebar/MapSidebarContent.tsx` (SelectionInfo + GenerateButton, no `position: fixed/absolute`); `src/components/Preview/PreviewSidebarContent.tsx` (all layer sections + ExportPanel, no positioning); existing wrappers become thin shells calling these new components
+**Implements:** Content extraction pattern from ARCHITECTURE.md; eliminates Anti-Pattern 3 (control components owning their positioning)
+**Avoids:** Requiring content duplication across BottomSheet (mobile) and ContextualSidebar (tablet/desktop)
 
-**Rationale:** Once raw data is fetchable, the adapter translates it to the format the existing pipeline expects. Parser correctness — especially ring winding order and MultiPolygon handling — is a prerequisite for meaningful deduplication testing. Bugs here produce inverted normals and missing buildings that are hard to diagnose in the integrated pipeline.
-**Delivers:** `parseOvertureBuildings()` within `src/lib/buildings/overture.ts` that correctly handles Polygon and MultiPolygon geometry, normalizes ring winding order to match the OSM pipeline's expectations, maps Overture properties to `BuildingFeature.properties`, and applies a 15 m² minimum area filter. Gap-fill buildings use the area-heuristic height fallback with the reason documented in code.
-**Uses:** `@mapbox/vector-tile`, `pbf`, tile-to-WGS84 coordinate math (~10 lines of arithmetic, no additional library)
-**Implements:** `src/lib/buildings/overture.ts` (parsing and adapter portion)
-**Avoids:** Pitfall 6 (height null for ML buildings — document and use area fallback explicitly), Pitfall 8 (ring winding order — normalize in parser before shared geometry code), Pitfall 9 (MultiPolygon not handled — emit one BuildingFeature per polygon entry), Pitfall 3 (roofprint displacement — accept as known limitation, document in code comment)
+### Phase 4: New Layout Components — BottomSheet, ContextualSidebar, MobileViewToggle
+**Rationale:** With content extracted and the breakpoint hook available, the three new layout containers can be built in isolation against the extracted content components. Each is independently testable before wiring into SplitLayout in Phase 5. This limits the blast radius — a bug in BottomSheet does not affect ContextualSidebar or the working SplitLayout.
+**Delivers:** `src/components/Layout/BottomSheet.tsx` (vaul, 3 snap points, `modal={false}`, `dismissible={false}`, `snap` as local state, auto-snaps to half on generate); `src/components/Layout/ContextualSidebar.tsx` (persistent, 220px tablet / 260px desktop, reads `showPreview` for content); `src/components/Layout/MobileViewToggle.tsx` (replaces MobileTabBar, sets `activeView`)
+**Uses:** `vaul@1.1.2` (BottomSheet); `useBreakpoint` (all three); `showPreview` + `activeView` from mapStore
+**Implements:** Patterns 3, 4, and 5 from ARCHITECTURE.md
+**Avoids:** Pitfall 1 (display:none canvas — mobile views use `visibility: hidden + pointer-events: none`); Pitfall 2 (OrbitControls touch — DOM z-order and pointer-events gating on canvas during sheet drag); Pitfall 3 (MapLibre pan vs sheet drag — stopPropagation on drag handle, dragPan.disable at full snap); Pitfall 6 (rubber banding — transform clamping in gesture handler)
+**Research flag:** The OrbitControls vs. MapLibre vs. vaul three-way touch conflict must be validated on real iOS hardware before Phase 4 is considered complete — Chrome DevTools does not reproduce `touch-action` enforcement accurately.
 
-### Phase 3: Spatial Deduplication
+### Phase 5: SplitLayout Rewrite
+**Rationale:** With all new layout components built and independently validated, SplitLayout can be rewritten to orchestrate the three tiers. This is the highest-impact change — it removes `MobileSidebar`, `DesktopSidebar`, `MobileTabBar`, and the floating `PreviewSidebar` overlay in favour of the new layout system. Deferring this to Phase 5 ensures that each component being wired together has already been verified independently.
+**Delivers:** `SplitLayout.tsx` fully rewritten to branch on `useBreakpoint()` tier: mobile (full-screen absolute-position view stack + BottomSheet as portal) / tablet (ContextualSidebar 220px + split map|preview, no resizer) / desktop (ContextualSidebar 260px + split map|preview, resizable divider); removal of `MobileSidebar`, `DesktopSidebar`, `MobileTabBar`, floating `PreviewSidebar` wrapper; `map.resize()` called with 150ms delay after layout changes
+**Implements:** System overview architecture from ARCHITECTURE.md; MapLibre resize coordination; `StaleIndicator` moved inside preview column (unchanged logic)
+**Avoids:** Pitfall 5 (MapLibre ResizeObserver during animation — no width/height animation on map container; `map.resize()` called once on `transitionend`)
 
-**Rationale:** Deduplication is the highest-complexity component and the most likely to produce subtle bugs. False negatives (missed duplicates) produce double-rendered buildings and non-manifold STL errors. The algorithm must be built and unit-tested against synthetic test cases with known outcomes before it is wired into the live pipeline.
-**Delivers:** `mergeAndDeduplicateBuildings(osm, overture)` in `src/lib/buildings/deduplicate.ts` with unit tests covering: OSM-only buildings pass through unchanged; Overture buildings matching OSM (by bbox IoU > 0.3) are discarded; Overture buildings with no OSM match are added; L-shaped buildings with OSM coverage are not double-rendered; overall feature count and memory stay within bounds for a 4 km² dense urban bbox.
-**Avoids:** Pitfall 4 (deduplication false negatives — IoU-based, not centroid-distance), Pitfall 5 (Overture re-publishes OSM data — run own deduplication regardless of Overture's internal conflation), Pitfall 7 (data volume blowup — area filter already applied in Phase 2; add count cap before geometry generation if needed)
-
-### Phase 4: Pipeline Integration and End-to-End Verification
-
-**Rationale:** Once the three functional components are independently validated, wire them into `GenerateButton.tsx` with parallel fetching and graceful degradation, then verify the complete pipeline against real geographic areas with known characteristics.
-**Delivers:** Modified `fetchOsmLayersStandalone()` using `Promise.allSettled()` for parallel OSM + Overture fetches; merged `BuildingFeature[]` flowing into the existing worker and STL export unchanged; graceful OSM-only fallback on Overture failure with no UI error shown.
-**Verify against the "Looks Done But Isn't" checklist:** OSM-sparse area shows gap-fill buildings; OSM-dense area (Manhattan, central Berlin) shows no double-rendered buildings; Overture endpoint broken intentionally → app produces valid OSM-only STL without crashing; winding order check (no black/inverted-normal buildings in 3D preview); all 176 existing Vitest tests still pass; `npx tsc --noEmit` clean; `npx vite build` succeeds.
+### Phase 6: Transitions, Touch Polish, and Accessibility Audit
+**Rationale:** Animations and touch polish add zero core functionality but significant test surface area on diverse hardware. Placing this phase last ensures the layout is confirmed working before adding performance-sensitive animation code. Performance testing on mid-range Android must happen here before the milestone is considered done.
+**Delivers:** `transform: translateY()` snap animation on BottomSheet (vaul handles this internally — verify easing is spring-like); `motion` `AnimatePresence` crossfade on mobile map/preview toggle; 44px minimum touch targets audited across TerrainSection, BuildingsSection, RoadsSection, WaterSection, VegetationSection, ModelSizeSection, ExportPanel, CollapsibleSection, DrawButton, SearchOverlay; `env(safe-area-inset-bottom)` applied consistently to sheet, sidebar footer, and bottom-anchored controls; `will-change: transform` applied only during active animation, removed after `transitionend`
+**Uses:** `motion@12.34.3` (AnimatePresence for view toggle crossfade); Tailwind `min-h-[44px]` across all interactive elements
+**Avoids:** Pitfall 5 extension (only `transform` and `opacity` animated, never `width`/`height`); GPU layer leak (cleanup `will-change` after animation); performance trap of backdrop-filter near WebGL canvas (use alpha background or restrict to desktop only after profiling)
+**Research flag:** Touch target audit may reveal controls needing structural changes (not just CSS) to reach 44px. Scope may expand during implementation — budget time for CollapsibleSection and slider components which are likely to require the most work.
 
 ### Phase Ordering Rationale
 
-- Phase 1 before Phase 2 because the MVT layer name and CORS behavior are unvalidated assumptions that could force parser rework. Discovering them first avoids rework.
-- Phase 2 before Phase 3 because deduplication operates on `BuildingFeature[]` — unit-testing it requires the adapter to produce correctly structured inputs with known ring geometry.
-- Phase 3 before Phase 4 because integrating unvalidated deduplication into the live pipeline makes bugs harder to isolate. Unit tests in Phase 3 make Phase 4 integration debugging minimal.
-- Parallel fetch design (Phase 4) adds no additional latency — both OSM and Overture fetches start simultaneously and the merge waits only for whichever completes last.
+- Phases 1–3 are pure refactors; the 264-test suite should pass unchanged after each one, providing a built-in regression gate
+- Phase 4 builds new components in isolation before they are wired together — a bug in BottomSheet does not break the working app
+- Phase 5 (SplitLayout rewrite) is deferred until all components it orchestrates have been independently validated
+- Phase 6 is intentionally last because animation correctness depends on stable layout, and performance regression is only meaningful to test against the final layout
+- The gesture conflict (Phase 4 research flag) is the only significant unknown; if it requires architectural changes, they are isolated to BottomSheet and do not affect ContextualSidebar or the SplitLayout rewrite
 
 ### Research Flags
 
-Phases needing empirical validation before proceeding:
-- **Phase 1:** Verify the MVT layer name by fetching one tile at pmtiles.io with the Overture buildings URL and inspecting layer names. This is a 5-minute check but it is the only LOW-confidence fact in the milestone. Do not write the parser until it is confirmed.
-- **Phase 1:** Test CORS from the actual production deployment domain (not localhost). The public Overture S3 bucket is expected to allow cross-origin range requests, but must be validated before committing to the PMTiles approach.
+Phases needing deeper research or real-device validation before proceeding:
+- **Phase 4 (BottomSheet — pointer event boundary on iOS):** The three-way conflict between OrbitControls, MapLibre DragPanHandler, and vaul must be tested on a real iPhone before the phase is considered complete. The DOM z-order solution is specified in PITFALLS.md but its sufficiency cannot be confirmed in DevTools alone. If DOM z-order is insufficient, Zustand-driven `pointer-events` toggling on the canvas container is the fallback strategy.
+- **Phase 6 (Touch target audit):** The 10 component files to audit may contain controls requiring structural (not just CSS) changes to reach 44px. Budget for this before planning Phase 6 in detail.
 
-Phases with standard patterns (no additional research needed):
-- **Phase 2:** Ring normalization, MultiPolygon handling, and property mapping follow RFC 7946 and the existing OSM parser conventions — both are well-documented.
-- **Phase 3:** Bounding-box IoU is elementary arithmetic. The algorithm is fully specified in `ARCHITECTURE.md` with working TypeScript code.
-- **Phase 4:** `Promise.allSettled()` parallel fetch with graceful degradation is a standard JavaScript pattern with no unknowns.
+Phases with standard patterns (additional research not needed):
+- **Phase 1:** React hook, Zustand slice, CSS @theme, HTML meta tag — all well-documented; no integration unknowns
+- **Phase 2:** Mechanical find-and-replace refactor; no new patterns
+- **Phase 3:** Mechanical content extraction; no new patterns
+- **Phase 5:** Build order and component mapping are fully specified in ARCHITECTURE.md with implementation code samples
+- **Phase 6 (transitions):** CSS `transform: translateY()` for sheet snap and `motion` crossfade are both fully documented in STACK.md with working code examples
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | `pmtiles`, `@mapbox/vector-tile`, and `@turf/boolean-intersects` verified via npm registry, official docs, and Azure Maps reference implementation. Version compatibility with Vite 6 confirmed. |
-| Features | HIGH | Overture schema verified via official docs. Feature boundaries (P1/P2/v2+) are clear. Anti-features are specifically confirmed impossible (no confidence score field in the buildings theme). |
-| Architecture | HIGH | Integration seam identified via direct codebase inspection of `GenerateButton.tsx`, `mapStore.ts`, and the full buildings pipeline. Component boundaries and property mapping are fully specified. One LOW-confidence item: MVT layer name. |
-| Pitfalls | MEDIUM-HIGH | 10 pitfalls documented with prevention strategies. Most verified against official Overture docs and the Azure Maps PMTiles implementation. Roofprint displacement and performance traps are inferred from Overture's documented data sources and standard computational geometry principles. |
+| Stack | HIGH | `vaul@1.1.2` and `motion@12.34.3` versions confirmed via npm; React 19 peer deps verified for both; Tailwind v4 `@theme` breakpoint syntax confirmed in official docs; all alternatives explicitly evaluated and ruled out |
+| Features | HIGH | Verified against NN/G, Material Design 3, Apple HIG, WCAG 2.5.8, and live competitor app behavior (Google Maps, Apple Maps, ArcGIS); feature boundaries (P1/P2/v2+) confirmed by research; anti-features confirmed problematic by architectural analysis |
+| Architecture | HIGH | Based on direct codebase inspection (`SplitLayout.tsx`, `Sidebar.tsx`, `PreviewSidebar.tsx`, `mapStore.ts`); all component names, integration points, and build order fully specified; implementation code samples provided per pattern |
+| Pitfalls | HIGH (critical), MEDIUM (performance traps) | Critical pitfalls verified via upstream issue trackers (drei #1233, three.js #16254, R3F #1151, R3F #672, bram.us iOS dvh, shadcn-ui #8471); iOS rubber banding and performance traps corroborated by multiple authoritative sources including MDN and motion.dev |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **MVT layer name inside Overture PMTiles archive (LOW confidence):** Expected `"building"` based on Azure Maps sample code and STACK.md source-layer documentation, but not confirmed in PMTiles typedoc. Resolve in Phase 1 by fetching one tile at [pmtiles.io](https://pmtiles.io) with the Overture buildings URL. This is the only unresolved technical unknown in the milestone.
-- **CORS from production deployment domain:** The Overture S3 bucket's CORS policy allows cross-origin range requests for their own hosted explorer, but whether the MapMaker production domain is covered requires a live test. Resolve in Phase 1.
-- **IoU threshold tuning with real data:** The 0.3 bounding-box IoU threshold is derived from Overture's own 0.5 polygon IoU threshold, adjusted conservatively for raw coordinate differences between OSM and ML-derived footprints. Validate empirically in Phase 4 by testing against a known well-covered OSM city (central London) and confirming no visible duplicate buildings and no valid gap-fills incorrectly discarded.
+- **Tablet breakpoint upper boundary discrepancy:** STACK.md uses 1024px as the desktop start; FEATURES.md uses 1200px; ARCHITECTURE.md uses 1024px. Recommend adopting 1024px (consistent with Tailwind's standard `lg:` breakpoint and ARCHITECTURE.md) and explicitly codifying this in Phase 1 before any component consumes the value.
+- **Vaul "unmaintained" flag:** The author has flagged vaul as unmaintained (last release v1.1.2, Dec 2024) despite 355k dependents and production use by Vercel. The risk is low, but a custom CSS `transform: translateY()` + pointer-events fallback (~300 lines) should be documented in Phase 4 planning as a contingency.
+- **OrbitControls touch conflict — requires real-device validation:** The DOM z-order solution for the OrbitControls/MapLibre/vaul gesture conflict cannot be confirmed in Chrome DevTools. This is not a research gap but a validation gate that must occur during Phase 4 before the phase is closed.
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Overture Maps Buildings Schema Reference](https://docs.overturemaps.org/schema/reference/buildings/building/) — field types, nullability, geometry as Polygon/MultiPolygon
-- [Overture Maps Buildings Overview](https://docs.overturemaps.org/guides/buildings/) — conflation methodology, IoU deduplication, OSM source priority
-- [Overture Maps PMTiles Documentation](https://docs.overturemaps.org/examples/overture-tiles/) — PMTiles URL format, zoom levels
-- [Overture Maps STAC Catalog (2026)](https://docs.overturemaps.org/blog/2026/02/11/stac/) — dynamic URL discovery via `latest` field
-- [Overture Data Retention Policy](https://docs.overturemaps.org/blog/2025/09/24/release-notes/) — 60-day retention window, two most recent releases kept
-- [Azure Maps Overture Buildings PMTiles Sample](https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/main/Samples/PMTiles/Overture%20Building%20Theme/Buildings.html) — confirms source-layer `"building"`, CORS pattern, `height` property from browser-side PMTiles
-- [pmtiles npm@4.4.0](https://www.npmjs.com/package/pmtiles) — ES module, no WASM, `getZxy(z, x, y)` API
-- [PMTiles TypeDoc: PMTiles class](https://pmtiles.io/typedoc/classes/PMTiles.html) — `getZxy()` is the only tile fetch method
-- [@mapbox/vector-tile npm@2.0.4](https://www.npmjs.com/package/@mapbox/vector-tile) — MVT decode, `toGeoJSON()` method, `pbf` peer dependency
-- [@turf/boolean-intersects npm@7.3.1](https://www.npmjs.com/package/@turf/boolean-intersects) — 13.4KB, ES module with `sideEffects: false`
-- [Protomaps: Cloud Storage CORS Requirements](https://docs.protomaps.com/cloud-storage) — `range` in AllowedHeaders, `etag` in ExposeHeaders
-- [RFC 7946: GeoJSON](https://www.rfc-editor.org/rfc/rfc7946) — exterior ring CCW, hole rings CW, no closing vertex duplicate
-- MapMaker v1.0 codebase (direct inspection) — `GenerateButton.tsx`, `BuildingFeature` interface, `buildAllBuildings()`, `meshBuilder.worker.ts`, `terrainRaycaster.ts`, `height.ts`
+- [vaul npm registry](https://www.npmjs.com/package/vaul) — v1.1.2, React 19 peer deps confirmed
+- [vaul snap points docs](https://vaul.emilkowal.ski/snap-points) — `snapPoints`, `activeSnapPoint`, `setActiveSnapPoint`, `modal`, `dismissible` API
+- [motion npm registry](https://www.npmjs.com/package/motion) — v12.34.3, React 19 peer deps confirmed
+- [motion.dev rebranding announcement](https://motion.dev/blog/framer-motion-is-now-independent-introducing-motion) — `motion` is framer-motion renamed
+- [Tailwind CSS v4 responsive design docs](https://tailwindcss.com/docs/responsive-design) — `--breakpoint-*` theme variables
+- [pmndrs/drei Issue #1233](https://github.com/pmndrs/drei/issues/1233) — OrbitControls blocks scroll on mobile, no opt-out
+- [three.js Issue #16254](https://github.com/mrdoob/three.js/issues/16254) — `touch-action: none` set unconditionally on canvas
+- [R3F Discussion #1151](https://github.com/pmndrs/react-three-fiber/discussions/1151) — WebGL context loss on canvas unmount
+- [R3F Discussion #672](https://github.com/pmndrs/react-three-fiber/discussions/672) — `display: none` prevents canvas initialization at correct size
+- [NN/G Bottom Sheets: Definition and UX Guidelines](https://www.nngroup.com/articles/bottom-sheet/) — authoritative UX research on snap heights and map app patterns
+- [WCAG 2.5.8 Target Size Minimum](https://www.allaccessible.org/blog/wcag-258-target-size-minimum-implementation-guide) — 44px touch target standard
+- [React.dev labs blog](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more) — `<ViewTransition>` confirmed experimental/canary
+- MapMaker v1.1 codebase (direct inspection) — `SplitLayout.tsx`, `Sidebar.tsx`, `PreviewSidebar.tsx`, `mapStore.ts`
+- [MapLibre GL JS Map.resize() API](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/) — must be called after container shown after CSS hide
 
 ### Secondary (MEDIUM confidence)
-- [DuckDB-WASM + Overture (Camptocamp blog)](https://dev.to/camptocamp-geo/querying-overture-maps-geoparquet-directly-in-the-browser-with-duckdb-wasm-4jn4) — confirms HTTPFS not available in WASM; S3 GeoParquet not browser-accessible
-- [HeiGIT: OSM Completeness with Overture Maps Data](https://heigit.org/osm-completeness-with-overture-maps-data/) — gap-fill coverage analysis and methodology
-- [Overture vs OSM Building Footprints Analysis](https://milanjanosov.substack.com/p/overture-vs-osm-building-footprints) — third-party coverage comparison across regions
+- [BrowserStack responsive breakpoints guide 2025](https://www.browserstack.com/guide/responsive-design-breakpoints) — breakpoint conventions; verified against Tailwind docs
+- [bram.us — 100vh in Safari on iOS](https://www.bram.us/2020/05/06/100vh-in-safari-on-ios/) — `100dvh` fix for iOS Safari toolbar behavior
+- [shadcn/ui Issue #8471](https://github.com/shadcn-ui/ui/issues/8471) — `viewport-fit=cover` required for safe area to function
+- [motion.dev Web Animation Performance Tier List](https://motion.dev/blog/web-animation-performance-tier-list) — `transform`/`opacity` GPU-accelerated; `height`/`width` trigger layout
+- [ArcGIS Instant Apps sidebar](https://doc.arcgis.com/en/instant-apps/latest/create-apps/sidebar.htm) — contextual sidebar reference for map tools
+- [Material Design 3 — Transitions](https://m3.material.io/styles/motion/transitions) — established component spec for map app motion patterns
+- [technetexperts.com — R3F canvas 300x150 fix](https://www.technetexperts.com/r3f-canvas-viewport-resize-fix/) — corroborates R3F Discussion #672
 
 ### Tertiary (LOW confidence)
-- MVT layer name `"building"` — inferred from Azure Maps sample and STAC docs but not confirmed in PMTiles typedoc; requires empirical verification in Phase 1
+- [Tailwind v4 breakpoints override guide](https://bordermedia.org/blog/tailwind-css-4-breakpoint-override) — third-party; `@theme` override syntax verified against official docs but not a primary source
+- [stripearmy.medium.com — iOS body scroll lock](https://stripearmy.medium.com/i-fixed-a-decade-long-ios-safari-problem-0d85f76caec0) — iOS overscroll patterns; corroborated by MDN `overscroll-behavior` docs
 
 ---
 *Research completed: 2026-02-28*

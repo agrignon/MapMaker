@@ -1,652 +1,559 @@
 # Architecture Research
 
-**Domain:** Overture Maps building footprint integration into MapMaker (v1.1 milestone)
+**Domain:** Responsive UI integration — React/R3F/Zustand/Tailwind v4 app
 **Researched:** 2026-02-28
-**Confidence:** HIGH for integration points (based on direct codebase inspection + Overture documentation); MEDIUM for PMTiles decoding specifics (beta API, limited browser-focused documentation)
+**Confidence:** HIGH
 
 ---
 
-## Context: What This Document Covers
+## Context: What Already Exists
 
-This document answers one question: **how does Overture Maps building footprint data plug into the existing MapMaker architecture?**
+The app ships a working but rough responsive system:
 
-The existing system (v1.0) is fully understood from direct inspection. This document maps the new Overture data source onto that known architecture, identifies precisely which files change, which files are new, and defines the deduplication contract between OSM and Overture buildings.
+- `SplitLayout.tsx` — owns layout orchestration, contains an inline `useIsMobile(768)` hook, binary mobile/desktop branch, `display:none` for the preview column when hidden (mobile path), `visibility:hidden` for the preview column on desktop (WebGL preservation)
+- `Sidebar.tsx` — owns map controls; contains its own `useIsMobile(768)` copy, switches between `MobileSidebar` (fixed bottom) and `DesktopSidebar` (floating overlay)
+- `PreviewSidebar.tsx` — owns 3D model controls; always rendered as a `position:absolute` overlay inside the preview column; no mobile-awareness
+- `MobileTabBar` (inside `SplitLayout`) — simple tab bar, shown only when `showPreview === true`
+- All sizing/spacing/colours are inline styles throughout
 
----
-
-## Existing Architecture (The Baseline)
-
-```
-User clicks "Generate Preview"
-        |
-        v
-GenerateButton.triggerRegenerate()
-        |
-        ├── fetchElevationForBbox()        → setElevationData() → TerrainMesh rebuilds
-        │
-        └── fetchOsmLayersStandalone()
-                |
-                └── fetchAllOsmData(bbox)   [single Overpass request]
-                        |
-                        ├── parseBuildingFeatures() → setBuildingFeatures() → BuildingMesh rebuilds
-                        ├── parseRoadFeatures()     → setRoadFeatures()     → RoadMesh rebuilds
-                        ├── parseWaterFeatures()    → setWaterFeatures()     → WaterMesh rebuilds
-                        └── parseVegetationFeatures() → setVegetationFeatures() → VegetationMesh rebuilds
-
-BuildingMesh.tsx (useEffect on buildingFeatures change)
-        |
-        └── buildBuildingsInWorker(buildingFeatures, ...)
-                |
-                └── meshBuilder.worker.ts
-                        |
-                        └── buildAllBuildings(features, bbox, elevData, params)
-                                → THREE.BufferGeometry → transferable Float32Arrays → main thread
-```
-
-**The current `buildingFeatures` store field holds `BuildingFeature[]`**. Each `BuildingFeature` has:
-- `outerRing: [number, number][]` — WGS84 `[lon, lat]` pairs
-- `holes: [number, number][][]` — inner rings
-- `properties: Record<string, string | undefined>` — OSM tags (height, levels, roof:shape, etc.)
-
-`BuildingMesh.tsx` passes `buildingFeatures` to the worker. The worker calls `buildAllBuildings()` which handles all geometry: projection to UTM/mm space, elevation sampling, raycasting onto terrain mesh, wall+roof generation.
+The constraint that defines everything: **the R3F `<Canvas>` must never unmount**. Unmounting it triggers a WebGL context loss that cannot be recovered without a full page reload. The current `visibility:hidden` approach on the desktop preview column works correctly. The mobile path currently conditionally mounts/unmounts the preview `<div>` based on `showPreview`, which is safe because `showPreview` gates on the Generate action — but tab-switching must NOT use mount/unmount.
 
 ---
 
-## Overture Maps Data Access: Key Facts
+## Standard Architecture
 
-### What Overture Is
-
-Overture builds a global buildings dataset by conflating ~200 sources: OSM (~672M buildings, highest priority), Microsoft ML (~711M), Google Open Buildings (~1B). Total: 2.28+ billion buildings globally. The conflation uses **IoU (Intersection over Union) matching** — buildings with IoU > 50% across sources are merged into a single feature with a stable GERS ID.
-
-**Critical implication:** Overture already contains OSM buildings. When you fetch from Overpass and from Overture for the same bbox, many buildings appear in both responses. Deduplication is mandatory, not optional.
-
-### Overture's OSM Priority Rule
-
-Overture prioritizes OSM data. Where OSM has a building, the Overture record's `sources` field includes `"dataset": "OpenStreetMap"`. Where OSM does not have a building, Overture may have one from Microsoft or Google ML data. The Overture building schema includes height, num_floors, roof_shape, roof_height, facade fields — the same properties the existing height resolution cascade uses.
-
-### Browser Access Path
-
-Overture does not provide a REST API for bbox queries. Data access options ranked by browser viability:
-
-| Method | Browser viable | Notes |
-|--------|---------------|-------|
-| GeoParquet on S3 | No | Parquet format, requires DuckDB or server-side query |
-| PMTiles on S3 | Yes | Vector tile archive, HTTP range requests, JS library available |
-| Python CLI | No | Server-side only |
-| Third-party REST API (overturemapsapi.com) | Yes (with caveats) | Community project, not official, unknown reliability |
-
-**Recommended: PMTiles.** The `pmtiles` npm package provides a browser-compatible class that makes HTTP range requests against the remote `.pmtiles` file. No server required. The file is hosted at:
+### System Overview
 
 ```
-https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/{RELEASE}/buildings.pmtiles
+┌─────────────────────────────────────────────────────────────────┐
+│                         App.tsx (100dvh)                         │
+├─────────────────────────────────────────────────────────────────┤
+│                   SplitLayout (rewritten)                        │
+│                                                                  │
+│  mobile tier:                                                    │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  [map view]   visibility:visible/hidden                  │   │
+│  │  ┌──────────────────────────────────────────────────┐   │   │
+│  │  │  MapView + SearchOverlay + DrawButton             │   │   │
+│  │  └──────────────────────────────────────────────────┘   │   │
+│  │  [preview view]  visibility:visible/hidden               │   │
+│  │  ┌──────────────────────────────────────────────────┐   │   │
+│  │  │  PreviewCanvas (R3F) — ALWAYS MOUNTED            │   │   │
+│  │  └──────────────────────────────────────────────────┘   │   │
+│  │  [bottom sheet] fixed position, always mounted           │   │
+│  │  ┌──────────────────────────────────────────────────┐   │   │
+│  │  │  BottomSheet  [peek | half | full snap points]   │   │   │
+│  │  │  content: map controls OR model controls         │   │   │
+│  │  └──────────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  tablet/desktop tier:                                            │
+│  ┌────────────────────┐  ┌──────────────────────────────────┐   │
+│  │  ContextualSidebar │  │  Map | Preview columns (split)   │   │
+│  │  ─────────────     │  │  ┌────────────┐  ┌───────────┐  │   │
+│  │  map controls OR   │  │  │  MapView   │  │ PreviewC. │  │   │
+│  │  model controls    │  │  │            │  │ (R3F)     │  │   │
+│  │  (based on active  │  │  └────────────┘  └───────────┘  │   │
+│  │   view)            │  └──────────────────────────────────┘   │
+│  └────────────────────┘                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                         Zustand Stores                           │
+│  mapStore (existing) + activeView field   |   uiStore (new)     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Current release cadence is monthly. Example: `2025-10-22`. The file uses the MVT (Mapbox Vector Tile) format inside the PMTiles container. Buildings appear at zoom 13+ (all properties included at z13).
+### Component Responsibilities
 
-**PMTiles JS API (from typedoc, HIGH confidence):**
+| Component | Responsibility | Status |
+|-----------|----------------|--------|
+| `SplitLayout` | Three-tier layout switching; WebGL column visibility; resizable split | Rewrite |
+| `useBreakpoint` | Single source of truth for `mobile / tablet / desktop` tier | New hook |
+| `BottomSheet` | Mobile-only draggable sheet with 3 snap heights (peek/half/full) | New component |
+| `ContextualSidebar` | Persistent sidebar (tablet/desktop) showing map OR model controls by view | New component |
+| `MobileViewToggle` | Full-screen map/preview switcher for mobile | New component |
+| `MapSidebarContent` | Map controls content (SelectionInfo + GenerateButton) — layout-agnostic | Extracted |
+| `PreviewSidebarContent` | Model controls content (layer sections + export) — layout-agnostic | Extracted |
+| `Sidebar` | Thin wrapper — delegates to layout system | Refactor |
+| `PreviewSidebar` | Thin wrapper — delegates to layout system | Refactor |
+| `StaleIndicator` | Unchanged; overlay inside preview column | No change |
+| `uiStore` | Sheet snap height, sidebar collapsed state | New store slice |
+
+---
+
+## Recommended Project Structure
+
+```
+src/
+├── components/
+│   ├── Layout/
+│   │   ├── SplitLayout.tsx          # Three-tier layout orchestrator (rewrite)
+│   │   ├── BottomSheet.tsx          # Mobile sheet with snap points (new)
+│   │   ├── ContextualSidebar.tsx    # Persistent sidebar for tablet/desktop (new)
+│   │   └── MobileViewToggle.tsx     # Full-screen map/preview switcher (new)
+│   ├── Sidebar/                     # Unchanged structure — holds map controls
+│   │   ├── Sidebar.tsx              # Thin wrapper; content extracted below
+│   │   ├── MapSidebarContent.tsx    # SelectionInfo + GenerateButton (extracted, new)
+│   │   ├── SelectionInfo.tsx        # No changes
+│   │   └── GenerateButton.tsx       # No changes
+│   ├── Preview/                     # Unchanged structure — holds 3D model controls
+│   │   ├── PreviewSidebar.tsx       # Thin wrapper; content extracted below
+│   │   ├── PreviewSidebarContent.tsx # All layer sections + export (extracted, new)
+│   │   └── ... (all mesh/section components unchanged)
+│   └── Map/                         # No changes
+├── hooks/
+│   ├── useBreakpoint.ts             # NEW — mobile/tablet/desktop tier
+│   └── useTerradraw.ts              # Unchanged
+├── store/
+│   ├── mapStore.ts                  # Add activeView: 'map' | 'preview' field
+│   └── uiStore.ts                   # NEW — sheetSnap, sidebarCollapsed
+└── index.css                        # Add @theme breakpoint vars + animation keyframes
+```
+
+### Structure Rationale
+
+- **`Layout/`:** All layout-aware components live here. Control components (`Sidebar/`, `Preview/`) become layout-agnostic and render only their content.
+- **`hooks/useBreakpoint.ts`:** Centralises the `window.matchMedia` logic currently duplicated in `SplitLayout.tsx` and `Sidebar.tsx`. Returns a typed tier rather than a boolean.
+- **Content extraction:** `MapSidebarContent` and `PreviewSidebarContent` are the extracted pure-content components. The layout system (BottomSheet, ContextualSidebar) decides where to place them. This is the critical prerequisite for all layout work.
+- **`store/uiStore.ts`:** Separates UI/layout state from app/domain state in `mapStore`. Prevents `mapStore` (already 64 fields) from growing further.
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Single Breakpoint Hook with Typed Tiers
+
+**What:** Replace both instances of `useIsMobile(768)` with a single `useBreakpoint()` hook that returns `'mobile' | 'tablet' | 'desktop'`.
+
+**When to use:** Everywhere layout branches on screen size. Replaces boolean `isMobile` checks.
+
+**Trade-offs:** Slightly more complex than a boolean, but eliminates the silent bug risk of mismatched breakpoint values between files. With three tiers, a boolean is insufficient anyway.
+
 ```typescript
-import { PMTiles } from 'pmtiles';
+// src/hooks/useBreakpoint.ts
+type Tier = 'mobile' | 'tablet' | 'desktop';
 
-const pmtiles = new PMTiles('https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2025-10-22/buildings.pmtiles');
-// Fetch a specific tile:
-const tile = await pmtiles.getZxy(z, x, y);  // returns ArrayBuffer | undefined
-```
+const BREAKPOINTS = {
+  tablet: 768,   // matches Tailwind md: — below this is mobile
+  desktop: 1024, // matches Tailwind lg: — at/above this is desktop
+} as const;
 
-To decode the MVT tile bytes to GeoJSON-like features, use `@mapbox/vector-tile` + `pbf`:
-```typescript
-import { VectorTile } from '@mapbox/vector-tile';
-import Protobuf from 'pbf';
+function getTier(width: number): Tier {
+  if (width >= BREAKPOINTS.desktop) return 'desktop';
+  if (width >= BREAKPOINTS.tablet) return 'tablet';
+  return 'mobile';
+}
 
-const tile = new VectorTile(new Protobuf(tileArrayBuffer));
-const layer = tile.layers['building']; // layer name TBD — needs verification
-for (let i = 0; i < layer.length; i++) {
-  const feature = layer.feature(i);
-  const geojson = feature.toGeoJSON(x, y, z);  // returns GeoJSON Feature
+export function useBreakpoint(): Tier {
+  const [tier, setTier] = useState<Tier>(() => getTier(window.innerWidth));
+
+  useEffect(() => {
+    const tabletMq = window.matchMedia(`(min-width: ${BREAKPOINTS.tablet}px)`);
+    const desktopMq = window.matchMedia(`(min-width: ${BREAKPOINTS.desktop}px)`);
+    const update = () => setTier(getTier(window.innerWidth));
+
+    tabletMq.addEventListener('change', update);
+    desktopMq.addEventListener('change', update);
+    return () => {
+      tabletMq.removeEventListener('change', update);
+      desktopMq.removeEventListener('change', update);
+    };
+  }, []);
+
+  return tier;
 }
 ```
 
-The tile coordinate system is standard TMS/Slippy Map. Given a bbox in WGS84, tile coordinates at zoom 14 can be derived using `lon2tile(lon, z)` and `lat2tile(lat, z)` — standard formulas. For a MapMaker bbox at z14, typically 4–16 tiles cover the area.
+The same values go into `index.css` as Tailwind v4 theme variables so CSS classes and JS logic stay in sync:
 
-**MEDIUM confidence on exact layer name inside the MVT.** The PMTiles docs confirm MVT format and buildings theme but do not document the layer key. Needs one-time empirical check: open `https://pmtiles.io/` with the Overture buildings URL and inspect layer names.
-
----
-
-## Integration Architecture
-
-### System Overview With Overture Added
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         Browser (Client-Side SPA)                          │
-│                                                                            │
-│  GenerateButton.triggerRegenerate()                                        │
-│        |                                                                   │
-│        ├── fetchElevationForBbox()  ─────────────────────────────────────► │
-│        │                                                                   │
-│        └── fetchOsmLayersStandalone(bbox)      ◄── MODIFIED                │
-│                   |                                                        │
-│                   ├── fetchAllOsmData(bbox)  ─────────────────────────────►│
-│                   │       |                                                │
-│                   │       └── parseBuildingFeatures()  → osmBuildings      │
-│                   │                                                        │
-│                   ├── fetchOvertureBuildings(bbox)  ──────────────────────►│
-│                   │       |                              Overture PMTiles  │
-│                   │       └── parseOvertureBuildings()  → overtureBuildings│
-│                   │                                                        │
-│                   └── mergeAndDeduplicateBuildings(                        │
-│                             osmBuildings, overtureBuildings                │
-│                         )  → BuildingFeature[]                             │
-│                                  |                                         │
-│                                  └── setBuildingFeatures()  ◄── SAME STORE │
-│                                                                            │
-│  mapStore.ts:  buildingFeatures: BuildingFeature[]  (unchanged type)       │
-│                                                                            │
-│  BuildingMesh.tsx  →  meshBuilder.worker.ts  →  buildAllBuildings()        │
-│       (ALL UNCHANGED — downstream pipeline sees no difference)             │
-└────────────────────────────────────────────────────────────────────────────┘
-         |                           |                         |
-         ▼                           ▼                         ▼
-┌─────────────────┐    ┌──────────────────────────┐  ┌─────────────────────┐
-│  Overpass API   │    │   Overture Maps PMTiles   │  │  MapTiler Terrain   │
-│  (OSM buildings │    │   buildings.pmtiles on S3 │  │  (elevation, DEM)   │
-│   + all other   │    │   HTTP range requests     │  │                     │
-│   OSM layers)   │    │   via pmtiles npm pkg     │  └─────────────────────┘
-└─────────────────┘    └──────────────────────────┘
-```
-
-### The Integration Seam
-
-The cleanest integration point is **between parsing and storing**. The existing flow is:
-
-```
-fetchAllOsmData() → parseBuildingFeatures() → setBuildingFeatures()
-```
-
-The new flow is:
-
-```
-fetchAllOsmData()         → parseBuildingFeatures() → osmBuildings
-fetchOvertureBuildings()  → parseOvertureBuildings() → overtureBuildings
-mergeAndDeduplicateBuildings(osmBuildings, overtureBuildings) → setBuildingFeatures()
-```
-
-Everything downstream of `setBuildingFeatures()` — the store, `BuildingMesh.tsx`, the worker, `buildAllBuildings()`, the STL export — is **unchanged**. The seam is in `GenerateButton.tsx`'s `fetchOsmLayersStandalone()` function.
-
----
-
-## Component Boundaries
-
-### New Files (Create)
-
-```
-src/lib/buildings/
-├── overture.ts          NEW — fetchOvertureBuildings(bbox) → BuildingFeature[]
-│                              PMTiles fetch + MVT decode + coordinate transform
-│                              Returns Overture buildings as BuildingFeature[]
-│                              with synthetic properties (height, num_floors, roof_shape)
-│                              mapped to the existing BuildingFeature.properties format
-│
-└── deduplicate.ts       NEW — mergeAndDeduplicateBuildings(
-                                   osm: BuildingFeature[],
-                                   overture: BuildingFeature[]
-                               ) → BuildingFeature[]
-                               Spatial deduplication: OSM preferred, Overture fills gaps
-```
-
-### Modified Files
-
-```
-src/components/Sidebar/GenerateButton.tsx
-  — fetchOsmLayersStandalone() function:
-    Add: const overtureBuildings = await fetchOvertureBuildings(bbox)
-    Add: const merged = mergeAndDeduplicateBuildings(osmBuildings, overtureBuildings)
-    Change: setBuildingFeatures(buildings) → setBuildingFeatures(merged)
-    Status reporting: show "Fetching Overture data..." alongside OSM status
-
-src/lib/overpass.ts
-  — No change. Combined OSM fetch is unchanged.
-
-src/lib/buildings/parse.ts
-  — No change. OSM parser is unchanged.
-```
-
-### Unchanged Files (Must Remain Unchanged)
-
-```
-src/store/mapStore.ts              — buildingFeatures type stays BuildingFeature[]
-src/lib/buildings/merge.ts         — buildAllBuildings() receives same type, unchanged
-src/lib/buildings/types.ts         — BuildingFeature interface unchanged
-src/components/Preview/BuildingMesh.tsx  — no change, reads same store field
-src/workers/meshBuilder.worker.ts  — no change, receives same BuildingFeature[]
-src/components/Preview/ExportPanel.tsx   — no change, STL export unchanged
-```
-
----
-
-## Deduplication Design
-
-### Why IoU Is the Right Metric
-
-Overture uses IoU > 50% internally to match buildings across sources. We must use the same metric for the same reason: two footprints representing the same building will overlap significantly (IoU > 0.4–0.6) even with projection differences, while adjacent buildings will have near-zero overlap.
-
-### Algorithm
-
-```typescript
-// src/lib/buildings/deduplicate.ts
-
-export function mergeAndDeduplicateBuildings(
-  osmBuildings: BuildingFeature[],
-  overtureBuildings: BuildingFeature[]
-): BuildingFeature[] {
-
-  // 1. OSM is always preferred — start with all OSM buildings
-  const result: BuildingFeature[] = [...osmBuildings];
-
-  // 2. For each Overture building, check if it overlaps with any OSM building
-  for (const overtureBuilding of overtureBuildings) {
-    const hasOsmMatch = osmBuildings.some(
-      (osmBuilding) => iou(overtureBuilding.outerRing, osmBuilding.outerRing) > 0.3
-    );
-
-    // 3. Only add Overture building if no OSM match found (gap-fill only)
-    if (!hasOsmMatch) {
-      result.push(overtureBuilding);
-    }
-  }
-
-  return result;
+```css
+/* src/index.css */
+@theme {
+  --breakpoint-md: 48rem;   /* 768px — tablet start */
+  --breakpoint-lg: 64rem;   /* 1024px — desktop start */
 }
 ```
 
-**IoU threshold: 0.3 (not 0.5).** OSM and Overture may use slightly different footprint sources even for the same building (e.g., OSM community-traced vs ML roofprint). A 0.3 threshold avoids false duplicates from small geometry differences. Overture uses 0.5 internally where both sources are already normalized; we use 0.3 to be conservative given raw coordinate differences.
+### Pattern 2: WebGL Context Preservation via CSS Visibility (Maintain Existing Strategy)
 
-### IoU Computation
+**What:** The R3F `<Canvas>` inside `PreviewCanvas` must never unmount. On mobile, it stays mounted but hidden with `visibility: hidden` (not `display: none`) when the map view is active. On desktop, the existing `visibility: hidden` on the preview column when `showPreview === false` is preserved.
 
-Computing exact polygon IoU (intersection area / union area) requires polygon clipping. Two options:
+**When to use:** Any time the layout switches views — mobile tab toggle, desktop show/hide preview.
 
-**Option A: Turf.js** — `@turf/intersect` returns intersection polygon; `@turf/area` computes area. Well-tested, production-ready. Adds ~50KB to bundle. Accurate.
+**Trade-offs:** `visibility: hidden` preserves layout space. On mobile, the full-screen stacked views are `position: absolute; inset: 0`, so both the map and preview occupy the same space — layout-space preservation is irrelevant.
 
-**Option B: Bounding-box IoU** — Compute bbox of each footprint's outerRing, compute bbox overlap. O(1) per pair, zero dependencies, no polygon math. Approximate — false negatives for L-shaped buildings, but acceptable for gap-fill deduplication where precision matters less than recall.
+**Why not `content-visibility: hidden`:** `content-visibility: hidden` achieved Baseline 2024 status but its interaction with WebGL canvas rendering state is not documented in the spec. The MDN documentation notes that the `contentvisibilityautostatechange` event is the mechanism for managing canvas rendering, introducing additional complexity. The existing `visibility: hidden` pattern is proven, simple, and correct. Do not change it.
 
-**Recommendation: Bounding-box IoU first.** The goal is to not render duplicate geometry, not to be cartographically precise. Bbox IoU is fast (O(n*m) with no library overhead), handles 99% of cases correctly (most buildings are roughly rectangular), and can be swapped for exact polygon IoU if needed. Implement with a `bboxOf(ring)` helper and standard IoU formula.
-
-```typescript
-function bboxOf(ring: [number, number][]): [number, number, number, number] {
-  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  for (const [lon, lat] of ring) {
-    if (lon < minLon) minLon = lon;
-    if (lat < minLat) minLat = lat;
-    if (lon > maxLon) maxLon = lon;
-    if (lat > maxLat) maxLat = lat;
-  }
-  return [minLon, minLat, maxLon, maxLat];
-}
-
-function bboxIou(a: [number,number,number,number], b: [number,number,number,number]): number {
-  const interMinLon = Math.max(a[0], b[0]);
-  const interMinLat = Math.max(a[1], b[1]);
-  const interMaxLon = Math.min(a[2], b[2]);
-  const interMaxLat = Math.min(a[3], b[3]);
-
-  if (interMaxLon <= interMinLon || interMaxLat <= interMinLat) return 0;
-
-  const interArea = (interMaxLon - interMinLon) * (interMaxLat - interMinLat);
-  const aArea = (a[2] - a[0]) * (a[3] - a[1]);
-  const bArea = (b[2] - b[0]) * (b[3] - b[1]);
-  return interArea / (aArea + bArea - interArea);
-}
-```
-
-**Performance:** For a dense area with 5,000 OSM buildings and 3,000 Overture gap-fills, the O(n*m) check is 15M comparisons. Each comparison is 10 arithmetic operations — ~150M ops. In a Worker this is acceptable. Pre-indexing OSM buildings by grid cell reduces this to ~O(n log n) if needed.
-
-### Properties Mapping
-
-Overture building properties must be mapped to the existing `BuildingFeature.properties` format (`Record<string, string | undefined>`) which the height resolution cascade reads:
-
-| Existing OSM property key | Overture field | Notes |
-|---------------------------|---------------|-------|
-| `height` | `height` | Direct map, convert number to string |
-| `building:levels` | `num_floors` | Direct map |
-| `roof:shape` | `roof_shape` | Overture values: "flat", "gabled", "hipped" — matches OSM vocabulary |
-| `roof:height` | `roof_height` | Direct map |
-| `building` | `class` or `subtype` | Overture has "building" subtype field |
-
-For gap-fill buildings (Overture-only, no OSM match), the `properties` object will have whatever Overture provides. The existing `resolveHeight()` function in `src/lib/buildings/height.ts` already handles missing height/levels with a footprint-area-based fallback — Overture-only buildings with height=undefined will use that fallback automatically.
-
----
-
-## Data Flow: Full Sequence
-
-```
-User clicks "Generate Preview"
-        |
-        v
-triggerRegenerate()
-        |
-        ├── fetchElevationForBbox()                    [unchanged, async]
-        │
-        └── fetchOsmLayersStandalone(bbox)             [MODIFIED]
-                |
-                ├── fetchAllOsmData(bbox)              [unchanged, Overpass]
-                │       → osmData (combined JSON)
-                │       → osmBuildings = parseBuildingFeatures(osmData)
-                │       → roads = parseRoadFeatures(osmData)         → setRoadFeatures()
-                │       → water = parseWaterFeatures(osmData)        → setWaterFeatures()
-                │       → vegetation = parseVegetationFeatures(osmData) → setVegetationFeatures()
-                │
-                ├── fetchOvertureBuildings(bbox)       [NEW, parallel with OSM]
-                │       → PMTiles.getZxy() for each tile covering bbox
-                │       → VectorTile decode → GeoJSON polygon features
-                │       → overtureBuildings: BuildingFeature[]
-                │
-                └── mergeAndDeduplicateBuildings(osmBuildings, overtureBuildings)  [NEW]
-                        → merged: BuildingFeature[]
-                        → setBuildingFeatures(merged)
-
-Store: buildingFeatures: BuildingFeature[]  (now contains both OSM + Overture gap-fills)
-
-BuildingMesh.tsx  ← useEffect on buildingFeatures
-        |
-        └── buildBuildingsInWorker(buildingFeatures, ...)   [unchanged]
-                |
-                └── meshBuilder.worker.ts                  [unchanged]
-                        |
-                        └── buildAllBuildings()            [unchanged]
-                                → same geometry pipeline for all buildings
-                                → OSM buildings: rich geometry (roofs, heights)
-                                → Overture gap-fills: flat box (height from Overture or fallback)
-```
-
-### Parallelism
-
-`fetchOvertureBuildings()` and `fetchAllOsmData()` should run in **parallel** — both start at the same time. The merge runs only after both complete. This avoids adding Overture latency to the serial critical path. The pattern matches existing parallel fetch design.
+**Why not `display: none`:** Destroys the WebGL context. Fatal for this app.
 
 ```typescript
-// In fetchOsmLayersStandalone():
-const [osmData, overtureBuildings] = await Promise.all([
-  fetchAllOsmData(bbox),
-  fetchOvertureBuildings(bbox),   // new
-]);
+// Mobile view stacking in SplitLayout
+// Both views are always mounted; visibility toggles which is interactive
+const mapStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  visibility: activeView === 'map' ? 'visible' : 'hidden',
+  pointerEvents: activeView === 'map' ? 'auto' : 'none',
+};
 
-const osmBuildings = parseBuildingFeatures(osmData);
-const merged = mergeAndDeduplicateBuildings(osmBuildings, overtureBuildings);
-setBuildingFeatures(merged);
+const previewStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  visibility: activeView === 'preview' ? 'visible' : 'hidden',
+  pointerEvents: activeView === 'preview' ? 'auto' : 'none',
+};
 ```
 
----
+### Pattern 3: Bottom Sheet with Vaul — Three Snap Points
 
-## fetchOvertureBuildings Implementation Design
+**What:** On mobile, replace the fixed `MobileSidebar` with a draggable bottom sheet using Vaul. Three snap points: peek (~80px, shows only Generate button), half (~45dvh, shows SelectionInfo + Generate), full (~85dvh, shows all model controls when in preview mode).
+
+**When to use:** Mobile only (`tier === 'mobile'`). Not rendered on tablet or desktop.
+
+**Trade-offs:** Vaul adds a dependency (~184KB package, Radix UI Dialog base) but provides gesture handling, snap-point physics, and keyboard accessibility that are expensive to build from scratch. Vaul v1.1.2 (Dec 2024) is the latest stable release. The author has noted the project is "unmaintained" but it has 355k dependent projects and is used in production by Vercel. The risk of abandonment is low given ecosystem adoption; a custom implementation is the fallback if Vaul becomes problematic.
+
+**Snap point configuration:**
 
 ```typescript
-// src/lib/buildings/overture.ts
+import { Drawer } from 'vaul';
 
-import { PMTiles } from 'pmtiles';
-import { VectorTile } from '@mapbox/vector-tile';
-import Protobuf from 'pbf';
-import type { BuildingFeature } from './types';
-import type { BoundingBox } from '../../types/geo';
+// Snap points: array of pixel strings or 0-1 fractions
+const SNAP_POINTS = ['80px', '45dvh', 0.85] as const;
 
-// Overture releases buildings as PMTiles; update URL per release
-const OVERTURE_BUILDINGS_URL =
-  'https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2025-10-22/buildings.pmtiles';
+function MobileBottomSheet() {
+  const [snap, setSnap] = useState<string | number>(SNAP_POINTS[0]);
+  const showPreview = useMapStore((s) => s.showPreview);
 
-// Standard TMS tile coordinate conversions
-function lon2tile(lon: number, z: number): number {
-  return Math.floor(((lon + 180) / 360) * Math.pow(2, z));
-}
-function lat2tile(lat: number, z: number): number {
-  return Math.floor(
-    ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) *
-      Math.pow(2, z)
+  return (
+    <Drawer.Root
+      snapPoints={SNAP_POINTS}
+      activeSnapPoint={snap}
+      setActiveSnapPoint={setSnap}
+      modal={false}        // map and preview remain interactive behind the sheet
+      dismissible={false}  // sheet never fully dismisses — always at least peek
+    >
+      <Drawer.Portal>
+        <Drawer.Content
+          style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))' }}
+        >
+          <Drawer.Handle />
+          {/* Peek state: always visible */}
+          <GenerateButton />
+          {/* Half/full: conditional on snap height */}
+          {snap !== SNAP_POINTS[0] && (
+            showPreview
+              ? <PreviewSidebarContent />   // model controls
+              : <MapSidebarContent />       // SelectionInfo + empty-state copy
+          )}
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }
+```
 
-export async function fetchOvertureBuildings(bbox: BoundingBox): Promise<BuildingFeature[]> {
-  const ZOOM = 14; // buildings appear at z13+; z14 gives adequate precision
-  const pmtiles = new PMTiles(OVERTURE_BUILDINGS_URL);
+**Contextual content switching:** When `showPreview === false`, the sheet shows map controls (SelectionInfo + GenerateButton). When `showPreview === true`, it shows model controls (all layer sections + ExportPanel). This is the "contextual" requirement from the milestone.
 
-  const swTileX = lon2tile(bbox.sw.lon, ZOOM);
-  const swTileY = lat2tile(bbox.ne.lat, ZOOM); // lat2tile: higher lat = lower Y
-  const neTileX = lon2tile(bbox.ne.lon, ZOOM);
-  const neTileY = lat2tile(bbox.sw.lat, ZOOM);
+**Auto-snap on generate:** When the user taps Generate and `showPreview` transitions `false → true`, the sheet should snap from peek to half. Wire this in a `useEffect` on `showPreview` inside `BottomSheet`:
 
-  const features: BuildingFeature[] = [];
+```typescript
+useEffect(() => {
+  if (showPreview) setSnap(SNAP_POINTS[1]); // snap to half on generate
+}, [showPreview]);
+```
 
-  // Fetch all tiles covering the bbox in parallel
-  const tileRequests: Promise<void>[] = [];
-  for (let x = swTileX; x <= neTileX; x++) {
-    for (let y = swTileY; y <= neTileY; y++) {
-      tileRequests.push(
-        (async () => {
-          const result = await pmtiles.getZxy(ZOOM, x, y);
-          if (!result) return;
+### Pattern 4: Contextual Sidebar for Tablet and Desktop
 
-          const tile = new VectorTile(new Protobuf(result.data));
-          const layer = tile.layers['building']; // layer name to verify empirically
-          if (!layer) return;
+**What:** A persistent sidebar column that shows map controls while the map view is active (or `showPreview === false`), and model controls while the preview is active (`showPreview === true`). Replaces both the floating `DesktopSidebar` overlay and the floating `PreviewSidebar` overlay.
 
-          for (let i = 0; i < layer.length; i++) {
-            const f = layer.feature(i);
-            const geojson = f.toGeoJSON(x, y, ZOOM);
+**When to use:** `tier === 'tablet'` or `tier === 'desktop'`.
 
-            if (geojson.geometry.type !== 'Polygon') continue;
+**Trade-offs:** Changes the visual layout from glass overlays to a structured column. The sidebar column consumes fixed width (240px on desktop, 220px on tablet), reducing map/preview canvas area. On desktop this is a net improvement — the current overlay obscures part of the preview. On tablet, same improvement.
 
-            const coords = geojson.geometry.coordinates as number[][][];
-            const [outerRing, ...holes] = coords;
+```typescript
+function ContextualSidebar() {
+  const showPreview = useMapStore((s) => s.showPreview);
 
-            const feature: BuildingFeature = {
-              outerRing: outerRing.map(([lon, lat]) => [lon, lat] as [number, number]),
-              holes: holes.map((h) => h.map(([lon, lat]) => [lon, lat] as [number, number])),
-              properties: mapOvertureProps(f.properties),
-            };
-
-            features.push(feature);
-          }
-        })()
-      );
-    }
-  }
-
-  await Promise.all(tileRequests);
-  return features;
-}
-
-function mapOvertureProps(raw: Record<string, unknown>): Record<string, string | undefined> {
-  return {
-    building: String(raw['class'] ?? raw['subtype'] ?? 'yes'),
-    height: raw['height'] != null ? String(raw['height']) : undefined,
-    'building:levels': raw['num_floors'] != null ? String(raw['num_floors']) : undefined,
-    'roof:shape': raw['roof_shape'] != null ? String(raw['roof_shape']) : undefined,
-    'roof:height': raw['roof_height'] != null ? String(raw['roof_height']) : undefined,
-  };
+  return (
+    <aside className="w-[220px] lg:w-[260px] h-full flex flex-col bg-gray-900 border-r border-gray-800 shrink-0">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {showPreview
+          ? <PreviewSidebarContent />
+          : <MapSidebarContent />
+        }
+      </div>
+    </aside>
+  );
 }
 ```
 
-**MEDIUM confidence on `tile.layers['building']`.** The PMTiles docs confirm MVT format and buildings theme but do not document the exact layer key string in the MVT. This must be verified by loading a sample tile at pmtiles.io and inspecting layer names. Common naming: `buildings`, `building`, `overture_buildings`.
+### Pattern 5: Content Extraction from Layout-Coupled Components
+
+**What:** `Sidebar.tsx` and `PreviewSidebar.tsx` currently own both their content AND their positioning/layout. The new system places that content in different containers (bottom sheet on mobile, sidebar column on tablet/desktop). Extract content to pure components.
+
+**When to use:** This is a prerequisite for patterns 3 and 4. Must happen before building new layout components.
+
+**Trade-offs:** Adds one level of component nesting. The trade-off is marginal; the flexibility gain is substantial.
+
+```
+Before:
+  Sidebar.tsx → [positions itself as fixed bottom / floating overlay] + [renders controls]
+
+After:
+  MapSidebarContent.tsx → [renders controls only — no positioning, no layout]
+  BottomSheet.tsx → places MapSidebarContent in Vaul content (mobile)
+  ContextualSidebar.tsx → places MapSidebarContent in sidebar column (tablet/desktop)
+```
+
+`SelectionInfo` and `GenerateButton` are already pure content components — they need no changes. Only the wrapper div with positioning is being removed and moved to the layout system.
 
 ---
 
-## Project Structure: New Files Only
+## Data Flow
+
+### Layout Decision Flow
 
 ```
-src/lib/buildings/
-├── overture.ts          NEW — PMTiles fetch + MVT decode → BuildingFeature[]
-├── deduplicate.ts       NEW — mergeAndDeduplicateBuildings(osm, overture) → BuildingFeature[]
-├── overture.ts          (existing src/lib/buildings/overpass.ts stays for building-only legacy)
-│                        (src/lib/overpass.ts stays for combined OSM fetch — unchanged)
-├── merge.ts             UNCHANGED
-├── parse.ts             UNCHANGED
-├── types.ts             UNCHANGED
-└── ... (all other files unchanged)
+window resize event
+    ↓
+useBreakpoint() → 'mobile' | 'tablet' | 'desktop'
+    ↓
+SplitLayout branches rendering:
 
-src/components/Sidebar/
-└── GenerateButton.tsx   MODIFIED (fetchOsmLayersStandalone only)
+  mobile  → full-screen view stack (position: absolute; inset: 0)
+            + MobileViewToggle (tab bar or FAB)
+            + BottomSheet (fixed, always mounted)
+            visibility toggling for WebGL preservation
 
-No new store fields. No new mesh components. No changes to worker or export pipeline.
+  tablet  → [ContextualSidebar 220px] + [split: map | preview]
+            no bottom sheet
+
+  desktop → [ContextualSidebar 260px] + [split: map | preview, resizable divider]
+            no bottom sheet
+```
+
+### View Transition Flow (Mobile)
+
+```
+User taps [3D Preview] in MobileViewToggle
+    ↓
+setActiveView('preview')        ← mapStore action
+    ↓
+SplitLayout re-renders:
+  map div:     visibility:hidden, pointerEvents:none
+  preview div: visibility:visible, pointerEvents:auto
+    ↓
+PreviewCanvas remains mounted — WebGL context intact
+MapLibre map remains mounted — no re-initialisation cost
+    ↓
+BottomSheet: showPreview === true → content switches to model controls
+```
+
+### Sheet Snap Flow (Mobile)
+
+```
+User drags bottom sheet upward
+    ↓
+Vaul gesture handler detects drag velocity + position
+    ↓
+Snaps to nearest point: '80px' → '45dvh' → 0.85
+    ↓
+setSnap(newSnapPoint)            ← local state in BottomSheet
+    ↓
+Content re-renders based on snap + showPreview:
+  snap === '80px'  → peek: GenerateButton only
+  snap === '45dvh' → half: SelectionInfo + GenerateButton (or partial model controls)
+  snap === 0.85    → full: all controls scrollable
+```
+
+### State Management
+
+```
+mapStore (existing — app/domain state):
+  showPreview: boolean          ← existing; controls content switch
+  activeView: 'map'|'preview'  ← ADD THIS; controls mobile view visibility
+  bbox, elevationData, ...      ← existing, unchanged
+
+uiStore (new — pure UI/layout state):
+  sheetSnap: string | number    ← current snap point (local to BottomSheet, not store)
+  sidebarCollapsed: boolean     ← for future collapse affordance on desktop
+```
+
+**Note on `sheetSnap`:** Keep `sheetSnap` as local state inside `BottomSheet.tsx` via `useState`. Only elevate to `uiStore` if another component needs to read or set the snap height (e.g., the generate button auto-expanding the sheet on success). If auto-expansion is needed, put snap control in `uiStore` and have `BottomSheet` subscribe to it.
+
+**Note on `activeView`:** Place in `mapStore` (not `uiStore`) because it is coupled to `showPreview` — when `showPreview` transitions `false → true` (Generate succeeds), `activeView` should automatically switch to `'preview'` on mobile. This coupling is cleaner in one store.
+
+---
+
+## Integration Points
+
+### Existing → New Component Mapping
+
+| Existing Component | Action | Result |
+|--------------------|--------|--------|
+| `useIsMobile()` in `SplitLayout` | Delete | Replaced by `useBreakpoint()` |
+| `useIsMobile()` in `Sidebar` | Delete | Replaced by `useBreakpoint()` |
+| `MobileTabBar` (inside SplitLayout) | Replace | `MobileViewToggle.tsx` |
+| `MobileSidebar` (inside Sidebar) | Replace | `BottomSheet.tsx` renders `MapSidebarContent` |
+| `DesktopSidebar` (inside Sidebar) | Replace | `ContextualSidebar.tsx` renders `MapSidebarContent` |
+| `PreviewSidebar.tsx` outer wrapper | Refactor | Extract content; `ContextualSidebar` renders `PreviewSidebarContent` on mobile it goes in `BottomSheet` |
+| `StaleIndicator` (in SplitLayout) | Move | Stays inside preview column — logic unchanged |
+| Split resizer divider | Keep | Desktop only; move inside SplitLayout desktop branch |
+
+### Internal Boundaries
+
+| Boundary | Communication | Constraint |
+|----------|---------------|------------|
+| `SplitLayout` ↔ `PreviewCanvas` | CSS `visibility` only | Never unmount Canvas |
+| `SplitLayout` ↔ `MapView` | DOM containment + resize coordination | MapLibre needs `map.resize()` after container size changes |
+| `BottomSheet` ↔ content components | Direct render inside `Drawer.Content` | Content is stateless; sheet owns snap/positioning |
+| `ContextualSidebar` ↔ content components | Direct render inside sidebar column | Same stateless content pattern |
+| `uiStore` ↔ `mapStore` | Both read independently | No cross-store writes; subscribe to each separately |
+| `useBreakpoint` ↔ layout components | Hook return value | Only `SplitLayout`, `ContextualSidebar`, `BottomSheet` should branch on tier |
+
+### MapLibre Resize Coordination
+
+MapLibre GL JS uses a `ResizeObserver` internally but may not detect changes caused by CSS transitions or JS-driven `visibility` changes (since these do not change the element's layout dimensions). After any layout change that alters the map container's rendered size — sidebar opening/closing, split percent changing, view toggle on tablet — call `map.resize()`.
+
+```typescript
+// In MapView.tsx or a dedicated resize coordinator
+const { current: mapRef } = useMap();
+const activeView = useMapStore((s) => s.activeView);
+const showPreview = useMapStore((s) => s.showPreview);
+const tier = useBreakpoint();
+
+useEffect(() => {
+  // Allow CSS transitions to complete before resizing
+  const id = setTimeout(() => {
+    mapRef?.getMap().resize();
+  }, 200);
+  return () => clearTimeout(id);
+}, [activeView, showPreview, tier, mapRef]);
 ```
 
 ---
 
 ## Build Order
 
-Dependencies determine order. Build in this sequence:
+Build in dependency order to avoid breaking the app at each step:
 
-**Step 1: fetchOvertureBuildings() in isolation**
+**Phase 1 — Foundation (no visible changes)**
+1. Create `hooks/useBreakpoint.ts` with `mobile/tablet/desktop` tiers
+2. Add `activeView: 'map' | 'preview'` field + `setActiveView` action to `mapStore`
+3. Create `store/uiStore.ts` with `sidebarCollapsed` (sheetSnap stays local)
+4. Update `index.css` `@theme` with correct breakpoint values + `@keyframes slide-up` for sheet animation
 
-Build `src/lib/buildings/overture.ts` as a standalone function. Test it independently by calling it with a known bbox and logging the returned `BuildingFeature[]` count. This verifies PMTiles access, tile coordinate math, MVT decoding, and property mapping before integrating into the live pipeline.
+**Phase 2 — Replace `useIsMobile` (behaviour identical)**
+5. Replace `useIsMobile` in `SplitLayout.tsx` with `useBreakpoint()` — `isMobile === true` maps to `tier === 'mobile'`; `isMobile === false` maps to `tier !== 'mobile'`. Tablet uses desktop layout for now.
+6. Replace `useIsMobile` in `Sidebar.tsx` with `useBreakpoint()` — same mapping.
+7. Run full test suite — all 264 tests should still pass.
 
-Blockers to resolve first:
-- Install `pmtiles` and `@mapbox/vector-tile` + `pbf` npm packages
-- Verify the MVT layer name by fetching one tile manually at pmtiles.io
-- Confirm CORS allows browser fetch from the S3 bucket (Overture tiles are public; their web explorer uses them browser-side, so CORS is expected to be open)
+**Phase 3 — Content extraction (no visible changes)**
+8. Create `MapSidebarContent.tsx` — extract `SelectionInfo` + `GenerateButton` wrapper from `MobileSidebar`/`DesktopSidebar`. Both existing variants now call `MapSidebarContent`.
+9. Create `PreviewSidebarContent.tsx` — extract all sections from `PreviewSidebar`'s inner panel div. `PreviewSidebar` wraps it in the existing absolute overlay.
+10. Verify in browser — visually identical.
 
-**Step 2: mergeAndDeduplicateBuildings() with tests**
+**Phase 4 — New layout components**
+11. Build `BottomSheet.tsx` (mobile only, Vaul-based, 3 snap points, `modal={false}`, `dismissible={false}`)
+12. Build `ContextualSidebar.tsx` (tablet/desktop, reads `showPreview` to switch content)
+13. Build `MobileViewToggle.tsx` (replaces `MobileTabBar`, sets `activeView` in store)
 
-Build `src/lib/buildings/deduplicate.ts`. Write unit tests with synthetic `BuildingFeature[]` arrays that have known overlaps and gaps. Verify: (a) OSM-only buildings pass through, (b) Overture buildings matching OSM are dropped, (c) Overture buildings with no OSM match are added. Do not integrate into `GenerateButton.tsx` yet.
+**Phase 5 — SplitLayout rewrite**
+14. Rewrite `SplitLayout.tsx` to branch on `useBreakpoint()` tier:
+    - Mobile: `position: relative; overflow: hidden` container; two `position: absolute; inset: 0` children (map + preview) with `visibility` toggle; `BottomSheet` rendered outside the stack (fixed, portal)
+    - Tablet: flex row — `ContextualSidebar` + split columns (map | preview) no resizer
+    - Desktop: flex row — `ContextualSidebar` + split columns with resizer divider
+15. Remove `MobileSidebar`, `DesktopSidebar`, `MobileTabBar` definitions from old files
 
-**Step 3: Wire into GenerateButton.tsx**
-
-Modify `fetchOsmLayersStandalone()` to run OSM and Overture fetches in parallel and merge results. Use `Promise.allSettled()` rather than `Promise.all()` so an Overture fetch failure degrades gracefully to OSM-only (no error shown to user, just no gap-fill buildings).
-
-```typescript
-const [osmResult, overtureResult] = await Promise.allSettled([
-  fetchAllOsmData(bbox),
-  fetchOvertureBuildings(bbox),
-]);
-
-const osmData = osmResult.status === 'fulfilled' ? osmResult.value : null;
-const overtureBuildings = overtureResult.status === 'fulfilled' ? overtureResult.value : [];
-
-const osmBuildings = osmData ? parseBuildingFeatures(osmData) : [];
-const merged = mergeAndDeduplicateBuildings(osmBuildings, overtureBuildings);
-setBuildingFeatures(merged);
-```
-
-**Step 4: Visual verification**
-
-Test in a known area with sparse OSM building coverage (rural areas, parts of Southeast Asia, Africa) to confirm Overture gap-fills appear. Test in a dense OSM area (Manhattan, central London) to confirm no duplicate buildings appear.
-
-**Step 5: Hardened release URL**
-
-The PMTiles URL contains a hardcoded release date. Before shipping, either: (a) pull the latest release date from Overture's GitHub release notes, or (b) fetch the Overture releases API (if one exists) to get the latest URL dynamically. Option (a) is acceptable for v1.1 — just update the URL constant per release.
+**Phase 6 — Transitions and polish**
+16. Add CSS `transition: transform` for sidebar content swap animation (slide left/right)
+17. Add `map.resize()` coordination on layout changes
+18. Touch target sizing: 44px minimum tap targets on mobile
+19. Safe-area-inset padding on sheet and bottom elements
 
 ---
 
-## Error Handling and Degradation
+## Anti-Patterns
 
-The Overture fetch must degrade gracefully. It is an enhancement, not a requirement. If PMTiles fetch fails (network, S3 down, CORS issue), the app should render OSM-only buildings with no error surfaced to the user.
+### Anti-Pattern 1: Using `display: none` on the Preview Column
 
-| Failure scenario | Behavior |
-|-----------------|----------|
-| S3 unavailable | `fetchOvertureBuildings()` throws → `Promise.allSettled` catches → `overtureBuildings = []` → OSM-only |
-| CORS blocked | Same as above |
-| MVT layer name wrong | `layer = tile.layers['building']` returns `undefined` → `if (!layer) return` → zero Overture features → OSM-only |
-| Stale release URL | PMTiles file not found → same degradation path |
-| Tile fetch timeout | Wrap in `AbortController` with 15s timeout → degrade to OSM-only |
+**What people do:** Toggle `display: none / block` to hide/show the 3D preview, thinking it is equivalent to `visibility: hidden`.
 
----
+**Why it's wrong:** `display: none` removes the element from the render tree. The browser destroys and recreates the WebGL context. React Three Fiber cannot survive this. The result is a permanently black canvas requiring a full page reload.
 
-## Anti-Patterns to Avoid
+**Do this instead:** Always use `visibility: hidden` + `pointerEvents: none` on the container. The canvas stays alive, Three.js keeps its GPU state, and switching views is instant.
 
-### Anti-Pattern 1: New Store Field for Overture Buildings
+### Anti-Pattern 2: Duplicating `useIsMobile` Across Components
 
-**What people do:** Add `overtureFeatures: BuildingFeature[] | null` to the store alongside `buildingFeatures`, then merge in `BuildingMesh.tsx`.
+**What people do:** Each component that needs layout awareness copies its own `useIsMobile(768)` hook — as currently exists in both `SplitLayout.tsx` and `Sidebar.tsx`.
 
-**Why it's wrong:** Creates two sources of truth for buildings. `BuildingMesh.tsx` now needs to know about the merge. The STL export in `ExportPanel.tsx` needs to know about it. The worker needs to know about it. You've spread the merge logic across three files instead of one.
+**Why it's wrong:** Two breakpoint values can drift independently. With three tiers, a boolean is insufficient. Three separate boolean checks for three tiers means six places that must agree on two threshold values.
 
-**Do this instead:** Merge at the data ingestion point in `fetchOsmLayersStandalone()`. The store holds only the final merged array. Everything downstream is unaware of the merge.
+**Do this instead:** Export one `useBreakpoint()` hook. All layout-branching components import it. Breakpoint values live in exactly one place and are also reflected in `index.css @theme`.
 
-### Anti-Pattern 2: Fetching Overture After OSM (Serial)
+### Anti-Pattern 3: Control Components Owning Their Positioning
 
-**What people do:** `await fetchAllOsmData(); await fetchOvertureBuildings();` — sequential fetches.
+**What people do:** `Sidebar.tsx` and `PreviewSidebar.tsx` contain `position: fixed/absolute` wrappers around their content — both content AND layout in one component. The content cannot be reused in a different layout container.
 
-**Why it's wrong:** Overture adds latency on the critical path. OSM typically takes 3–8 seconds for a dense area. Overture PMTiles may take 2–5 seconds (multiple tile fetches). Serial = 8–13 seconds. Parallel = 8 seconds (whichever is slower).
+**Why it's wrong:** On mobile the controls need to live inside Vaul's `Drawer.Content`. On desktop they live in a sidebar column. If a component positions itself, it can only live in one context.
 
-**Do this instead:** `Promise.allSettled([fetchAllOsmData(), fetchOvertureBuildings()])` — start both simultaneously.
+**Do this instead:** Extract `MapSidebarContent` and `PreviewSidebarContent` as pure content components. The layout system (BottomSheet, ContextualSidebar) applies all positioning.
 
-### Anti-Pattern 3: Exact Polygon IoU for Deduplication at First Pass
+### Anti-Pattern 4: Mounting/Unmounting the Preview on Tab Switch
 
-**What people do:** Import Turf.js, compute exact polygon intersection for every Overture×OSM building pair.
+**What people do:** On mobile, wrap the preview view in `{activeView === 'preview' && <PreviewView />}` so it only mounts when visible.
 
-**Why it's wrong:** Turf.js adds bundle weight and the O(n*m) exact polygon computation is expensive for dense areas (5,000 × 3,000 = 15M polygon intersection operations). The extra accuracy is not needed for gap-fill deduplication.
+**Why it's wrong:** This unmounts `PreviewCanvas` when switching to map view, destroying the WebGL context. The user returns to find a black screen.
 
-**Do this instead:** Bounding-box IoU first. If duplicate leakage is observed in testing, profile before adding exact polygon computation. Spatial grid indexing (bucket OSM buildings into lat/lon cells, only check Overture buildings against nearby OSM buildings) solves the performance issue without Turf.js.
+**Do this instead:** Both views are always mounted. `visibility: hidden` hides the inactive one. `pointerEvents: none` prevents invisible interaction. MapLibre and R3F both stay alive.
 
-### Anti-Pattern 4: Treating Overture as the Authoritative Source
+### Anti-Pattern 5: Animating Layout with `width` or `height` Transitions
 
-**What people do:** Prefer Overture over OSM for overlapping buildings (reasoning: Overture merges more sources, so it must be richer).
+**What people do:** Animate a sidebar opening with `transition: width 0.3s ease`, causing the browser to recalculate layout on every animation frame.
 
-**Why it's wrong:** OSM buildings have community-verified 3D attributes (roof shapes, material types, detailed heights). Overture building_part data comes exclusively from OSM. Discarding OSM geometry in favor of Overture loses the rich building detail that drives MapMaker's roof geometry.
+**Why it's wrong:** Animating `width` or `height` triggers layout + paint on every frame. With a MapLibre map and a Three.js scene both rendering simultaneously, this causes visible frame drops on mid-range mobile devices.
 
-**Do this instead:** OSM always wins on overlap. Overture only fills gaps where OSM has nothing.
+**Do this instead:** Use `transform: translateX()` for slide-in animations (compositor thread only). Vaul uses `transform` internally for sheet dragging. The split-layout resizer drag is a forced exception (width change on user drag) but is not animated — it is direct and immediate, which is acceptable.
 
-### Anti-Pattern 5: Fetching Overture at Max Bbox Scale
+### Anti-Pattern 6: Sheet Snap State in `mapStore`
 
-**What people do:** Use zoom 8 or 10 to fetch fewer tiles for large bboxes.
+**What people do:** Put `sheetSnap` and other transient UI state directly in `mapStore` because it is globally accessible.
 
-**Why it's wrong:** Overture buildings appear at z13+ with full properties. Lower zoom tiles may not include building footprints or will have simplified/omitted geometry. The existing MapMaker area cap (25 km² hard limit, 4 km² soft warning) means the bbox is small enough that z14 tile fetches are 4–25 tiles — a manageable set.
+**Why it's wrong:** `mapStore` already has 64 fields covering domain state. Sheet snap height is ephemeral UI state that does not need persistence or coordination with app data. It pollutes the store and makes debugging harder.
 
-**Do this instead:** Always use zoom 14. With the existing area cap, this is always ≤ 30 tiles per generate.
+**Do this instead:** Keep `sheetSnap` as local state inside `BottomSheet.tsx`. Elevate to `uiStore` only if another component needs to drive the snap programmatically (e.g., the Generate button auto-expanding the sheet on success).
 
 ---
 
-## Integration Points Summary
+## Scaling Considerations
 
-### New External Service
+This is a client-side tool. The relevant scaling concern is render performance on lower-powered mobile hardware.
 
-| Service | URL | Integration Pattern | CORS | Notes |
-|---------|-----|---------------------|------|-------|
-| Overture Maps PMTiles | `https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/{release}/buildings.pmtiles` | PMTiles JS library, HTTP range requests | Expected open (public S3, used by Overture's browser explorer) | URL requires manual update per release; labeled "beta" |
-
-### New Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `GenerateButton.tsx` → `overture.ts` | Direct async call inside `fetchOsmLayersStandalone()` | Parallel with OSM fetch via `Promise.allSettled()` |
-| `overture.ts` → `deduplicate.ts` | Function call: `mergeAndDeduplicateBuildings(osm, overture)` | Both arguments required; graceful empty-array fallback |
-| `deduplicate.ts` → `mapStore.ts` | Result passed to `setBuildingFeatures()` | Identical contract to current OSM-only flow |
-
-### Required New Dependencies
-
-| Package | Purpose | Version to use |
-|---------|---------|----------------|
-| `pmtiles` | PMTiles archive decoder for browser | Latest (4.4.0 as of research) |
-| `@mapbox/vector-tile` | MVT decoder (tile bytes → features) | Latest stable |
-| `pbf` | Protobuf reader (required by vector-tile) | Latest stable |
-
----
-
-## Confidence Assessment
-
-| Area | Confidence | Reason |
-|------|------------|--------|
-| Integration seam location | HIGH | Direct codebase inspection; `fetchOsmLayersStandalone()` is the exact merge point |
-| OSM/Overture duplicate existence | HIGH | Overture documentation confirms OSM is a source; ~672M OSM buildings in dataset |
-| PMTiles browser access | MEDIUM | Official docs confirm JS library + HTTP access; CORS assumption (browser explorer uses it) needs empirical verification |
-| MVT layer name inside PMTiles | LOW | Not documented; must be checked empirically by fetching a tile at pmtiles.io |
-| Deduplication threshold 0.3 IoU | MEDIUM | Based on Overture's own 0.5 threshold + adjustment for raw coordinate differences; needs tuning with real data |
-| Overture property field names | HIGH | Official schema documentation; height, num_floors, roof_shape, roof_height confirmed |
-| Degradation behavior | HIGH | `Promise.allSettled()` pattern is standard; catch paths are straightforward |
+| Concern | Approach |
+|---------|---------|
+| Animation on low-GPU mobile | Use `transform`-only animations. Avoid `width`/`height` transitions. Vaul handles sheet dragging on compositor thread. |
+| Very small screens (<375px) | Use `dvh` units for snap points (`45dvh` not `45vh`) to handle iOS browser chrome. Test snap point pixel heights at iPhone SE size. |
+| Tailwind class vs inline style | Replace inline styles with Tailwind classes where the value is static. Keep inline styles only for dynamic values (splitPercent %, snap pixel heights, visibility toggling). |
+| MapLibre map resize | Call `map.resize()` after any layout change with a 150-200ms debounce to let CSS transitions settle before MapLibre re-renders tiles. |
 
 ---
 
 ## Sources
 
-- Overture Maps buildings schema: https://docs.overturemaps.org/schema/reference/buildings/building/
-- Overture Maps building conflation process: https://docs.overturemaps.org/guides/buildings/
-- Overture Maps PMTiles documentation: https://docs.overturemaps.org/examples/overture-tiles/
-- PMTiles JavaScript library API: https://pmtiles.io/typedoc/classes/PMTiles.html
-- @mapbox/vector-tile npm package: https://github.com/mapbox/vector-tile-js
-- Overture data access (no browser REST API confirmed): https://docs.overturemaps.org/getting-data/
-- IoU deduplication methodology: https://docs.overturemaps.org/guides/buildings/ (conflation section)
+- Vaul snap points API: [vaul.emilkowal.ski/snap-points](https://vaul.emilkowal.ski/snap-points)
+- Vaul GitHub (v1.1.2, Dec 2024, unmaintained note): [github.com/emilkowalski/vaul](https://github.com/emilkowalski/vaul)
+- Tailwind v4 custom breakpoints via `@theme`: [tailwindcss.com/docs/responsive-design](https://tailwindcss.com/docs/responsive-design)
+- CSS scroll snap for bottom sheets (native alternative reference): [viliket.github.io/posts/native-like-bottom-sheets-on-the-web](https://viliket.github.io/posts/native-like-bottom-sheets-on-the-web/)
+- R3F canvas context loss on unmount (confirmed behavior): [github.com/pmndrs/react-three-fiber/discussions/1151](https://github.com/pmndrs/react-three-fiber/discussions/1151)
+- `content-visibility: hidden` — Baseline 2024, WebGL interaction not documented: [developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/content-visibility](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/content-visibility)
+- MapLibre GL JS `Map.resize()` API: [maplibre.org/maplibre-gl-js/docs/API/classes/Map/](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/)
+- Motion library layout animations (sidebar pattern): [motion.dev/docs/react-layout-animations](https://motion.dev/docs/react-layout-animations)
 - Existing codebase (HIGH confidence — direct inspection):
-  - `src/components/Sidebar/GenerateButton.tsx`
-  - `src/lib/buildings/parse.ts`, `merge.ts`, `types.ts`
+  - `src/components/Layout/SplitLayout.tsx`
+  - `src/components/Sidebar/Sidebar.tsx`
+  - `src/components/Preview/PreviewSidebar.tsx`
+  - `src/components/Map/MapView.tsx`
   - `src/store/mapStore.ts`
-  - `src/workers/meshBuilder.worker.ts`
-  - `src/components/Preview/BuildingMesh.tsx`
 
 ---
-
-*Architecture research for: MapMaker v1.1 — Overture Maps building footprint integration*
+*Architecture research for: MapMaker v1.2 Responsive UI*
 *Researched: 2026-02-28*

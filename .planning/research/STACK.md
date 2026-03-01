@@ -1,225 +1,308 @@
 # Stack Research
 
-**Domain:** Overture Maps building footprint integration — bounding-box fetch, vector tile decode, spatial deduplication against OSM buildings
+**Domain:** Responsive UI — three-tier layout, bottom sheet with snap heights, touch gestures, view transition animations
 **Researched:** 2026-02-28
-**Confidence:** HIGH for fetch approach (PMTiles + pmtiles npm); HIGH for vector tile decode (@mapbox/vector-tile + pbf); MEDIUM for spatial deduplication (turf vs. rbush trade-offs are well-understood but need benchmark validation against real datasets)
+**Confidence:** HIGH for vaul + motion (verified via npm + official docs); HIGH for Tailwind v4 breakpoints (verified via official docs); MEDIUM for CSS-only animation approach (verified via MDN + Tailwind docs, but requires integration validation)
 
 ---
 
-> **Scope note:** This document covers ONLY the new stack additions for the v1.1 milestone.
-> The existing validated stack (React 19, Three.js R3F, Zustand, Vite 6, Vitest, MapLibre GL JS 5,
-> @mapbox/martini, earcut, proj4, osmtogeojson, geometry-extrude, comlink, three-bvh-csg, manifold-3d)
+> **Scope note:** This document covers ONLY the new stack additions for the v1.2 milestone.
+> The existing validated stack (React 19, Three.js R3F, Zustand, Vite 6, Vitest, Tailwind CSS v4,
+> MapLibre GL JS 5, react-resizable-panels, terra-draw, pmtiles, manifold-3d, three-bvh-csg)
 > is not re-researched here.
 
 ---
 
 ## Recommended Stack — New Additions
 
-### 1. Overture Buildings Fetch: PMTiles + pmtiles npm
+### 1. Bottom Sheet with Snap Points: vaul
 
 | Library | Version | Purpose | Why Recommended |
 |---------|---------|---------|-----------------|
-| `pmtiles` | `^4.4.0` | Fetch individual vector tiles from the Overture buildings PMTiles archive via HTTP range requests | Overture publishes buildings as PMTiles (MVT format inside a single `.pmtiles` file on S3). The `pmtiles` npm package implements the PMTiles spec in JavaScript/TypeScript, works in the browser via Fetch API, uses HTTP range requests so only the tiles covering the bounding box are downloaded — NOT the entire ~50 GB file. Version 4.4.0 is the current release (published ~23 days before this research date). Ships as ES module. No WASM. No server required. |
+| `vaul` | `^1.1.2` | Unstyled drawer/bottom sheet with iOS-style snap points, drag gesture, keyboard dismiss | The correct tool for a peek/half/full snap sheet. Built by Emil Kowalski (shadcn/ui collaborator). Used in production by Linear and Vercel. React 19 explicitly in peer dependencies (`^16.8 || ^17.0 || ^18.0 || ^19.0.0`). Ships a `Drawer.Root` with `snapPoints` array (pixel strings or 0–1 numbers), `activeSnapPoint`/`setActiveSnapPoint` for controlled state, `modal={false}` for non-blocking overlay that doesn't prevent R3F canvas interaction, and `dismissible` prop. No CSS-in-JS, no peer framework required beyond React. ~7 KB. |
 
-**Why NOT DuckDB WASM:** DuckDB WASM does not support the `httpfs` extension, so it cannot query Overture's S3-hosted GeoParquet files from the browser. A workaround (pre-extract + host locally) defeats the purpose of a client-side-only architecture.
+**Why NOT a custom hook + CSS:** A bottom sheet with real snap physics (velocity-based snap, overscroll elasticity, keyboard repositioning on iOS) requires ~300+ lines of non-trivial pointer/touch event math to match native feel. Vaul handles all of this correctly. Custom implementations consistently get iOS momentum scrolling wrong.
 
-**Why NOT direct GeoParquet in browser:** No maintained JavaScript-native GeoParquet browser parser exists. The official approach is server-side (Python CLI, DuckDB server, AWS Athena). DuckDB WASM is the closest option but is blocked by the httpfs limitation above.
+**Why NOT react-spring-bottom-sheet:** Last commit 2022, unmaintained. Peer dependency on `react-spring` v9 which conflicts with `motion` (our animation library). No snap points — only open/closed.
 
-**Why NOT Fused UDF HTTP API:** Fused provides a serverless UDF platform that can expose Overture data via HTTP endpoints, but it is a third-party service with its own authentication and pricing, introduces a dependency on an external SaaS, and is not appropriate for a client-only open-data tool.
+**Why NOT gorhom/react-native-bottom-sheet:** React Native only. Not applicable to web.
 
-**Why NOT the unofficial overturemapsapi.com:** A community-maintained API that deploys via GCP/BigQuery. Requires the user to self-host and introduces a backend dependency. Not suitable for MapMaker's fully client-side architecture.
+**Critical integration note for MapMaker:** Use `modal={false}` on `Drawer.Root` so the R3F WebGL canvas (3D preview) remains interactive while the sheet is open. Without this, vaul installs a pointer-events blocker on the document that prevents Three.js orbit controls.
 
-**Fetch pattern:**
+**Snap point configuration for MapMaker:**
 ```typescript
-import { PMTiles } from 'pmtiles';
-
-const OVERTURE_BUILDINGS_URL =
-  'https://tiles.overturemaps.org/2026-02-18.0/buildings.pmtiles';
-
-const p = new PMTiles(OVERTURE_BUILDINGS_URL);
-
-// Convert bbox [minLon, minLat, maxLon, maxLat] to z/x/y tiles at zoom 14
-// then call p.getZxy(z, x, y) for each tile in range
-const tileData = await p.getZxy(14, tileX, tileY);
+const SNAP_POINTS = ['80px', '45%', 1] as const;
+// peek: 80px = just the handle + location name visible
+// half: 45% = controls readable, map still visible above
+// full: 1 = full height, controls fill screen
 ```
 
-**PMTiles URL discovery:** Overture publishes a STAC catalog at `https://stac.overturemaps.org/catalog.json` with a `latest` field. The catalog structure is:
-```
-https://labs.overturemaps.org/stac/{release}/buildings/catalog.json
-  → link rel="pmtiles" → https://tiles.overturemaps.org/{release}/buildings.pmtiles
-```
-The application should hard-code a known-good release URL and update it monthly, OR dynamically resolve via the STAC catalog on startup.
+**API pattern:**
+```typescript
+import { Drawer } from 'vaul';
 
-**Data retention warning (MEDIUM confidence):** As of September 2025, Overture maintains only the two most recent monthly releases (~60 days). Hard-coded URLs will break after ~2 months. Dynamic STAC discovery is the correct long-term approach.
+const [snap, setSnap] = useState<number | string | null>('80px');
 
-**CORS:** The `tiles.overturemaps.org` domain (confirmed for 2026-02-18.0 release) is publicly accessible. The Overture S3 buckets have CORS configured for GET/HEAD with the `range` header allowed, which is required for PMTiles HTTP range requests. This works from the browser without a proxy.
+<Drawer.Root
+  snapPoints={SNAP_POINTS}
+  activeSnapPoint={snap}
+  setActiveSnapPoint={setSnap}
+  modal={false}
+  dismissible={false}
+>
+  <Drawer.Portal>
+    <Drawer.Content>
+      <Drawer.Handle />
+      {/* controls content */}
+    </Drawer.Content>
+  </Drawer.Portal>
+</Drawer.Root>
+```
+
+**Source:** [vaul npm](https://www.npmjs.com/package/vaul) version 1.1.2 confirmed; [vaul snap points docs](https://vaul.emilkowal.ski/snap-points) confirmed API; React 19 peer dependency confirmed via `npm view vaul peerDependencies`.
 
 ---
 
-### 2. Vector Tile Decoding: @mapbox/vector-tile + pbf
+### 2. View Transition Animations: motion (formerly Framer Motion)
 
 | Library | Version | Purpose | Why Recommended |
 |---------|---------|---------|-----------------|
-| `@mapbox/vector-tile` | `^2.0.4` | Parse MVT (Mapbox Vector Tile) binary data into JavaScript feature objects with geometry and properties | PMTiles stores tiles in MVT format. The `@mapbox/vector-tile` library is the reference implementation for the MVT spec. Provides `VectorTile` class that parses tile bytes into layers. Source layer for Overture buildings is `"building"`. Returns feature geometry as pixel coordinates that must be converted back to geographic coordinates. |
-| `pbf` | `^4.0.1` | Low-level Protocol Buffer decoder — required peer dependency of `@mapbox/vector-tile` | `@mapbox/vector-tile` takes a `Protobuf` instance (from `pbf`) as input. The `pbf` library is 3KB gzipped, maintained by Mapbox. MapLibre GL JS (already in the project) bundles pbf internally, but it should be added as an explicit dependency since we need to import it in our code. |
+| `motion` | `^12.34.3` | Animate layout changes, tab switches, sidebar slide-in/out, loading states, micro-interactions | `motion` is framer-motion rebranded and independent. The `motion` npm package is identical to `framer-motion` — both point to the same code. React 19 is in peer dependencies (`^18.0.0 || ^19.0.0`). The `motion` package name is preferred going forward. Provides `<motion.div>` with `animate`, `initial`, `exit`, `layout` props. `AnimatePresence` enables exit animations. `layout` prop handles panel resize and reflow animations automatically. |
 
-**Source layer name:** `"building"` (confirmed from Azure Maps + Overture sample code).
+**Why NOT CSS transitions only:** CSS transitions work for simple opacity/translate but cannot:
+  - Animate layout changes (sidebar becoming persistent vs. overlay) — requires `layout` animations
+  - Handle conditional rendering exit animations (element removed from DOM before CSS transition plays)
+  - Coordinate enter/exit sequences across multiple elements (tab bar, panel, preview)
 
-**Available properties from MVT tiles:**
-- `height` — float, building height in meters (may be absent; default to 3.0m = 1 floor)
-- `subtype` — string, building category (residential, commercial, etc.)
-- `names` — JSON-encoded string (stringify nested object)
-- `sources` — JSON-encoded string
+  `AnimatePresence` + `layout` prop solves all three without custom JavaScript.
 
-**Zoom level:** Buildings are present from zoom 13 through zoom 15 (max). Zoom 14 is the recommended query zoom for MapMaker's bounding box sizes (1–25 km²). At zoom 14, one tile covers ~2.4 km × 2.4 km, so a 4 km² bbox requires ~4 tiles at most.
+**Why NOT React View Transitions API (`<ViewTransition>`):** The React team announced `<ViewTransition>` as experimental in April 2025 (react@canary only). It is NOT stable in React 19 production. Browser support is Chrome 111+ / Safari 18+ / Firefox 133+, but the React API for it remains experimental with design changes expected. Defer until React 20 stable.
 
-**Decode pattern:**
+**Why NOT CSS `@starting-style` + `transition-behavior: discrete`:** A valid pure-CSS approach for simple enter/exit animations, but requires careful manual orchestration across the three breakpoints. `motion` provides the same output with less code and handles the React reconciliation lifecycle automatically.
+
+**Use cases in MapMaker v1.2:**
 ```typescript
-import { VectorTile } from '@mapbox/vector-tile';
-import Protobuf from 'pbf';
+import { motion, AnimatePresence } from 'motion/react';
 
-function decodeTile(buffer: ArrayBuffer) {
-  const tile = new VectorTile(new Protobuf(buffer));
-  const layer = tile.layers['building'];
-  if (!layer) return [];
+// Sidebar slide animation
+<AnimatePresence>
+  {isOpen && (
+    <motion.div
+      initial={{ x: '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: '100%' }}
+      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+    >
+      {/* sidebar content */}
+    </motion.div>
+  )}
+</AnimatePresence>
 
-  const features = [];
-  for (let i = 0; i < layer.length; i++) {
-    const feature = layer.feature(i);
-    // feature.loadGeometry() returns pixel coordinates [0..4096]
-    // Must convert to lon/lat using tile z/x/y + extent (4096)
-    const geometry = feature.loadGeometry();
-    const props = feature.properties;
-    features.push({ geometry, props });
-  }
-  return features;
-}
+// Tab switch content fade
+<motion.div
+  key={activeTab}
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ duration: 0.15 }}
+>
+  {activeTabContent}
+</motion.div>
+
+// Layout-aware panel resize (desktop split → preview occupies panel)
+<motion.div layout className="...">
+  {children}
+</motion.div>
 ```
 
-**Coordinate conversion:** MVT geometry is in tile-local pixel coordinates (0–4096 range). To convert back to WGS84 lon/lat, use the standard tile-to-lnglat formula based on z/x/y and the pixel position within the tile. No additional library needed — this is ~10 lines of math.
-
-**Types:** `@types/mapbox__vector-tile` provides TypeScript types for the library.
+**Source:** [motion npm](https://www.npmjs.com/package/motion) version 12.34.3 confirmed; peer dependencies confirmed via `npm view motion peerDependencies`; rebranding confirmed at [motion.dev/blog](https://motion.dev/blog/framer-motion-is-now-independent-introducing-motion).
 
 ---
 
-### 3. Spatial Deduplication: @turf/boolean-intersects (tree-shaken import)
+### 3. Breakpoint System: Tailwind CSS v4 `@theme` variables (no new library)
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| `@turf/boolean-intersects` | `^7.3.1` | Test whether two polygons intersect (share any area) | The deduplication algorithm is: for each Overture footprint, check if any OSM building polygon intersects it. If yes, discard the Overture footprint (OSM wins). `booleanIntersects` returns true if the intersection of two geometries is non-empty — exactly the right predicate. Package is 13.4 KB, ships as ES module (tree-shaking works). |
+No new library needed. Tailwind CSS v4 (already in the project as `@tailwindcss/vite@^4.2.1`) supports custom breakpoints via CSS-first `@theme` configuration.
 
-**Why NOT full `turf` package:** The monolithic `turf` package is 68+ KB even tree-shaken for this use case. Installing only `@turf/boolean-intersects` gives a 13.4 KB package with the exact predicate needed.
+**Current state:** The app uses a hardcoded `768px` binary mobile/desktop check (`useIsMobile` hook with `window.matchMedia`) scattered in `SplitLayout.tsx` and `Sidebar.tsx`. Three-tier layout requires three named breakpoints.
 
-**Why NOT `@turf/intersect`:** `intersect` computes the actual intersection polygon (more expensive). For deduplication, we only need a boolean answer. `booleanIntersects` is faster.
+**Recommended breakpoints for MapMaker:**
 
-**Why NOT `rbush` alone:** rbush is a spatial index that accelerates bounding-box candidate lookup, but it only tests bounding box overlap — not polygon overlap. Bounding boxes of adjacent buildings can overlap even when the buildings themselves do not. For accurate deduplication we need actual polygon intersection testing. rbush would be an optimization layer on top of `booleanIntersects` if performance demands it (see Stack Patterns section below).
+```css
+/* in src/index.css, inside @theme block */
+@import "tailwindcss";
 
-**Why NOT custom polygon intersection:** Robust polygon intersection is a non-trivial computational geometry problem (handling shared edges, floating-point precision, non-convex polygons). Using turf's battle-tested implementation avoids subtle bugs.
-
-**Deduplication algorithm:**
-```typescript
-import { booleanIntersects } from '@turf/boolean-intersects';
-import type { Feature, Polygon } from 'geojson';
-
-function deduplicateOverture(
-  osmBuildings: Feature<Polygon>[],
-  overtureBuildings: Feature<Polygon>[]
-): Feature<Polygon>[] {
-  return overtureBuildings.filter((overture) =>
-    !osmBuildings.some((osm) => booleanIntersects(osm, overture))
-  );
+@theme {
+  --breakpoint-sm: 480px;   /* large phones landscape */
+  --breakpoint-md: 768px;   /* tablet portrait */
+  --breakpoint-lg: 1024px;  /* tablet landscape / small desktop */
+  --breakpoint-xl: 1280px;  /* desktop */
 }
 ```
 
-**Performance note:** For typical MapMaker bounding boxes (≤25 km²), expected OSM building counts are 50–2000, and Overture footprints in the same area are 100–5000. The naive O(n×m) `booleanIntersects` loop should complete in < 100ms for these sizes. If profiling reveals a bottleneck, add `rbush@4.0.0` as a bounding-box pre-filter to reduce candidates before calling `booleanIntersects`.
+Then in components:
+```tsx
+// mobile-first, class-based — prefer this over inline style
+<div className="flex-col md:flex-row lg:flex-row">
+  {/* stacks on mobile, side-by-side on tablet+ */}
+</div>
+```
+
+**`useBreakpoint` hook to replace scattered `useIsMobile`:**
+```typescript
+// src/hooks/useBreakpoint.ts
+// No library needed — matchMedia is built in
+type Breakpoint = 'mobile' | 'tablet' | 'desktop';
+
+export function useBreakpoint(): Breakpoint {
+  const [bp, setBp] = useState<Breakpoint>(() => {
+    if (window.innerWidth >= 1024) return 'desktop';
+    if (window.innerWidth >= 768) return 'tablet';
+    return 'mobile';
+  });
+
+  useEffect(() => {
+    const tablet = window.matchMedia('(min-width: 768px)');
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const update = () => {
+      if (desktop.matches) setBp('desktop');
+      else if (tablet.matches) setBp('tablet');
+      else setBp('mobile');
+    };
+    tablet.addEventListener('change', update);
+    desktop.addEventListener('change', update);
+    return () => {
+      tablet.removeEventListener('change', update);
+      desktop.removeEventListener('change', update);
+    };
+  }, []);
+
+  return bp;
+}
+```
+
+**Why NOT `react-responsive`:** 3 KB library that wraps the same `matchMedia` API. Adds a dependency for logic we can write in 25 lines. Avoid.
+
+**Why NOT `usehooks-ts` `useMediaQuery`:** Another wrapper library. Zero value over a direct matchMedia hook for this use case.
+
+**Source:** [Tailwind CSS v4 responsive design docs](https://tailwindcss.com/docs/responsive-design) — confirmed `--breakpoint-*` theme variables; [Tailwind v4 breakpoints guide](https://bordermedia.org/blog/tailwind-css-4-breakpoint-override) — confirmed CSS-first override syntax.
+
+---
+
+### 4. Touch-Optimized Interactions: CSS + Tailwind (no new library)
+
+Touch optimization for controls (larger tap targets, better spacing) and the view toggle (tab bar) requires NO additional library. Tailwind utility classes cover all cases:
+
+**Touch target sizing:**
+```tsx
+// Minimum 44px touch targets (Apple HIG recommendation)
+<button className="min-h-[44px] min-w-[44px] px-4 py-3 ...">
+```
+
+**Touch-specific Tailwind utilities in v4 (built-in):**
+- `touch-manipulation` — disables double-tap zoom, enables fast tap
+- `select-none` — prevents text selection during swipe
+- `active:scale-95` — tactile feedback on tap
+- `cursor-pointer` on interactive elements for hybrid devices
+
+**Safe area insets (already partially implemented, should be formalized):**
+```css
+/* Tailwind v4 CSS variable pattern */
+padding-bottom: env(safe-area-inset-bottom, 8px);
+```
+
+Tailwind v4 exposes `pb-safe` via the `@supports` block pattern. Define once in `@theme`:
+```css
+@theme {
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+```
+
+**Why NOT `@use-gesture/react`:** `@use-gesture/react` is powerful for custom drag/fling/pinch gestures, but vaul handles all gesture logic for the bottom sheet. The tab bar toggle uses simple click/tap — no library needed. The only remaining gesture is the split-panel drag handle (desktop), which already works with pointer events in the existing code. Adding `@use-gesture` would be over-engineering.
+
+**Exception:** If a custom swipe-to-switch gesture between map/preview tabs is desired on mobile (swipe left/right to change tab without tapping the tab bar), `@use-gesture/react@10.3.1` can be added at that point. Do not add it speculatively.
 
 ---
 
 ## Installation
 
 ```bash
-# Overture fetch
-npm install pmtiles
+# Bottom sheet with snap points
+npm install vaul
 
-# MVT decode
-npm install @mapbox/vector-tile pbf
-npm install -D @types/mapbox__vector-tile
-
-# Spatial deduplication
-npm install @turf/boolean-intersects
+# Animation library (if not already installed)
+npm install motion
 ```
+
+No other dependencies needed. Breakpoints and touch optimization are handled by existing Tailwind CSS v4 and custom hooks.
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| `pmtiles` npm + HTTP range requests | DuckDB WASM + GeoParquet | If DuckDB WASM adds httpfs support in a future release. As of Feb 2026, httpfs is not available in WASM, making this approach impossible for S3-hosted GeoParquet. |
-| `pmtiles` npm + HTTP range requests | Self-hosted proxy server (DuckDB/Python backend) | If the project adds a backend in the future. Would allow arbitrary Parquet queries. Not suitable for current client-only architecture. |
-| `@mapbox/vector-tile` | Manual Protobuf parsing | Only if `@mapbox/vector-tile` is no longer maintained. It is the reference implementation and is actively maintained (v2.0.4, Jul 2025). |
-| `@turf/boolean-intersects` | Custom point-in-polygon overlap test | If Overture footprints are convex and simple, a centroid-based test (is the centroid inside the OSM polygon?) would work as a 90% approximation. Use only if booleanIntersects is too slow for very dense areas. |
-| `@turf/boolean-intersects` alone | `rbush` + `@turf/boolean-intersects` | Add `rbush@4.0.0` as a bounding-box pre-filter if O(n×m) intersection is too slow. For MapMaker's bounding box sizes this is unlikely to be needed — benchmark first. |
+| `vaul` | CSS scroll-snap bottom sheet (pure CSS) | If the project had zero tolerance for JS dependencies. CSS scroll-snap sheets work but lose velocity-based snapping and iOS keyboard repositioning. Vaul's modal={false} is also a critical blocker for CSS-only approaches — CSS cannot make the R3F canvas interactive through a scroll-snap overlay. |
+| `vaul` | `@radix-ui/react-dialog` + custom sheet | If you need a modal dialog AND a bottom sheet in the same UI. Vaul is a drawer, not a dialog. For a future "confirm export" modal, Radix Dialog would be appropriate. Do not use vaul for dialogs. |
+| `motion` | CSS transitions + Tailwind `transition-*` classes | For simple single-property animations (opacity fade, translate in/out that don't require exit). Use CSS for things like hover states and loading spinner rotations. Use `motion` only when: (a) exit animations are needed, (b) layout changes need coordinating, or (c) spring physics are desired. |
+| `motion` | React View Transitions API | When React 19 stable adds `<ViewTransition>`. Not ready in Feb 2026 — API still experimental and canary-only. |
+| `useBreakpoint` custom hook | `react-responsive` npm | Only if the team wants to avoid writing and maintaining the hook themselves. The hook is 25 lines and has no edge cases in this CSR-only app. |
+| `@use-gesture/react` | Pointer events directly on tab bar | If a swipe-to-switch gesture between map/preview is added to the mobile tab bar. Do not add upfront. |
 
 ## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| DuckDB WASM | No httpfs in WASM as of Feb 2026. Cannot query S3 GeoParquet from browser. Build size impact is also 6+ MB. | `pmtiles` npm with HTTP range requests |
-| Full `turf` package (`import turf from '@turf/turf'`) | 68+ KB bundle weight for a feature that only needs a 13 KB sub-package | Import `@turf/boolean-intersects` directly |
-| `overturemaps-py` Python CLI | Server-side tool, incompatible with browser-only architecture | `pmtiles` npm |
-| GeoParquet browser parsers (`geoarrow-js`, `@loaders.gl/parquet`) | No stable, well-maintained GeoParquet library for browsers exists as of Feb 2026 that can range-request partial Parquet files from S3. These libraries require full file download or a server. | `pmtiles` npm reading from Overture's PMTiles distribution |
-| `rbush` as the primary deduplication method | rbush indexes bounding boxes, not polygons. Two buildings can have overlapping bboxes but non-overlapping footprints. Bounding-box-only deduplication produces false positives (discards valid gap-fill buildings). | `@turf/boolean-intersects` for polygon-level accuracy |
+| `react-spring-bottom-sheet` | Unmaintained since 2022, peer dependency on react-spring v9 which conflicts with motion | `vaul` |
+| `framer-motion` | Renamed to `motion` — `framer-motion` npm still works but is the old package name; prefer `motion` for new installs | `motion` |
+| `@use-gesture/react` (upfront) | Vaul already handles all bottom sheet gestures. Tab bar works with onClick. Only add if swipe-tab gesture is explicitly in scope. | Native pointer events for the split handle; vaul gestures for the sheet |
+| `tailwindcss-animate` | Deprecated for Tailwind v4 projects. Replaced by `tw-animate-css`. However, neither is needed here — motion handles enter/exit animations. | `motion` for enter/exit; Tailwind `transition-*` utilities for hover/focus states |
+| `react-spring` | Adds ~50 KB for animation physics that `motion` already provides | `motion` |
+| `headlessui` | Radix primitives are lighter and better maintained; dialog/popover primitives from headlessui conflict with vaul's focus management | `vaul` for bottom sheet; `@radix-ui/react-dialog` if a modal dialog is ever needed |
+| `@radix-ui/react-dialog` | Not needed for v1.2. No modal dialogs in scope. | — |
+| Floating UI / Popper.js | No floating dropdowns or tooltips in scope for v1.2 | — |
+| `react-responsive` | Wraps `matchMedia` in a 3 KB library we can implement in 25 lines | Custom `useBreakpoint` hook |
 
 ## Stack Patterns by Variant
 
-**If bounding box is small (< 4 km²):**
-- Fetch tiles at zoom 14 (typically 1–4 tiles)
-- Decode all features in one pass
-- Run `booleanIntersects` deduplication inline (no pre-filter needed)
+**If building the mobile bottom sheet:**
+- Use `vaul` with `modal={false}`, `dismissible={false}`, `snapPoints={['80px', '45%', 1]}`
+- Store `activeSnapPoint` in Zustand (not local state) so other components react to sheet height changes
+- Set `snapToSequentialPoint={true}` so users can't fling past the half-snap to full immediately
 
-**If bounding box is at the 25 km² hard limit:**
-- Fetch tiles at zoom 13 (fewer, larger tiles) OR zoom 14 (more tiles but better feature granularity)
-- Consider adding `rbush` bbox pre-filter before `booleanIntersects` to keep deduplication under 200ms
-- Run deduplication inside the existing Web Worker to keep UI non-blocking
+**If building desktop persistent sidebar:**
+- No vaul — sidebar is a CSS flex column at fixed width
+- Use `motion.div` with `layout` prop on the container so the map/preview panels smoothly resize when sidebar appears/disappears
+- Width: `280px` fixed; `lg:w-[280px]` in Tailwind
 
-**If Overture PMTiles URL changes (monthly releases):**
-- Fetch `https://labs.overturemaps.org/stac/catalog.json`, read `latest` field
-- Navigate to `https://labs.overturemaps.org/stac/{latest}/buildings/catalog.json`
-- Find the link with `rel: "pmtiles"` and use its `href` as the PMTiles URL
-- Cache the resolved URL for the session
+**If building the mobile view toggle (map ↔ preview):**
+- Use `motion.div` with `key={activeTab}` + `AnimatePresence` for a cross-fade on content swap
+- Tab bar itself uses Tailwind `transition-colors` + `active:scale-95` — no motion needed for the buttons themselves
 
-## Integration Points with Existing Code
-
-| Existing File | How v1.1 Integrates |
-|---------------|---------------------|
-| `src/lib/buildings/types.ts` | Add `overtureSource?: true` flag to `BuildingFeature` to mark gap-fill buildings |
-| `src/lib/buildings/parse.ts` | Add parallel `parseOvertureFeatures(tiles)` function that converts MVT features to `BuildingFeature` array |
-| `src/lib/buildings/merge.ts` | Add `mergeWithOverture(osmBuildings, overtureBuildings)` that runs deduplication and returns combined array |
-| `src/lib/overpass.ts` or new `src/lib/overture.ts` | New file: `fetchOvertureBuildings(bbox)` — resolves tiles from bbox, calls `pmtiles.getZxy()`, decodes MVT |
-| `src/workers/meshBuilder.worker.ts` | Extend worker to call `fetchOvertureBuildings` in parallel with the existing Overpass fetch |
+**If adding loading states and micro-interactions:**
+- Spinner: Tailwind `animate-spin`
+- Progress pulse: Tailwind `animate-pulse`
+- Generate button in-progress state: `motion` scale + opacity (connects the button to mesh generation status in Zustand)
+- Stale indicator banner: `motion` slide-down from top — 150ms ease-out
 
 ## Version Compatibility
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `pmtiles@4.4.0` | Vite 6, ES module builds | Ships as ES module. No WASM, no native Node addons. Works in Vite's dev server and production build. |
-| `@mapbox/vector-tile@2.0.4` | `pbf@4.x` | Requires `pbf` as a peer. MapLibre GL JS 5 bundles its own pbf internally — do NOT share; install pbf explicitly so our import resolves independently. |
-| `@turf/boolean-intersects@7.3.1` | Vite 6, tree-shaking | v7 is ES module with proper `sideEffects: false`. Vite tree-shakes correctly. |
-| `pmtiles@4.4.0` | `maplibre-gl@5.x` | MapLibre GL JS already registers the `pmtiles://` protocol handler internally if the `pmtiles` package is present. To avoid double-registration, check before calling `Protocol.add()`. |
+| `vaul@1.1.2` | React 19, React DOM 19 | Explicitly listed in peerDependencies. Tested against React 19 rc since v1.1.1. |
+| `motion@12.34.3` | React 18, React 19 | Peer dependency: `react: "^18.0.0 || ^19.0.0"`. Confirmed via `npm view motion peerDependencies`. |
+| `vaul@1.1.2` | `react-resizable-panels@4.6.5` | No overlap — vaul is bottom-anchored on mobile; react-resizable-panels handles desktop split. No z-index or event conflicts expected. |
+| `motion@12.34.3` | R3F (`@react-three/fiber@9.5.0`) | motion animates DOM elements; R3F animates a WebGL canvas. No conflict. R3F's own animation loop (`useFrame`) is separate from motion's. |
+| `vaul@1.1.2` | MapLibre GL JS / R3F canvas | With `modal={false}`, vaul does NOT intercept pointer events outside the sheet. MapLibre pan/zoom and R3F orbit controls remain functional while the sheet is open. Verified from vaul's `modal` prop docs. |
 
 ## Sources
 
-- [Overture Maps PMTiles documentation](https://docs.overturemaps.org/examples/overture-tiles/) — PMTiles URL format, zoom levels, source layer name `"building"` (MEDIUM confidence, official docs; source-layer confirmed via Azure Maps sample code)
-- [Azure Maps Overture Buildings sample](https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/main/Samples/PMTiles/Overture%20Building%20Theme/Buildings.html) — source-layer `"building"`, `height` property, PMTiles URL pattern (HIGH confidence, official Microsoft sample)
-- STAC catalog navigation `https://labs.overturemaps.org/stac/2026-02-18.0/buildings/catalog.json` — resolved exact PMTiles URL `https://tiles.overturemaps.org/2026-02-18.0/buildings.pmtiles` (HIGH confidence, direct catalog inspection)
-- [pmtiles npm](https://www.npmjs.com/package/pmtiles) — version 4.4.0, published ~23 days before this research date (HIGH confidence, npm registry)
-- [PMTiles TypeDoc: PMTiles class](https://pmtiles.io/typedoc/classes/PMTiles.html) — `getZxy(z, x, y)` is the only tile fetch method; no built-in bbox query (HIGH confidence, official docs)
-- [Overture Maps STAC announcement](https://docs.overturemaps.org/blog/2026/02/11/stac/) — `latest` field in root catalog, STAC-based URL discovery pattern (HIGH confidence, official blog)
-- [Overture data retention policy](https://docs.overturemaps.org/blog/2025/09/24/release-notes/) — 60-day window, two most recent releases kept (HIGH confidence, official release notes)
-- [@mapbox/vector-tile npm](https://www.npmjs.com/package/@mapbox/vector-tile) — version 2.0.4, last published Jul 2025 (HIGH confidence, npm registry)
-- [@turf/boolean-intersects npm](https://www.npmjs.com/package/@turf/boolean-intersects) — version 7.3.1, package size 13.4 KB (HIGH confidence, npm registry)
-- [Overture buildings schema reference](https://docs.overturemaps.org/schema/reference/buildings/building/) — `height` is `float64` in meters, `num_floors` is `int32` (HIGH confidence, official schema docs)
-- [DuckDB WASM + GeoParquet browser article](https://dev.to/camptocamp-geo/querying-overture-maps-geoparquet-directly-in-the-browser-with-duckdb-wasm-4jn4) — confirms httpfs not available in WASM; requires pre-extracted data (HIGH confidence, verifies the limitation)
+- [vaul npm registry](https://www.npmjs.com/package/vaul) — version 1.1.2, React 19 peer dependency (HIGH confidence)
+- [vaul snap points documentation](https://vaul.emilkowal.ski/snap-points) — `snapPoints`, `activeSnapPoint`, `setActiveSnapPoint` API (HIGH confidence, official docs)
+- [vaul API reference](https://vaul.emilkowal.ski/api) — `modal`, `dismissible`, `direction`, `snapToSequentialPoint` props (HIGH confidence, official docs)
+- [motion npm registry](https://www.npmjs.com/package/motion) — version 12.34.3, React 19 peer dependency (HIGH confidence)
+- [motion rebranding announcement](https://motion.dev/blog/framer-motion-is-now-independent-introducing-motion) — confirmed `motion` is framer-motion renamed (HIGH confidence, official blog)
+- [Tailwind CSS v4 responsive design docs](https://tailwindcss.com/docs/responsive-design) — `--breakpoint-*` custom theme variables (HIGH confidence, official docs)
+- [Tailwind v4 breakpoints override guide](https://bordermedia.org/blog/tailwind-css-4-breakpoint-override) — CSS-first `@theme` override syntax (MEDIUM confidence, third-party verified against official docs)
+- [React ViewTransition labs post](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more) — confirmed experimental/canary status (HIGH confidence, official React blog)
+- [@use-gesture/react npm](https://www.npmjs.com/package/@use-gesture/react) — version 10.3.1, React 16+ compatible (HIGH confidence, npm)
 
 ---
-*Stack research for: MapMaker v1.1 — Overture Maps building footprint integration*
+*Stack research for: MapMaker v1.2 — Responsive UI (bottom sheet, breakpoints, animations, touch)*
 *Researched: 2026-02-28*
