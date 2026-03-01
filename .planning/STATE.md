@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Building Coverage
 status: active
-last_updated: "2026-02-28"
+last_updated: "2026-03-01"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -23,24 +23,24 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 10 of 13 (Overture Access)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-02-28 — Roadmap created for v1.1
+Plan: 10-02 (next to execute)
+Status: In Progress — Plan 10-01 complete
+Last activity: 2026-03-01 — Plan 10-01 executed (Overture PMTiles fetch module)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 50% of phase 10 (1/2 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 1
+- Average duration: 2 min
+- Total execution time: 2 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 10-overture-access | 1/2 | 2 min | 2 min |
 
 *Updated after each plan completion*
 
@@ -55,6 +55,8 @@ Recent decisions affecting current work:
 - Merge at data ingestion point in GenerateButton.tsx, not in store or mesh layer
 - Use `Promise.allSettled()` so Overture failures degrade silently to OSM-only
 - Bounding-box IoU at 0.3 threshold for deduplication (polygon-level, not centroid-distance)
+- Fixed zoom level 14 for Overture fetch (archive maxzoom; only level with complete building properties)
+- Promise.all() without explicit concurrency limit — 5s timeout is backstop; add p-limit only if empirically needed
 
 ### Pending Todos
 
@@ -62,11 +64,11 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 10: MVT layer name inside Overture PMTiles archive is LOW confidence — must be validated empirically at pmtiles.io before writing parser
-- Phase 10: CORS behavior from production deployment domain must be tested (not just localhost)
+- ~~Phase 10: MVT layer name~~ — RESOLVED: `"building"` (singular), confirmed from live metadata 2026-02-28
+- ~~Phase 10: CORS~~ — RESOLVED: `Access-Control-Allow-Origin: *` verified empirically from localhost 2026-02-28, no proxy needed
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Roadmap written, ready to plan Phase 10
+Last session: 2026-03-01
+Stopped at: Completed 10-01-PLAN.md — Overture PMTiles fetch module
 Resume file: None

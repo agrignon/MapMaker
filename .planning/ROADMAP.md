@@ -44,10 +44,11 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   2. When Overture's URL is broken or returns an error, the app completes generation using OSM buildings only with no error shown to the user
   3. The Overture PMTiles URL constant is documented with the 60-day rotation warning and the STAC catalog URL for future updates
   4. Fetching from the production deployment domain succeeds without CORS errors (AllowedHeaders includes `range`, ExposeHeaders includes `etag`)
-**Plans**: TBD
+**Plans**: 2
 
 Plans:
-- [ ] 10-01: TBD
+- [ ] 10-01: Overture PMTiles fetch module with silent fallback (TDD) — Wave 1
+- [ ] 10-02: Zustand store overtureAvailable flag + integration tests — Wave 2
 
 ### Phase 11: MVT Parser
 **Goal**: Raw Overture MVT tile data is decoded, validated, and adapted into the same BuildingFeature format that the existing buildings pipeline already understands
@@ -104,7 +105,7 @@ Plans:
 | 7. Vegetation + Terrain Smoothing | v1.0 | 2/2 | Complete | 2026-02-26 |
 | 8. Edit-Iterate + Export Polish | v1.0 | 2/2 | Complete | 2026-02-28 |
 | 9. Performance Hardening | v1.0 | 2/2 | Complete | 2026-02-28 |
-| 10. Overture Access | v1.1 | 0/? | Not started | - |
+| 10. Overture Access | 1/2 | In Progress|  | - |
 | 11. MVT Parser | v1.1 | 0/? | Not started | - |
 | 12. Deduplication | v1.1 | 0/? | Not started | - |
 | 13. Pipeline Integration | v1.1 | 0/? | Not started | - |

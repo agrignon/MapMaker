@@ -1,5 +1,5 @@
 {
-  "mode": "yolo",
+  "mode": "interactive",
   "depth": "comprehensive",
   "parallelization": true,
   "commit_docs": true,

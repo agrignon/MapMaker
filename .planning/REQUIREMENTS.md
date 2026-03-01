@@ -9,8 +9,8 @@ Requirements for Overture Maps building coverage gap-fill. Each maps to roadmap 
 
 ### Data Access
 
-- [ ] **DATA-01**: User's selected area fetches building footprints from Overture Maps via PMTiles in addition to OSM
-- [ ] **DATA-02**: App silently falls back to OSM-only when Overture data is unavailable (no error shown to user)
+- [x] **DATA-01**: User's selected area fetches building footprints from Overture Maps via PMTiles in addition to OSM
+- [x] **DATA-02**: App silently falls back to OSM-only when Overture data is unavailable (no error shown to user)
 
 ### Parsing
 
@@ -58,8 +58,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 10 | Pending |
-| DATA-02 | Phase 10 | Pending |
+| DATA-01 | Phase 10 | Complete |
+| DATA-02 | Phase 10 | Complete |
 | PARSE-01 | Phase 11 | Pending |
 | PARSE-02 | Phase 11 | Pending |
 | PARSE-03 | Phase 11 | Pending |
