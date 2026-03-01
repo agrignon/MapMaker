@@ -25,29 +25,68 @@ A web app that turns any real-world location into a 3D-printable terrain model. 
 
 ## Getting Started
 
-### Prerequisites
+### 1. Install Node.js
 
-- Node.js 18+
-- A free [MapTiler](https://www.maptiler.com/) API key (for map tiles and elevation data)
+You need **Node.js 18 or newer**. If you don't have it installed:
 
-### Setup
+- **macOS** — `brew install node` (via [Homebrew](https://brew.sh/)), or download from [nodejs.org](https://nodejs.org/)
+- **Windows** — download the installer from [nodejs.org](https://nodejs.org/) (pick the LTS version)
+- **Linux** — `sudo apt install nodejs npm` (Ubuntu/Debian) or see [nodejs.org](https://nodejs.org/)
+
+Verify it's installed by opening a terminal and running:
+
+```bash
+node --version   # should print v18.x.x or higher
+npm --version    # should print 9.x.x or higher
+```
+
+### 2. Get a MapTiler API Key (free)
+
+MapMaker uses [MapTiler](https://www.maptiler.com/) for satellite map tiles and elevation data. You need a free API key:
+
+1. Go to [cloud.maptiler.com/auth/widget](https://cloud.maptiler.com/auth/widget?next=https://cloud.maptiler.com) and create an account (email or Google/GitHub sign-in)
+2. After signing in, go to [API Keys](https://cloud.maptiler.com/account/keys/) in your dashboard
+3. You'll see a default key already created — copy it
+
+That's it. The free tier is more than enough for personal use.
+
+### 3. Clone and install
 
 ```bash
 git clone https://github.com/your-username/MapMaker.git
 cd MapMaker
 npm install
+```
+
+`npm install` downloads all dependencies — this may take a minute the first time.
+
+### 4. Add your API key
+
+```bash
 cp .env.example .env
-# Edit .env and add your MapTiler API key
+```
+
+Open the `.env` file in any text editor and replace `your_key_here` with the MapTiler API key you copied:
+
+```
+VITE_MAPTILER_KEY=abc123yourActualKeyHere
+```
+
+Save the file. Never share this key or commit the `.env` file (it's already in `.gitignore`).
+
+### 5. Start the app
+
+```bash
 npm run dev
 ```
 
-The app starts at `http://localhost:5000`.
+Open [http://localhost:5000](http://localhost:5000) in your browser. You should see the map editor.
 
 ### Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start dev server |
+| `npm run dev` | Start dev server at localhost:5000 |
 | `npm run build` | TypeScript check + production build |
 | `npm run preview` | Serve production build locally |
 | `npm test` | Run tests (Vitest) |
