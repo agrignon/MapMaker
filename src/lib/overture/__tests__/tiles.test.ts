@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useMapStore } from '../../../store/mapStore';
 
 // Mock pmtiles module to control getZxy return values
 vi.mock('pmtiles', () => {
@@ -317,5 +318,43 @@ describe('fetchOvertureTiles', () => {
     mockGetZxy.mockRejectedValueOnce(new TypeError('unexpected type error'));
 
     await expect(fetchOvertureTiles(NYC_BBOX)).resolves.toHaveProperty('available');
+  });
+});
+
+describe('mapStore overtureAvailable', () => {
+  beforeEach(() => {
+    useMapStore.setState({ overtureAvailable: false });
+  });
+
+  it('defaults to false', () => {
+    const state = useMapStore.getState();
+    expect(state.overtureAvailable).toBe(false);
+  });
+
+  it('setOvertureAvailable(true) sets flag to true', () => {
+    const { setOvertureAvailable } = useMapStore.getState();
+    setOvertureAvailable(true);
+    expect(useMapStore.getState().overtureAvailable).toBe(true);
+  });
+
+  it('setOvertureAvailable(false) sets flag back to false', () => {
+    useMapStore.setState({ overtureAvailable: true });
+    const { setOvertureAvailable } = useMapStore.getState();
+    setOvertureAvailable(false);
+    expect(useMapStore.getState().overtureAvailable).toBe(false);
+  });
+
+  it('clearBbox resets overtureAvailable to false', () => {
+    useMapStore.setState({ overtureAvailable: true });
+    const { clearBbox } = useMapStore.getState();
+    clearBbox();
+    expect(useMapStore.getState().overtureAvailable).toBe(false);
+  });
+
+  it('setBbox resets overtureAvailable to false', () => {
+    useMapStore.setState({ overtureAvailable: true });
+    const { setBbox } = useMapStore.getState();
+    setBbox({ lon: -74.01, lat: 40.70 }, { lon: -73.97, lat: 40.75 });
+    expect(useMapStore.getState().overtureAvailable).toBe(false);
   });
 });
