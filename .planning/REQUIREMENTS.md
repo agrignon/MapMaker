@@ -25,9 +25,9 @@ Requirements for Overture Maps building coverage gap-fill. Each maps to roadmap 
 
 ### Integration
 
-- [ ] **INTEG-01**: OSM and Overture fetches run in parallel (no added latency)
-- [ ] **INTEG-02**: Gap-fill buildings from Overture appear in 3D preview alongside OSM buildings
-- [ ] **INTEG-03**: Gap-fill buildings from Overture are included in STL export as watertight geometry
+- [x] **INTEG-01**: OSM and Overture fetches run in parallel (no added latency)
+- [x] **INTEG-02**: Gap-fill buildings from Overture appear in 3D preview alongside OSM buildings
+- [x] **INTEG-03**: Gap-fill buildings from Overture are included in STL export as watertight geometry
 
 ## v2 Requirements
 
@@ -65,9 +65,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARSE-03 | Phase 11 | Complete |
 | PARSE-04 | Phase 11 | Complete |
 | DEDUP-01 | Phase 12 | Complete |
-| INTEG-01 | Phase 13 | Pending |
-| INTEG-02 | Phase 13 | Pending |
-| INTEG-03 | Phase 13 | Pending |
+| INTEG-01 | Phase 13 | Complete |
+| INTEG-02 | Phase 13 | Complete |
+| INTEG-03 | Phase 13 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 10 total
@@ -76,4 +76,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 — traceability filled during roadmap creation*
+*Last updated: 2026-03-01 — INTEG-01, INTEG-02, INTEG-03 completed in Phase 13 Plan 01*

@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Building Coverage
-status: unknown
-last_updated: "2026-03-01T02:12:58.700Z"
+status: complete
+last_updated: "2026-03-01T02:44:25Z"
 progress:
   total_phases: 3
   completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 12 — Deduplication
+**Current focus:** Phase 13 — Pipeline Integration (COMPLETE)
 
 ## Current Position
 
-Phase: 12 of 13 (Deduplication)
-Plan: 12-01 (complete — plan done)
-Status: Phase 12 Plan 01 Complete — proceeding to next plan
-Last activity: 2026-03-01 — Plan 12-01 executed (deduplicateOverture AABB IoU implementation)
+Phase: 13 of 13 (Pipeline Integration)
+Plan: 13-01 (complete — plan done)
+Status: Phase 13 Plan 01 Complete — v1.1 milestone COMPLETE
+Last activity: 2026-03-01 — Plan 13-01 executed (parallel OSM + Overture fetch pipeline integration)
 
-Progress: [██████████] 100% of phase 12 plan 01 (1/1 plans so far)
+Progress: [██████████] 100% — All phases and plans complete
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 3.3 min
-- Total execution time: 13 min
+- Total plans completed: 5
+- Average duration: 3.4 min
+- Total execution time: 17 min
 
 **By Phase:**
 
@@ -43,6 +43,7 @@ Progress: [██████████] 100% of phase 12 plan 01 (1/1 plans s
 | 10-overture-access | 2/2 | 7 min | 3.5 min |
 | 11-mvt-parser | 1/1 | 3 min | 3 min |
 | 12-deduplication | 1/1 | 2 min | 2 min |
+| 13-pipeline-integration | 1/1 | 5 min | 5 min |
 
 *Updated after each plan completion*
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Phase 11-01]: Mock computeFootprintAreaM2 in area tests, use real computeSignedArea in winding tests
 - [Phase 12-01]: Threshold is >= 0.3 (not strict >) — IoU exactly 0.3 counts as duplicate (locked from STATE.md)
 - [Phase 12-01]: Return ONLY filtered Overture gap-fill list; Phase 13 handles merge with OSM features
+- [Phase 13-01]: Test fire-and-forget fetchOsmLayersStandalone via vi.waitFor polling store state, not by awaiting the void call directly
+- [Phase 13-01]: setOvertureAvailable not called when overtureResult.status is unexpectedly 'rejected' — defensive guard only (fetchOvertureTiles never throws)
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 12-01-PLAN.md — deduplicateOverture AABB IoU deduplication filter
+Stopped at: Completed 13-01-PLAN.md — parallel OSM + Overture fetch pipeline integration (v1.1 milestone COMPLETE)
 Resume file: None

@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-9 (shipped 2026-02-28)
-- 🚧 **v1.1 Building Coverage** — Phases 10-13 (in progress)
+- ✅ **v1.1 Building Coverage** — Phases 10-13 (completed 2026-03-01)
 
 ## Phases
 
@@ -24,14 +24,14 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v1.1 Building Coverage (In Progress)
+### ✅ v1.1 Building Coverage (COMPLETE — 2026-03-01)
 
 **Milestone Goal:** Fill building data gaps by merging Overture Maps footprints with existing OSM data so buildings appear everywhere, not just where OSM has coverage.
 
 - [x] **Phase 10: Overture Access** — Establish PMTiles fetch with validated CORS and graceful fallback (completed 2026-03-01)
 - [x] **Phase 11: MVT Parser** — Decode and adapt Overture tiles into the existing BuildingFeature format (Plan 11-01 complete 2026-03-01)
 - [x] **Phase 12: Deduplication** — Spatial merge that removes Overture footprints overlapping OSM buildings (completed 2026-03-01)
-- [ ] **Phase 13: Pipeline Integration** — Wire parallel fetching and merged buildings into preview and export
+- [x] **Phase 13: Pipeline Integration** — Wire parallel fetching and merged buildings into preview and export (completed 2026-03-01)
 
 ## Phase Details
 
@@ -90,7 +90,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 13-01: TBD
+- [x] 13-01: Parallel OSM + Overture fetch with deduplication and merge wired into fetchOsmLayersStandalone (TDD) — Wave 1 (complete 2026-03-01)
 
 ## Progress
 
@@ -108,4 +108,4 @@ Plans:
 | 10. Overture Access | 2/2 | Complete    | 2026-03-01 | - |
 | 11. MVT Parser | v1.1 | Complete    | 2026-03-01 | 2026-03-01 |
 | 12. Deduplication | 1/1 | Complete    | 2026-03-01 | - |
-| 13. Pipeline Integration | v1.1 | 0/? | Not started | - |
+| 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
