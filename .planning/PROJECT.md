@@ -42,7 +42,16 @@ Users can turn any place in the world into a physical 3D-printed model — from 
 
 ### Active
 
-(None — next milestone not yet started)
+- [ ] Three-tier responsive layout system (mobile / tablet / desktop) with clean breakpoints
+- [ ] Mobile: full-screen map and preview views with fast toggle between them
+- [ ] Mobile: bottom sheet with three snap heights (peek / half / full) for controls
+- [ ] Mobile: touch-optimized controls — larger targets, better spacing, gesture-friendly
+- [ ] Tablet: side-by-side layout with contextual sidebar (like desktop)
+- [ ] Desktop: persistent contextual sidebar replacing floating overlay panel
+- [ ] Desktop: better space utilization and layout proportions
+- [ ] Contextual sidebar — shows map controls or model/export controls based on active view
+- [ ] Transitions and animations — view switches, sheet snapping, loading states, micro-interactions
+- [ ] Clean breakpoint system replacing binary 768px mobile/desktop switch
 
 ### Out of Scope
 
@@ -99,4 +108,17 @@ All processing is client-side: coordinate projection, elevation decode, mesh gen
 | Fixed zoom 14 for Overture fetch | Archive maxzoom; only level with complete building properties | ✓ Good |
 
 ---
-*Last updated: 2026-03-01 after v1.1 milestone completion*
+## Current Milestone: v1.2 Responsive UI
+
+**Goal:** End-to-end responsive redesign so MapMaker thrives on mobile phones, tablets, and desktops — not just works.
+
+**Target features:**
+- Three-tier responsive layout (mobile / tablet / desktop) with proper breakpoints
+- Mobile bottom sheet with peek/half/full snap heights
+- Full-screen focus views on mobile with smooth toggle
+- Touch-optimized controls and spacing
+- Persistent contextual sidebar on tablet/desktop
+- Transitions, animations, and micro-interactions throughout
+
+---
+*Last updated: 2026-02-28 after v1.2 milestone start*
