@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 15 of 18 (Content Architecture)
-Plan: 01 complete — Phase 15 Plan 01 DONE
+Plan: 02 complete — Phase 15 Plan 02 DONE
 Status: In Progress
-Last activity: 2026-03-02 — Plan 15-01 complete; layout-agnostic panel components created, Sidebar and PreviewSidebar refactored to thin shells
+Last activity: 2026-03-02 — Plan 15-02 complete; fixed duplicate model controls on desktop and black screen on mobile resize
 
 Progress: [███░░░░░░░] 21%
 
@@ -65,6 +65,8 @@ Recent decisions affecting v1.2:
 - [Phase 15-content-architecture]: SidebarContent uses conditional ternary rendering (not display:none) so only one panel mounts at a time
 - [Phase 15-content-architecture]: GenerateButton.tsx and SelectionInfo.tsx remain at original paths to preserve test import paths
 - [Phase 15-content-architecture]: ModelControlsPanel reads setShowPreview directly from store — not passed as prop from container
+- [Phase 15-content-architecture]: SidebarContent unconditionally renders MapControlsPanel — left sidebar is map-only; model controls belong exclusively to PreviewSidebar
+- [Phase 15-content-architecture]: SplitLayout tracks prevIsMobile ref alongside prevShowPreview to handle all tab-switching transition cases (isMobile false-to-true while showPreview active)
 
 ### Pending Todos
 
@@ -78,5 +80,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 15-01-PLAN.md (Phase 15 Plan 01 complete)
+Stopped at: Completed 15-02-PLAN.md (Phase 15 Plan 02 complete)
 Resume file: None

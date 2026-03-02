@@ -44,7 +44,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 #### v1.2 Phase Summary
 
 - [x] **Phase 14: Foundation** — Breakpoint hook, store fields, viewport meta, dvh fix, visibility pattern (completed 2026-03-02)
-- [ ] **Phase 15: Content Architecture** — Extract layout-agnostic sidebar content components (in progress — UAT gap closure)
+- [x] **Phase 15: Content Architecture** — Extract layout-agnostic sidebar content components (in progress — UAT gap closure) (completed 2026-03-02)
 - [ ] **Phase 16: Layout Components** — BottomSheet (vaul), ContextualSidebar, MobileViewToggle
 - [ ] **Phase 17: SplitLayout Rewrite** — Orchestrate three-tier layout with persistent sidebar
 - [ ] **Phase 18: Transitions & Polish** — Crossfades, spring animations, touch targets, safe area audit
@@ -131,7 +131,7 @@ Plans:
 | 12. Deduplication | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 14. Foundation | v1.2 | 2/2 | Complete | 2026-03-02 |
-| 15. Content Architecture | v1.2 | 1/2 | In Progress | - |
+| 15. Content Architecture | 2/2 | Complete   | 2026-03-02 | - |
 | 16. Layout Components | v1.2 | 0/? | Not started | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |
 | 18. Transitions & Polish | v1.2 | 0/? | Not started | - |
