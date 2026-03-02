@@ -45,7 +45,7 @@ describe('BottomSheet', () => {
     render(<BottomSheet><div /></BottomSheet>);
     const snapPoints = capturedRootProps.snapPoints as (number | string)[];
     expect(snapPoints).toHaveLength(3);
-    expect(snapPoints[0]).toBe(80);          // peek: 80px
+    expect(snapPoints[0]).toBe('80px');       // peek: 80px (string for vaul pixel snap)
     expect(snapPoints[1]).toBeCloseTo(0.45); // half: ~45vh
     expect(snapPoints[2]).toBe(1);           // full: full height
   });
@@ -73,7 +73,7 @@ describe('BottomSheet', () => {
 
   it('starts at peek snap point', () => {
     render(<BottomSheet><div /></BottomSheet>);
-    expect(capturedRootProps.activeSnapPoint).toBe(80);
+    expect(capturedRootProps.activeSnapPoint).toBe('80px');
   });
 
   it('provides onOpenChange handler to prevent sheet from closing', () => {

@@ -1,18 +1,18 @@
 import { useState, useCallback } from 'react';
 import { Drawer } from 'vaul';
 
-const PEEK_PX = 80;
-const SNAP_POINTS = [PEEK_PX, 0.45, 1] as const;
+const PEEK = '80px';
+const SNAP_POINTS = [PEEK, 0.45, 1] as const;
 
 export function BottomSheet({ children }: { children: React.ReactNode }) {
-  const [snap, setSnap] = useState<number | string | null>(PEEK_PX);
+  const [snap, setSnap] = useState<number | string | null>(PEEK);
 
   // Safety net: if vaul fires onOpenChange(false) due to double-tap on handle
   // (GitHub #362), prevent the sheet from disappearing by ignoring close.
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
       // Re-snap to peek instead of closing — there is no Trigger to reopen
-      setSnap(PEEK_PX);
+      setSnap(PEEK);
     }
   }, []);
 
