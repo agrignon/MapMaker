@@ -4,6 +4,7 @@ import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
 import { triggerRegenerate } from '../Sidebar/GenerateButton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { MobileViewToggle } from '../MobileViewToggle/MobileViewToggle';
 
 interface SplitLayoutProps {
   children: React.ReactNode;
@@ -66,58 +67,6 @@ function StaleIndicator() {
   );
 }
 
-function MobileTabBar({ activeTab, onTabChange }: { activeTab: 'map' | 'preview'; onTabChange: (tab: 'map' | 'preview') => void }) {
-  const showPreview = useMapStore((s) => s.showPreview);
-
-  if (!showPreview) return null;
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        borderBottom: '1px solid #374151',
-        backgroundColor: '#111827',
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => onTabChange('map')}
-        style={{
-          flex: 1,
-          padding: '10px 0',
-          fontSize: '13px',
-          fontWeight: 600,
-          border: 'none',
-          cursor: 'pointer',
-          backgroundColor: activeTab === 'map' ? '#1f2937' : 'transparent',
-          color: activeTab === 'map' ? '#fff' : '#6b7280',
-          borderBottom: activeTab === 'map' ? '2px solid #3b82f6' : '2px solid transparent',
-          transition: 'all 0.15s',
-        }}
-      >
-        Map
-      </button>
-      <button
-        onClick={() => onTabChange('preview')}
-        style={{
-          flex: 1,
-          padding: '10px 0',
-          fontSize: '13px',
-          fontWeight: 600,
-          border: 'none',
-          cursor: 'pointer',
-          backgroundColor: activeTab === 'preview' ? '#1f2937' : 'transparent',
-          color: activeTab === 'preview' ? '#fff' : '#6b7280',
-          borderBottom: activeTab === 'preview' ? '2px solid #3b82f6' : '2px solid transparent',
-          transition: 'all 0.15s',
-        }}
-      >
-        3D Preview
-      </button>
-    </div>
-  );
-}
-
 export function SplitLayout({ children }: SplitLayoutProps) {
   const showPreview = useMapStore((state) => state.showPreview);
   const tier = useBreakpoint();
@@ -163,6 +112,11 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     prevIsMobile.current = isMobile;
   }, [showPreview, isMobile]);
 
+  // Toggle callback for MobileViewToggle
+  const handleViewToggle = useCallback(() => {
+    setActiveTab((prev) => (prev === 'map' ? 'preview' : 'map'));
+  }, []);
+
   // Unified tree: PreviewCanvas stays at the same React tree position
   // across mobile/desktop transitions, preserving the WebGL context.
   const mapVisible = !showPreview || !isMobile || activeTab === 'map';
@@ -174,10 +128,6 @@ export function SplitLayout({ children }: SplitLayoutProps) {
       className="flex-1 h-full"
       style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}
     >
-      {isMobile && (
-        <MobileTabBar key="tabbar" activeTab={activeTab} onTabChange={setActiveTab} />
-      )}
-
       <div
         key="content"
         style={isMobile
@@ -235,6 +185,11 @@ export function SplitLayout({ children }: SplitLayoutProps) {
           <PreviewCanvas />
           <PreviewSidebar />
         </div>
+
+        {/* MobileViewToggle — sibling to panes, floats above both via position:absolute + zIndex:20 */}
+        {isMobile && showPreview && (
+          <MobileViewToggle activeView={activeTab} onToggle={handleViewToggle} />
+        )}
       </div>
     </div>
   );
