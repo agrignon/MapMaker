@@ -10,7 +10,8 @@ requires:
     provides: Panel components extracted as layout-agnostic shells; SidebarContent thin wrapper; PreviewSidebar unconditionally renders ModelControlsPanel
 provides:
   - SidebarContent unconditionally renders MapControlsPanel (no ternary, no showPreview read)
-  - SplitLayout useEffect handles isMobile false-to-true transition when showPreview is active
+  - SplitLayout useLayoutEffect handles isMobile false-to-true transition when showPreview is active
+  - Mobile layout uses visibility:hidden + absolute stacking (not display:none) to preserve WebGL context
   - Both UAT gaps from 15-UAT.md resolved
 affects: [16-layout-components, 17-persistent-sidebar, 18-polish]
 
@@ -19,7 +20,8 @@ tech-stack:
   added: []
   patterns:
     - "Left sidebar (SidebarContent) is map-only — model controls belong exclusively to PreviewSidebar in right pane"
-    - "Use prevRef pattern for both showPreview and isMobile in SplitLayout useEffect to track transitions"
+    - "Use prevRef pattern for both showPreview and isMobile in SplitLayout useLayoutEffect to track transitions"
+    - "Mobile tab panes use visibility:hidden + absolute stacking to preserve WebGL context (matching desktop pattern)"
 
 key-files:
   created: []
@@ -56,7 +58,9 @@ completed: 2026-03-02
 
 ## Accomplishments
 - Removed ModelControlsPanel from SidebarContent — left sidebar now exclusively shows map controls, eliminating duplicate controls on desktop split layout
-- Added prevIsMobile ref to SplitLayout useEffect — when viewport crosses mobile breakpoint while showPreview is active, preview tab activates immediately (no black screen)
+- Added prevIsMobile ref to SplitLayout useLayoutEffect — when viewport crosses mobile breakpoint while showPreview is active, preview tab activates immediately (no black screen)
+- Changed mobile tab panes from display:none/block to visibility:hidden/visible with absolute stacking — preserves R3F WebGL context across tab switches (matching the desktop layout pattern)
+- Switched useEffect → useLayoutEffect for tab switching to prevent visual flash on transition
 - All 264 tests pass, TypeScript compiles clean, production build succeeds
 
 ## Task Commits
@@ -65,10 +69,11 @@ Each task was committed atomically:
 
 1. **Task 1: Fix duplicate controls — SidebarContent always renders MapControlsPanel** - `4e56aba` (fix)
 2. **Task 2: Fix mobile black screen — handle isMobile transition while showPreview is active** - `4cf3877` (fix)
+3. **Task 2 (cont): Preserve WebGL context on mobile tab switch** - `f36872e` (fix) — root cause was display:none destroying Canvas context
 
 ## Files Created/Modified
 - `src/components/Panels/SidebarContent.tsx` - Simplified to unconditionally render MapControlsPanel; removed showPreview read and ModelControlsPanel import
-- `src/components/Layout/SplitLayout.tsx` - Added prevIsMobile ref and Case 2 condition in useEffect for isMobile transition handling
+- `src/components/Layout/SplitLayout.tsx` - Added prevIsMobile ref and Case 2 condition in useLayoutEffect; mobile panes use visibility:hidden + absolute stacking instead of display:none
 
 ## Decisions Made
 - SidebarContent ternary was a design error: ModelControlsPanel belongs only in PreviewSidebar (right pane). The left sidebar should never render model controls regardless of preview state.
@@ -76,11 +81,11 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+- **Additional fix needed:** The plan's Task 2 (prevIsMobile ref) addressed the tab-switching logic but not the root cause: mobile layout used `display:none` which destroyed the R3F WebGL context. Added `visibility:hidden` + absolute stacking and switched from `useEffect` to `useLayoutEffect`. Identified after UAT re-testing showed the black screen persisted.
 
 ## Issues Encountered
 
-None.
+- The initial prevIsMobile fix was necessary but insufficient — the real culprit was `display:none` on the Canvas container destroying the WebGL context during tab transitions.
 
 ## User Setup Required
 
