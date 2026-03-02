@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Responsive UI
 status: unknown
-last_updated: "2026-03-02T00:36:08.923Z"
+last_updated: "2026-03-02T00:51:43Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Users can turn any place in the world into a physical 3D-printed model with full control over features and dimensions
-**Current focus:** Phase 14 — Foundation (v1.2 Responsive UI)
+**Current focus:** Phase 15 — Content Architecture (v1.2 Responsive UI)
 
 ## Current Position
 
-Phase: 14 of 18 (Foundation)
-Plan: 02 complete — Phase 14 DONE
+Phase: 15 of 18 (Content Architecture)
+Plan: 01 complete — Phase 15 Plan 01 DONE
 Status: In Progress
-Last activity: 2026-03-02 — Plan 14-02 complete; useBreakpoint consumers migrated, MobileSidebar safe areas fixed, DevBadge created
+Last activity: 2026-03-02 — Plan 15-01 complete; layout-agnostic panel components created, Sidebar and PreviewSidebar refactored to thin shells
 
-Progress: [██░░░░░░░░] 14%
+Progress: [███░░░░░░░] 21%
 
 ## Performance Metrics
 
@@ -40,6 +40,7 @@ Progress: [██░░░░░░░░] 14%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 14-foundation | 2 | 3 min | 4 files/plan |
+| 15-content-architecture | 1 | 2 min | 5 files/plan |
 
 *Updated after each plan completion*
 
@@ -60,6 +61,10 @@ Recent decisions affecting v1.2:
 - [Phase 14-foundation]: CSS custom properties on :root centralize safe area values for component consumption
 - [Phase 14-foundation]: Both SplitLayout and Sidebar derive isMobile as tier === 'mobile'; tablet follows desktop layout until Phase 17
 - [Phase 14-foundation]: DevBadge reads deviceTier from Zustand store rather than calling useBreakpoint — avoids duplicate hook instantiation
+- [Phase 15-content-architecture]: Panel components have ZERO container styles — no position, width, maxHeight, overflow, backdrop, shadow, zIndex; container concerns belong to shell components
+- [Phase 15-content-architecture]: SidebarContent uses conditional ternary rendering (not display:none) so only one panel mounts at a time
+- [Phase 15-content-architecture]: GenerateButton.tsx and SelectionInfo.tsx remain at original paths to preserve test import paths
+- [Phase 15-content-architecture]: ModelControlsPanel reads setShowPreview directly from store — not passed as prop from container
 
 ### Pending Todos
 
@@ -73,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 14-02-PLAN.md (Phase 14 complete)
+Stopped at: Completed 15-01-PLAN.md (Phase 15 Plan 01 complete)
 Resume file: None
