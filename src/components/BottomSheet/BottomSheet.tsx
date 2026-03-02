@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Drawer } from 'vaul';
 
 const PEEK = '80px';
@@ -14,6 +14,26 @@ export function BottomSheet({ children }: { children: React.ReactNode }) {
       // Re-snap to peek instead of closing — there is no Trigger to reopen
       setSnap(PEEK);
     }
+  }, []);
+
+  // Workaround: vaul doesn't pass modal={false} to Radix Dialog.Root, so Radix
+  // defaults to modal behavior with FocusScope trapping. After the user interacts
+  // with the sheet, focus gets trapped and can't return to the search bar or map
+  // controls. This effect defeats the trap by re-focusing the intended target.
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      const drawer = document.querySelector('[data-vaul-drawer]');
+      if (drawer && !drawer.contains(target)) {
+        // Focus is moving outside the drawer — Radix FocusScope will try to
+        // redirect it back. Schedule a re-focus after FocusScope's redirect.
+        requestAnimationFrame(() => {
+          target.focus();
+        });
+      }
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
   }, []);
 
   return (
