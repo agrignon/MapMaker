@@ -163,61 +163,66 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     prevIsMobile.current = isMobile;
   }, [showPreview, isMobile]);
 
-  if (isMobile) {
-    return (
-      <div ref={containerRef} className="flex-1 h-full flex flex-col">
-        <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <div style={{ flex: 1, position: 'relative' }}>
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            visibility: (!showPreview || activeTab === 'map') ? 'visible' : 'hidden',
-            zIndex: activeTab === 'map' ? 1 : 0,
-          }}>
-            {children}
-          </div>
-          {showPreview && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                visibility: activeTab === 'preview' ? 'visible' : 'hidden',
-                overflow: 'hidden',
-                zIndex: activeTab === 'preview' ? 1 : 0,
-              }}
-            >
-              <StaleIndicator />
-              <PreviewCanvas />
-              <PreviewSidebar />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // Unified tree: PreviewCanvas stays at the same React tree position
+  // across mobile/desktop transitions, preserving the WebGL context.
+  const mapVisible = !showPreview || !isMobile || activeTab === 'map';
+  const previewVisible = showPreview && (!isMobile || activeTab === 'preview');
 
   return (
-    <div ref={containerRef} className="flex-1 h-full flex">
-      <div style={{ width: showPreview ? `${splitPercent}%` : '100%', minWidth: 0, height: '100%', position: 'relative' }}>
-        {children}
-      </div>
+    <div
+      ref={containerRef}
+      className="flex-1 h-full"
+      style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}
+    >
+      {isMobile && (
+        <MobileTabBar key="tabbar" activeTab={activeTab} onTabChange={setActiveTab} />
+      )}
 
       <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        style={{
-          width: '6px',
-          cursor: 'col-resize',
-          backgroundColor: '#4b5563',
-          flexShrink: 0,
-          touchAction: 'none',
-          display: showPreview ? 'flex' : 'none',
-        }}
-      />
+        key="content"
+        style={isMobile
+          ? { flex: 1, position: 'relative' }
+          : { display: 'flex', flex: 1, width: '100%', height: '100%' }
+        }
+      >
+        {/* Map pane */}
+        <div style={isMobile ? {
+          position: 'absolute',
+          inset: 0,
+          visibility: mapVisible ? 'visible' : 'hidden',
+          zIndex: mapVisible ? 1 : 0,
+        } : {
+          width: showPreview ? `${splitPercent}%` : '100%',
+          minWidth: 0,
+          height: '100%',
+          position: 'relative',
+        }}>
+          {children}
+        </div>
 
-      <div
-        style={{
+        {/* Divider — always in tree to keep preview pane at stable index */}
+        <div
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          style={{
+            width: '6px',
+            cursor: 'col-resize',
+            backgroundColor: '#4b5563',
+            flexShrink: 0,
+            touchAction: 'none',
+            display: (!isMobile && showPreview) ? 'flex' : 'none',
+          }}
+        />
+
+        {/* Preview pane — stable tree position preserves R3F WebGL context */}
+        <div style={isMobile ? {
+          position: 'absolute',
+          inset: 0,
+          visibility: previewVisible ? 'visible' : 'hidden',
+          overflow: 'hidden',
+          zIndex: previewVisible ? 1 : 0,
+        } : {
           width: showPreview ? `${100 - splitPercent}%` : '0%',
           minWidth: 0,
           height: '100%',
@@ -225,11 +230,11 @@ export function SplitLayout({ children }: SplitLayoutProps) {
           visibility: showPreview ? 'visible' : 'hidden',
           overflow: 'hidden',
           pointerEvents: showPreview ? 'auto' : 'none',
-        }}
-      >
-        <StaleIndicator />
-        <PreviewCanvas />
-        <PreviewSidebar />
+        }}>
+          <StaleIndicator />
+          <PreviewCanvas />
+          <PreviewSidebar />
+        </div>
       </div>
     </div>
   );
