@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useLayoutEffect } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
@@ -146,7 +146,7 @@ export function SplitLayout({ children }: SplitLayoutProps) {
 
   const prevShowPreview = useRef(showPreview);
   const prevIsMobile = useRef(isMobile);
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Case 1: showPreview just turned on while already mobile → show preview tab
     if (showPreview && !prevShowPreview.current && isMobile) {
       setActiveTab('preview');
@@ -167,23 +167,31 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     return (
       <div ref={containerRef} className="flex-1 h-full flex flex-col">
         <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <div style={{ flex: 1, position: 'relative', display: (!showPreview || activeTab === 'map') ? 'block' : 'none' }}>
-          {children}
-        </div>
-        {showPreview && (
-          <div
-            style={{
-              flex: 1,
-              position: 'relative',
-              display: activeTab === 'preview' ? 'block' : 'none',
-              overflow: 'hidden',
-            }}
-          >
-            <StaleIndicator />
-            <PreviewCanvas />
-            <PreviewSidebar />
+        <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            visibility: (!showPreview || activeTab === 'map') ? 'visible' : 'hidden',
+            zIndex: activeTab === 'map' ? 1 : 0,
+          }}>
+            {children}
           </div>
-        )}
+          {showPreview && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                visibility: activeTab === 'preview' ? 'visible' : 'hidden',
+                overflow: 'hidden',
+                zIndex: activeTab === 'preview' ? 1 : 0,
+              }}
+            >
+              <StaleIndicator />
+              <PreviewCanvas />
+              <PreviewSidebar />
+            </div>
+          )}
+        </div>
       </div>
     );
   }
