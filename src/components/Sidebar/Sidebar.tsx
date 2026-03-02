@@ -1,9 +1,7 @@
-import { useMapStore } from '../../store/mapStore';
-import { SelectionInfo } from './SelectionInfo';
-import { GenerateButton } from './GenerateButton';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { SidebarContent } from '../Panels/SidebarContent';
 
-function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
+function MobileSidebar() {
   return (
     <div
       style={{
@@ -31,28 +29,14 @@ function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
         </span>
       </div>
 
-      {hasBbox && (
-        <div style={{ padding: '0 14px 6px', overflowY: 'auto', flexShrink: 1, minHeight: 0 }}>
-          <SelectionInfo />
-        </div>
-      )}
-
-      {!hasBbox && (
-        <div style={{ padding: '0 14px 6px', flexShrink: 0 }}>
-          <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-            Tap <strong>Draw Area</strong> and drag on the map to select a region.
-          </p>
-        </div>
-      )}
-
-      <div style={{ padding: '6px 14px 6px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <GenerateButton />
+      <div style={{ padding: '0 14px 6px', overflowY: 'auto', flexShrink: 1, minHeight: 0 }}>
+        <SidebarContent />
       </div>
     </div>
   );
 }
 
-function DesktopSidebar({ hasBbox }: { hasBbox: boolean }) {
+function DesktopSidebar() {
   return (
     <div
       style={{
@@ -79,30 +63,19 @@ function DesktopSidebar({ hasBbox }: { hasBbox: boolean }) {
       </div>
 
       <div style={{ padding: '12px 14px', flex: 1, overflowY: 'auto' }}>
-        {hasBbox ? (
-          <SelectionInfo />
-        ) : (
-          <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-            Search for a location, then tap <strong>Draw Area</strong> and drag on the map to select a region. On desktop you can also <strong>Shift+drag</strong>.
-          </p>
-        )}
-      </div>
-
-      <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        <GenerateButton />
+        <SidebarContent />
       </div>
     </div>
   );
 }
 
 export function Sidebar() {
-  const hasBbox = useMapStore((s) => s.bbox !== null);
   const tier = useBreakpoint();
   const isMobile = tier === 'mobile';
 
   if (isMobile) {
-    return <MobileSidebar hasBbox={hasBbox} />;
+    return <MobileSidebar />;
   }
 
-  return <DesktopSidebar hasBbox={hasBbox} />;
+  return <DesktopSidebar />;
 }

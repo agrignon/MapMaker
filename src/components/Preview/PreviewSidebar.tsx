@@ -1,16 +1,8 @@
 import { useState } from 'react';
-import { useMapStore } from '../../store/mapStore';
-import { ModelSizeSection } from './ModelSizeSection';
-import { TerrainSection } from './TerrainSection';
-import { BuildingsSection } from './BuildingsSection';
-import { RoadsSection } from './RoadsSection';
-import { WaterSection } from './WaterSection';
-import { VegetationSection } from './VegetationSection';
-import { ExportPanel } from './ExportPanel';
+import { ModelControlsPanel } from '../Panels/ModelControlsPanel';
 
 export function PreviewSidebar() {
   const [isOpen, setIsOpen] = useState(true);
-  const setShowPreview = useMapStore((s) => s.setShowPreview);
 
   return (
     <div
@@ -68,55 +60,7 @@ export function PreviewSidebar() {
             flexDirection: 'column',
           }}
         >
-          {/* Header */}
-          <div style={{ marginBottom: '4px' }}>
-            <button
-              onClick={() => setShowPreview(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#9ca3af',
-                fontSize: '12px',
-                padding: '4px 0',
-                cursor: 'pointer',
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.color = '#d1d5db'; }}
-              onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.color = '#9ca3af'; }}
-            >
-              {'\u2190'} Back to Edit
-            </button>
-            <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, fontSize: '13px' }}>
-              Model Controls
-            </span>
-          </div>
-
-          {/* Model Size section — always visible above layers */}
-          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', paddingTop: '8px' }}>
-            <ModelSizeSection />
-          </div>
-
-          {/* Layers subheading */}
-          <div style={{ paddingTop: '10px', paddingBottom: '4px' }}>
-            <span style={{ color: '#6b7280', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Layers
-            </span>
-          </div>
-
-          {/* Layer sections in pipeline order */}
-          <TerrainSection />
-          <BuildingsSection />
-          <RoadsSection />
-          <WaterSection />
-          <VegetationSection />
-
-          {/* Divider before export */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '8px' }} />
-
-          {/* Export panel at bottom */}
-          <ExportPanel />
+          <ModelControlsPanel />
         </div>
       )}
     </div>
