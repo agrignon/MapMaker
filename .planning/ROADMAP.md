@@ -131,7 +131,7 @@ Plans:
 | 12. Deduplication | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 14. Foundation | v1.2 | 2/2 | Complete | 2026-03-02 |
-| 15. Content Architecture | 2/2 | Complete   | 2026-03-02 | - |
+| 15. Content Architecture | 2/2 | Complete    | 2026-03-02 | - |
 | 16. Layout Components | v1.2 | 0/? | Not started | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |
 | 18. Transitions & Polish | v1.2 | 0/? | Not started | - |
