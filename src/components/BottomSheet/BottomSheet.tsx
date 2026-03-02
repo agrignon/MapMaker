@@ -35,6 +35,8 @@ export function BottomSheet({ children }: { children: React.ReactNode }) {
             bottom: 0,
             left: 0,
             right: 0,
+            height: '100%',
+            maxHeight: '97dvh',
             zIndex: 10,
             backgroundColor: 'rgba(17, 24, 39, 0.95)',
             backdropFilter: 'blur(12px)',
