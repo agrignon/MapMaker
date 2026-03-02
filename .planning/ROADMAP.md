@@ -88,7 +88,11 @@ Plans:
   4. When released mid-drag the sheet animates with a spring-like ease to the nearest snap point (not an instant jump)
   5. Flicking the sheet upward quickly jumps it to the next snap point, not just the nearest one
   6. A toggle button lets the user switch the full-screen view between map and preview on mobile
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 16-01-PLAN.md — Install vaul, build BottomSheet component with snap points/handle/modal=false, unit tests
+- [ ] 16-02-PLAN.md — Build MobileViewToggle floating toggle button, unit tests
+- [ ] 16-03-PLAN.md — Wire BottomSheet into Sidebar.tsx, MobileViewToggle into SplitLayout.tsx, remove MobileSidebar and MobileTabBar
 
 ### Phase 17: SplitLayout Rewrite
 **Goal**: Users on tablet and desktop see a persistent sidebar that stays visible alongside the map and preview panels
@@ -132,6 +136,6 @@ Plans:
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 14. Foundation | v1.2 | 2/2 | Complete | 2026-03-02 |
 | 15. Content Architecture | 2/2 | Complete    | 2026-03-02 | - |
-| 16. Layout Components | v1.2 | 0/? | Not started | - |
+| 16. Layout Components | 2/3 | In Progress|  | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |
 | 18. Transitions & Polish | v1.2 | 0/? | Not started | - |

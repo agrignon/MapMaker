@@ -12,15 +12,15 @@ Requirements for responsive UI milestone. Each maps to roadmap phases.
 - [x] **LAYOUT-01**: User sees a mobile layout below 768px, tablet layout at 768–1023px, and desktop layout at 1024px+
 - [ ] **LAYOUT-02**: User sees a persistent sidebar on tablet (220px) and desktop (260px) that is part of the layout flow, not a floating overlay
 - [x] **LAYOUT-03**: User sees sidebar content switch between map controls and model controls based on the active view
-- [ ] **LAYOUT-04**: User sees the map or preview fill the full screen on mobile, with a toggle button to switch between them
+- [x] **LAYOUT-04**: User sees the map or preview fill the full screen on mobile, with a toggle button to switch between them
 
 ### Bottom Sheet
 
-- [ ] **SHEET-01**: User can drag the mobile bottom sheet between peek (~80px), half (~45vh), and full (~88dvh) snap heights
-- [ ] **SHEET-02**: User sees a visible drag handle (pill) with at least 44px touch target area
-- [ ] **SHEET-03**: User sees the map remain visible and interactive at peek and half snap heights
-- [ ] **SHEET-04**: User sees a spring-like snap animation (not instant jumps) when the sheet settles to a snap point
-- [ ] **SHEET-05**: User can flick the sheet up or down quickly to jump to the next snap point (velocity-aware)
+- [x] **SHEET-01**: User can drag the mobile bottom sheet between peek (~80px), half (~45vh), and full (~88dvh) snap heights
+- [x] **SHEET-02**: User sees a visible drag handle (pill) with at least 44px touch target area
+- [x] **SHEET-03**: User sees the map remain visible and interactive at peek and half snap heights
+- [x] **SHEET-04**: User sees a spring-like snap animation (not instant jumps) when the sheet settles to a snap point
+- [x] **SHEET-05**: User can flick the sheet up or down quickly to jump to the next snap point (velocity-aware)
 
 ### Touch & Accessibility
 
@@ -68,12 +68,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAYOUT-01 | Phase 14 | Complete |
 | LAYOUT-02 | Phase 17 | Pending |
 | LAYOUT-03 | Phase 15 | Complete |
-| LAYOUT-04 | Phase 16 | Pending |
-| SHEET-01 | Phase 16 | Pending |
-| SHEET-02 | Phase 16 | Pending |
-| SHEET-03 | Phase 16 | Pending |
-| SHEET-04 | Phase 16 | Pending |
-| SHEET-05 | Phase 16 | Pending |
+| LAYOUT-04 | Phase 16 | Complete |
+| SHEET-01 | Phase 16 | Complete |
+| SHEET-02 | Phase 16 | Complete |
+| SHEET-03 | Phase 16 | Complete |
+| SHEET-04 | Phase 16 | Complete |
+| SHEET-05 | Phase 16 | Complete |
 | TOUCH-01 | Phase 18 | Pending |
 | TOUCH-02 | Phase 14 | Complete |
 | TOUCH-03 | Phase 18 | Pending |
