@@ -5,6 +5,7 @@ import type { BuildingFeature } from '../lib/buildings/types';
 import type { RoadFeature, RoadStyle } from '../lib/roads/types';
 import type { WaterFeature } from '../lib/water/types';
 import type { VegetationFeature } from '../lib/vegetation/types';
+import { DeviceTier, getTier } from '../hooks/useBreakpoint';
 
 export interface LayerToggles {
   buildings: boolean;
@@ -61,6 +62,8 @@ interface MapState {
   overtureAvailable: boolean;
   // Draw mode for mobile support
   drawMode: boolean;
+  // Device tier for responsive layout
+  deviceTier: DeviceTier;
 }
 
 interface MapActions {
@@ -99,6 +102,7 @@ interface MapActions {
   setGeneratedBboxKey: (key: string | null) => void;
   setOvertureAvailable: (available: boolean) => void;
   setDrawMode: (enabled: boolean) => void;
+  setDeviceTier: (tier: DeviceTier) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -155,6 +159,8 @@ export const useMapStore = create<MapStore>((set, get) => ({
   overtureAvailable: false,
   // Draw mode defaults
   drawMode: false,
+  // Device tier — initialized synchronously for correct first render
+  deviceTier: getTier(),
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -249,4 +255,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setGeneratedBboxKey: (key) => set({ generatedBboxKey: key }),
   setOvertureAvailable: (available) => set({ overtureAvailable: available }),
   setDrawMode: (enabled) => set({ drawMode: enabled }),
+  setDeviceTier: (tier) => set({ deviceTier: tier }),
 }));
