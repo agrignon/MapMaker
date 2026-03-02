@@ -1,9 +1,9 @@
 import { useMapStore } from '../../store/mapStore';
 
 export function DevBadge() {
-  if (!import.meta.env.DEV) return null;
-
   const tier = useMapStore((s) => s.deviceTier);
+
+  if (!import.meta.env.DEV) return null;
 
   return (
     <div
