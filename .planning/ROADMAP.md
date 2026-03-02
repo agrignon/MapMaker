@@ -127,7 +127,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 | 11. MVT Parser | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 12. Deduplication | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
-| 14. Foundation | v1.2 | 0/2 | Planned | - |
+| 14. Foundation | 1/2 | In Progress|  | - |
 | 15. Content Architecture | v1.2 | 0/? | Not started | - |
 | 16. Layout Components | v1.2 | 0/? | Not started | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |

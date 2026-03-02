@@ -9,7 +9,7 @@ Requirements for responsive UI milestone. Each maps to roadmap phases.
 
 ### Layout
 
-- [ ] **LAYOUT-01**: User sees a mobile layout below 768px, tablet layout at 768–1023px, and desktop layout at 1024px+
+- [x] **LAYOUT-01**: User sees a mobile layout below 768px, tablet layout at 768–1023px, and desktop layout at 1024px+
 - [ ] **LAYOUT-02**: User sees a persistent sidebar on tablet (220px) and desktop (260px) that is part of the layout flow, not a floating overlay
 - [ ] **LAYOUT-03**: User sees sidebar content switch between map controls and model controls based on the active view
 - [ ] **LAYOUT-04**: User sees the map or preview fill the full screen on mobile, with a toggle button to switch between them
@@ -25,7 +25,7 @@ Requirements for responsive UI milestone. Each maps to roadmap phases.
 ### Touch & Accessibility
 
 - [ ] **TOUCH-01**: User can reliably tap all interactive controls (sliders, toggles, buttons, section headers) with a minimum 44px touch target
-- [ ] **TOUCH-02**: User sees correct spacing around the iOS notch and home bar via safe area insets on sheet, sidebar, and bottom controls
+- [x] **TOUCH-02**: User sees correct spacing around the iOS notch and home bar via safe area insets on sheet, sidebar, and bottom controls
 - [ ] **TOUCH-03**: User sees the bottom sheet adjust position when the virtual keyboard opens on mobile
 
 ### Animation & Polish
@@ -65,7 +65,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | Phase 14 | Pending |
+| LAYOUT-01 | Phase 14 | Complete |
 | LAYOUT-02 | Phase 17 | Pending |
 | LAYOUT-03 | Phase 15 | Pending |
 | LAYOUT-04 | Phase 16 | Pending |
@@ -75,7 +75,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHEET-04 | Phase 16 | Pending |
 | SHEET-05 | Phase 16 | Pending |
 | TOUCH-01 | Phase 18 | Pending |
-| TOUCH-02 | Phase 14 | Pending |
+| TOUCH-02 | Phase 14 | Complete |
 | TOUCH-03 | Phase 18 | Pending |
 | ANIM-01 | Phase 18 | Pending |
 | ANIM-02 | Phase 18 | Pending |
