@@ -1,19 +1,7 @@
-import { useEffect, useState } from 'react';
 import { useMapStore } from '../../store/mapStore';
 import { SelectionInfo } from './SelectionInfo';
 import { GenerateButton } from './GenerateButton';
-
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    setIsMobile(mq.matches);
-    return () => mq.removeEventListener('change', handler);
-  }, [breakpoint]);
-  return isMobile;
-}
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
   return (
@@ -29,7 +17,9 @@ function MobileSidebar({ hasBbox }: { hasBbox: boolean }) {
         borderTop: '1px solid rgba(255,255,255,0.15)',
         borderRadius: '14px 14px 0 0',
         boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
-        paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))',
+        paddingBottom: 'max(8px, var(--safe-bottom))',
+        paddingLeft: 'var(--safe-left)',
+        paddingRight: 'var(--safe-right)',
         maxHeight: '45vh',
         display: 'flex',
         flexDirection: 'column',
@@ -107,7 +97,8 @@ function DesktopSidebar({ hasBbox }: { hasBbox: boolean }) {
 
 export function Sidebar() {
   const hasBbox = useMapStore((s) => s.bbox !== null);
-  const isMobile = useIsMobile();
+  const tier = useBreakpoint();
+  const isMobile = tier === 'mobile';
 
   if (isMobile) {
     return <MobileSidebar hasBbox={hasBbox} />;

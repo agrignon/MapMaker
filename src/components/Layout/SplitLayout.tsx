@@ -3,21 +3,10 @@ import { useMapStore } from '../../store/mapStore';
 import { PreviewCanvas } from '../Preview/PreviewCanvas';
 import { PreviewSidebar } from '../Preview/PreviewSidebar';
 import { triggerRegenerate } from '../Sidebar/GenerateButton';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 interface SplitLayoutProps {
   children: React.ReactNode;
-}
-
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    setIsMobile(mq.matches);
-    return () => mq.removeEventListener('change', handler);
-  }, [breakpoint]);
-  return isMobile;
 }
 
 function StaleIndicator() {
@@ -131,7 +120,8 @@ function MobileTabBar({ activeTab, onTabChange }: { activeTab: 'map' | 'preview'
 
 export function SplitLayout({ children }: SplitLayoutProps) {
   const showPreview = useMapStore((state) => state.showPreview);
-  const isMobile = useIsMobile();
+  const tier = useBreakpoint();
+  const isMobile = tier === 'mobile';
   const [splitPercent, setSplitPercent] = useState(50);
   const [activeTab, setActiveTab] = useState<'map' | 'preview'>('map');
   const containerRef = useRef<HTMLDivElement>(null);
