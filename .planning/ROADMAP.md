@@ -72,7 +72,9 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
   1. When the user switches from map view to preview view, the sidebar content switches from map controls to model controls without page reload
   2. The same sidebar content appears correctly whether rendered inside the mobile bottom sheet or the desktop sidebar (no duplicated content)
   3. The 264-test suite passes unchanged (pure extraction refactor with no behavior regression)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 15-01-PLAN.md — Extract panel components, wire SidebarContent switcher, update containers
 
 ### Phase 16: Layout Components
 **Goal**: Mobile users can interact with a draggable bottom sheet and toggle between full-screen map and preview views
@@ -128,7 +130,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 | 12. Deduplication | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 14. Foundation | v1.2 | Complete    | 2026-03-02 | 2026-03-02 |
-| 15. Content Architecture | v1.2 | 0/? | Not started | - |
+| 15. Content Architecture | v1.2 | 0/1 | Not started | - |
 | 16. Layout Components | v1.2 | 0/? | Not started | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |
 | 18. Transitions & Polish | v1.2 | 0/? | Not started | - |
