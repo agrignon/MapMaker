@@ -43,7 +43,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 
 #### v1.2 Phase Summary
 
-- [ ] **Phase 14: Foundation** — Breakpoint hook, store fields, viewport meta, dvh fix, visibility pattern
+- [x] **Phase 14: Foundation** — Breakpoint hook, store fields, viewport meta, dvh fix, visibility pattern (completed 2026-03-02)
 - [ ] **Phase 15: Content Architecture** — Extract layout-agnostic sidebar content components
 - [ ] **Phase 16: Layout Components** — BottomSheet (vaul), ContextualSidebar, MobileViewToggle
 - [ ] **Phase 17: SplitLayout Rewrite** — Orchestrate three-tier layout with persistent sidebar
@@ -60,9 +60,9 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
   2. On an iPhone with notch/home bar, controls are not obscured by system UI elements
   3. The 264-test suite passes unchanged (pure foundation refactor with no behavior regression)
   4. No duplicate breakpoint values exist in the codebase — a single `useBreakpoint` hook is the only source
-**Plans**: 2 plans
-- [ ] 14-01-PLAN.md — Core infrastructure: useBreakpoint hook, Zustand deviceTier, matchMedia test mock, safe area CSS properties
-- [ ] 14-02-PLAN.md — Consumer migration: App.tsx wiring, replace useIsMobile in SplitLayout + Sidebar, MobileSidebar safe area fix, DevBadge
+**Plans**: 2 plans (2/2 complete — Phase 14 DONE 2026-03-02)
+- [x] 14-01-PLAN.md — Core infrastructure: useBreakpoint hook, Zustand deviceTier, matchMedia test mock, safe area CSS properties
+- [x] 14-02-PLAN.md — Consumer migration: App.tsx wiring, replace useIsMobile in SplitLayout + Sidebar, MobileSidebar safe area fix, DevBadge
 
 ### Phase 15: Content Architecture
 **Goal**: Sidebar content is extractable into layout-agnostic components that any container can host
@@ -127,7 +127,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 | 11. MVT Parser | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 12. Deduplication | v1.1 | 1/1 | Complete | 2026-03-01 |
 | 13. Pipeline Integration | v1.1 | 1/1 | Complete | 2026-03-01 |
-| 14. Foundation | 1/2 | In Progress|  | - |
+| 14. Foundation | v1.2 | 2/2 | Complete | 2026-03-02 |
 | 15. Content Architecture | v1.2 | 0/? | Not started | - |
 | 16. Layout Components | v1.2 | 0/? | Not started | - |
 | 17. SplitLayout Rewrite | v1.2 | 0/? | Not started | - |
