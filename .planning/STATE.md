@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Responsive UI
-status: unknown
-last_updated: "2026-03-02T21:50:29.841Z"
+status: in_progress
+last_updated: "2026-03-02T21:53:14Z"
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 
 ## Current Position
 
-Phase: 16 of 18 (Layout Components)
-Plan: 02 complete — Phase 16 Plan 02 DONE
-Status: In Progress
-Last activity: 2026-03-02 — Plan 16-02 complete; MobileViewToggle floating toggle button with 9 tests; fixed vitest.config.ts JSX plugin
+Phase: 16 of 18 (Layout Components) — COMPLETE
+Plan: 03 complete — Phase 16 Plan 03 DONE (Phase 16 complete)
+Status: In Progress (Phase 17 next)
+Last activity: 2026-03-02 — Plan 16-03 complete; BottomSheet + MobileViewToggle wired into Sidebar and SplitLayout; Phase 16 integration done
 
-Progress: [████░░░░░░] 28%
+Progress: [█████░░░░░] 57%
 
 ## Performance Metrics
 
@@ -41,7 +41,7 @@ Progress: [████░░░░░░] 28%
 |-------|-------|-------|----------|
 | 14-foundation | 2 | 3 min | 4 files/plan |
 | 15-content-architecture | 1 | 2 min | 5 files/plan |
-| 16-layout-components | 2 | 6 min | 3.5 files/plan |
+| 16-layout-components | 3 | 7 min | 3 files/plan |
 
 *Updated after each plan completion*
 
@@ -74,6 +74,8 @@ Recent decisions affecting v1.2:
 - [Phase 16-layout-components]: React.createElement in vi.mock factory — hoisted mocks run before module scope so JSX needs explicit React import
 - [Phase 16-layout-components]: MobileViewToggle is a controlled component (activeView + onToggle props) not store-driven — SplitLayout manages activeTab state and will wire it in Plan 03
 - [Phase 16-layout-components]: matchMedia mock restoration uses explicit window.matchMedia = defaultMatchMedia in afterEach instead of vi.restoreAllMocks() which breaks Object.defineProperty-based mocks
+- [Phase 16-layout-components]: MobileViewToggle placed as sibling to map/preview panes (not inside map pane) so it remains visible when map pane has visibility:hidden
+- [Phase 16-layout-components]: BottomSheet wraps SidebarContent directly — no extra header inside sheet, drag handle (pill) replaces MobileSidebar MapMaker branding
 
 ### Pending Todos
 
@@ -87,5 +89,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 16-02-PLAN.md (Phase 16 Plan 02 complete)
+Stopped at: Completed 16-03-PLAN.md (Phase 16 Plan 03 complete — Phase 16 DONE)
 Resume file: None
