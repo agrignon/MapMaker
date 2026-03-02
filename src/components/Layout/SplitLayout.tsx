@@ -145,14 +145,22 @@ export function SplitLayout({ children }: SplitLayoutProps) {
   }, []);
 
   const prevShowPreview = useRef(showPreview);
+  const prevIsMobile = useRef(isMobile);
   useEffect(() => {
+    // Case 1: showPreview just turned on while already mobile → show preview tab
     if (showPreview && !prevShowPreview.current && isMobile) {
       setActiveTab('preview');
     }
+    // Case 2: just transitioned TO mobile while showPreview is already true → show preview tab
+    if (isMobile && !prevIsMobile.current && showPreview) {
+      setActiveTab('preview');
+    }
+    // Case 3: showPreview turned off while mobile → back to map tab
     if (!showPreview && isMobile) {
       setActiveTab('map');
     }
     prevShowPreview.current = showPreview;
+    prevIsMobile.current = isMobile;
   }, [showPreview, isMobile]);
 
   if (isMobile) {
