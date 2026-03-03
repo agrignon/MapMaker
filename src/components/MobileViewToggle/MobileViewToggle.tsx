@@ -17,7 +17,7 @@ export function MobileViewToggle({ activeView, onToggle }: MobileViewToggleProps
       data-testid="mobile-view-toggle"
       style={{
         position: 'absolute',
-        bottom: 96,
+        top: 12,
         right: 12,
         zIndex: 20,
         minHeight: 44,
