@@ -93,29 +93,38 @@ export function SplitLayout({ children }: SplitLayoutProps) {
     dragging.current = false;
   }, []);
 
+  const setMobileActiveView = useMapStore((state) => state.setMobileActiveView);
+
   const prevShowPreview = useRef(showPreview);
   const prevIsMobile = useRef(isMobile);
   useLayoutEffect(() => {
     // Case 1: showPreview just turned on while already mobile → show preview tab
     if (showPreview && !prevShowPreview.current && isMobile) {
       setActiveTab('preview');
+      setMobileActiveView('preview');
     }
     // Case 2: just transitioned TO mobile while showPreview is already true → show preview tab
     if (isMobile && !prevIsMobile.current && showPreview) {
       setActiveTab('preview');
+      setMobileActiveView('preview');
     }
     // Case 3: showPreview turned off while mobile → back to map tab
     if (!showPreview && isMobile) {
       setActiveTab('map');
+      setMobileActiveView('map');
     }
     prevShowPreview.current = showPreview;
     prevIsMobile.current = isMobile;
-  }, [showPreview, isMobile]);
+  }, [showPreview, isMobile, setMobileActiveView]);
 
   // Toggle callback for MobileViewToggle
   const handleViewToggle = useCallback(() => {
-    setActiveTab((prev) => (prev === 'map' ? 'preview' : 'map'));
-  }, []);
+    setActiveTab((prev) => {
+      const next = prev === 'map' ? 'preview' : 'map';
+      setMobileActiveView(next);
+      return next;
+    });
+  }, [setMobileActiveView]);
 
   // Unified tree: PreviewCanvas stays at the same React tree position
   // across mobile/desktop transitions, preserving the WebGL context.

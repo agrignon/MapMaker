@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Drawer } from 'vaul';
 
 const PEEK = '80px';
 const SNAP_POINTS = [PEEK, 0.45, 1] as const;
+const HANDLE_HEIGHT = 30; // handle (4px) + margins (10+6) + padding
 
 export function BottomSheet({ children }: { children: React.ReactNode }) {
   const [snap, setSnap] = useState<number | string | null>(PEEK);
@@ -16,24 +17,50 @@ export function BottomSheet({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Workaround: vaul doesn't pass modal={false} to Radix Dialog.Root, so Radix
-  // defaults to modal behavior with FocusScope trapping. After the user interacts
-  // with the sheet, focus gets trapped and can't return to the search bar or map
-  // controls. This effect defeats the trap by re-focusing the intended target.
+  // Vaul bug: doesn't forward modal={false} to Radix Dialog.Root, so Radix
+  // defaults to modal=true. This causes two blocking mechanisms:
+  //
+  // 1. DismissableLayer sets pointer-events:none on document.body, blocking
+  //    all touch/click outside the drawer. Vaul's one-time rAF fix doesn't
+  //    survive Radix re-applying it on re-renders (snap point changes).
+  //
+  // 2. FocusScope with trapped=true intercepts focusin events and redirects
+  //    focus back into the drawer.
   useEffect(() => {
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target as HTMLElement;
+    // Fix #1: Remove pointer-events:none whenever Radix re-applies it
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        document.body.style.pointerEvents = '';
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    if (document.body.style.pointerEvents === 'none') {
+      document.body.style.pointerEvents = '';
+    }
+
+    // Fix #2: FocusScope traps via both focusin (redirect outside→inside) and
+    // focusout (intercept leaving). Both are bubble-phase document listeners.
+    // Capture-phase handlers run first and block them.
+    const defeatFocusIn = (e: FocusEvent) => {
       const drawer = document.querySelector('[data-vaul-drawer]');
-      if (drawer && !drawer.contains(target)) {
-        // Focus is moving outside the drawer — Radix FocusScope will try to
-        // redirect it back. Schedule a re-focus after FocusScope's redirect.
-        requestAnimationFrame(() => {
-          target.focus();
-        });
+      if (drawer && !drawer.contains(e.target as HTMLElement)) {
+        e.stopImmediatePropagation();
       }
     };
-    document.addEventListener('focusin', handleFocusIn);
-    return () => document.removeEventListener('focusin', handleFocusIn);
+    const defeatFocusOut = (e: FocusEvent) => {
+      const drawer = document.querySelector('[data-vaul-drawer]');
+      if (drawer && drawer.contains(e.target as HTMLElement)) {
+        e.stopImmediatePropagation();
+      }
+    };
+    document.addEventListener('focusin', defeatFocusIn, true);
+    document.addEventListener('focusout', defeatFocusOut, true);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('focusin', defeatFocusIn, true);
+      document.removeEventListener('focusout', defeatFocusOut, true);
+    };
   }, []);
 
   return (
@@ -82,10 +109,13 @@ export function BottomSheet({ children }: { children: React.ReactNode }) {
           />
           <div
             style={{
-              flex: 1,
-              minHeight: 0,
               overflowY: 'auto',
               padding: '0 14px 6px',
+              maxHeight: typeof snap === 'string'
+                ? `calc(${snap} - ${HANDLE_HEIGHT}px)`
+                : typeof snap === 'number'
+                  ? `calc(${Math.min(snap * 100, 97)}dvh - ${HANDLE_HEIGHT}px)`
+                  : undefined,
             }}
           >
             {children}

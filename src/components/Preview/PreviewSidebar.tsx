@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { ModelControlsPanel } from '../Panels/ModelControlsPanel';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export function PreviewSidebar() {
+  const tier = useBreakpoint();
   const [isOpen, setIsOpen] = useState(true);
+
+  // On mobile, model controls live in the BottomSheet — hide this sidebar
+  // to avoid its toggle button overlapping MobileViewToggle in the top-right
+  if (tier === 'mobile') return null;
 
   return (
     <div

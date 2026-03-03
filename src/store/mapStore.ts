@@ -64,6 +64,8 @@ interface MapState {
   drawMode: boolean;
   // Device tier for responsive layout
   deviceTier: DeviceTier;
+  // Mobile active view — which pane is visible on mobile (drives BottomSheet content)
+  mobileActiveView: 'map' | 'preview';
 }
 
 interface MapActions {
@@ -103,6 +105,7 @@ interface MapActions {
   setOvertureAvailable: (available: boolean) => void;
   setDrawMode: (enabled: boolean) => void;
   setDeviceTier: (tier: DeviceTier) => void;
+  setMobileActiveView: (view: 'map' | 'preview') => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -161,6 +164,7 @@ export const useMapStore = create<MapStore>((set, get) => ({
   drawMode: false,
   // Device tier — initialized synchronously for correct first render
   deviceTier: getTier(),
+  mobileActiveView: 'map' as const,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -256,4 +260,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setOvertureAvailable: (available) => set({ overtureAvailable: available }),
   setDrawMode: (enabled) => set({ drawMode: enabled }),
   setDeviceTier: (tier) => set({ deviceTier: tier }),
+  setMobileActiveView: (view) => set({ mobileActiveView: view }),
 }));
