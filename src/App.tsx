@@ -15,13 +15,13 @@ function App() {
   }, [tier, setDeviceTier]);
 
   return (
-    <div style={{ height: '100dvh', display: 'flex' }}>
+    <div style={{ height: '100dvh', display: 'flex', position: 'relative' }}>
       <SplitLayout>
         <div className="relative w-full h-full">
           <MapView />
-          <Sidebar />
         </div>
       </SplitLayout>
+      <Sidebar />
       <DevBadge />
     </div>
   );

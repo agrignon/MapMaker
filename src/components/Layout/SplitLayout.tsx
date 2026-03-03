@@ -128,6 +128,7 @@ export function SplitLayout({ children }: SplitLayoutProps) {
 
   // Unified tree: PreviewCanvas stays at the same React tree position
   // across mobile/desktop transitions, preserving the WebGL context.
+  const mobilePanelHeight = useMapStore((state) => state.mobilePanelHeight);
   const mapVisible = !showPreview || !isMobile || activeTab === 'map';
   const previewVisible = showPreview && (!isMobile || activeTab === 'preview');
 
@@ -177,7 +178,10 @@ export function SplitLayout({ children }: SplitLayoutProps) {
         {/* Preview pane — stable tree position preserves R3F WebGL context */}
         <div style={isMobile ? {
           position: 'absolute',
-          inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: previewVisible ? mobilePanelHeight : 0,
           visibility: previewVisible ? 'visible' : 'hidden',
           overflow: 'hidden',
           zIndex: previewVisible ? 1 : 0,

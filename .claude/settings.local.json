@@ -3,7 +3,9 @@
     "allow": [
       "Bash(node:*)",
       "WebSearch",
-      "Skill(gsd:discuss-phase)"
+      "Skill(gsd:discuss-phase)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

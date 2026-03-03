@@ -66,6 +66,8 @@ interface MapState {
   deviceTier: DeviceTier;
   // Mobile active view — which pane is visible on mobile (drives BottomSheet content)
   mobileActiveView: 'map' | 'preview';
+  // Mobile bottom panel height for centering preview above panel
+  mobilePanelHeight: number;
 }
 
 interface MapActions {
@@ -106,6 +108,7 @@ interface MapActions {
   setDrawMode: (enabled: boolean) => void;
   setDeviceTier: (tier: DeviceTier) => void;
   setMobileActiveView: (view: 'map' | 'preview') => void;
+  setMobilePanelHeight: (height: number) => void;
 }
 
 type MapStore = MapState & MapActions;
@@ -165,6 +168,7 @@ export const useMapStore = create<MapStore>((set, get) => ({
   // Device tier — initialized synchronously for correct first render
   deviceTier: getTier(),
   mobileActiveView: 'map' as const,
+  mobilePanelHeight: 240,
 
   setBbox: (sw, ne) => {
     const bbox: BoundingBox = { sw, ne };
@@ -261,4 +265,5 @@ export const useMapStore = create<MapStore>((set, get) => ({
   setDrawMode: (enabled) => set({ drawMode: enabled }),
   setDeviceTier: (tier) => set({ deviceTier: tier }),
   setMobileActiveView: (view) => set({ mobileActiveView: view }),
+  setMobilePanelHeight: (height) => set({ mobilePanelHeight: height }),
 }));
